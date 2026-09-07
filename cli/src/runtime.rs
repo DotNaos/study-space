@@ -10,6 +10,8 @@ use std::{
 #[derive(Serialize, Deserialize)]
 pub struct Config {
     pub version: String,
+    #[serde(default)]
+    pub commit: Option<String>,
     pub schema_version: u32,
     pub public_url: String,
     pub port: u16,
@@ -54,13 +56,38 @@ impl Installation {
     }
 
     pub fn compose(&self, args: &[&str]) -> Result<()> {
+        self.compose_at(
+            &self.home.join("current"),
+            &self.home.join("install.env"),
+            args,
+        )
+    }
+
+    pub fn compose_at(
+        &self,
+        release: &std::path::Path,
+        env_file: &std::path::Path,
+        args: &[&str],
+    ) -> Result<()> {
         self.check_ownership()?;
-        let release = self.home.join("current");
         ensure!(
             release.join("compose.yaml").is_file(),
             "application bundle is missing; run the installer again"
         );
         let mut command = Command::new("docker");
+        for key in [
+            "STUDY_IMAGE",
+            "STUDY_VERSION",
+            "STUDY_COMMIT",
+            "STUDY_SCHEMA_VERSION",
+            "STUDY_PUBLIC_URL",
+            "STUDY_HOST_PORT",
+            "STUDY_DATA_DIR",
+            "STUDY_SECRETS_DIR",
+            "STUDY_HOSTNAME",
+        ] {
+            command.env_remove(key);
+        }
         command
             .arg("compose")
             .arg("--project-name")
@@ -68,7 +95,7 @@ impl Installation {
             .arg("--env-file")
             .arg(release.join("release.env"))
             .arg("--env-file")
-            .arg(self.home.join("install.env"))
+            .arg(env_file)
             .arg("--file")
             .arg(release.join("compose.yaml"));
         command.args(args);
@@ -325,6 +352,10 @@ fn fetch_json(url: &str) -> Result<serde_json::Value> {
 
 fn matches_installation(status: &serde_json::Value, config: &Config) -> bool {
     status["app"] == "study-space"
+        && config
+            .commit
+            .as_ref()
+            .is_none_or(|commit| status["commit"] == *commit)
         && status["version"]
             .as_str()
             .map(|value| value.trim_start_matches('v'))
@@ -360,6 +391,7 @@ mod tests {
     fn wrong_application_or_release_does_not_pass_health() {
         let config = Config {
             version: "0.1.0".into(),
+            commit: None,
             schema_version: 1,
             public_url: "https://study.os-pc.vpn.os-home.net".into(),
             port: 18081,

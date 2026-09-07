@@ -1,4 +1,5 @@
 mod api;
+mod bundle;
 mod runtime;
 mod setup;
 

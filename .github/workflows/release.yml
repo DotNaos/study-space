@@ -4,7 +4,6 @@ on:
     tags: ['v[0-9]*']
 permissions:
   contents: write
-  packages: write
 concurrency:
   group: release
   cancel-in-progress: false
@@ -42,29 +41,20 @@ jobs:
         run: python3 cli/tests/test_native.py
       - name: Installer contract
         run: python3 scripts/install/test_installer.py
-      - uses: docker/setup-buildx-action@5ac4a31b15f1c45ec652b8af78c2096c3a08368c
-      - uses: docker/login-action@0a596b2e7a325f0cedf8e9bd21ab002cbd3c9241
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and publish image
-        id: image
-        uses: docker/build-push-action@2ca78c6bec76527009825f31aae0532b4d40d820
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64
-          tags: ghcr.io/dotnaos/study-space:${{ github.ref_name }}
-          build-args: |
-            VERSION=${{ github.ref_name }}
-            COMMIT=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-      - name: Package immutable release bundle
-        env:
-          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
-        run: bash scripts/release/package.sh "${GITHUB_REF_NAME#v}" "ghcr.io/dotnaos/study-space@$IMAGE_DIGEST" "$GITHUB_SHA"
+      - name: Source bundle contract
+        run: python3 scripts/release/test_package.py
+      - name: Package exact release source
+        run: bash scripts/release/package.sh "${GITHUB_REF_NAME#v}" "$GITHUB_SHA"
+      - name: Validate released source build
+        run: |
+          source_dir=$(mktemp -d)
+          trap 'rm -rf "$source_dir"' EXIT
+          tar -xzf artifacts/study-space-bundle.tar.gz -C "$source_dir"
+          docker build \
+            --build-arg VERSION="$GITHUB_REF_NAME" \
+            --build-arg COMMIT="$GITHUB_SHA" \
+            --tag "study-space-local:$GITHUB_REF_NAME-$GITHUB_SHA" \
+            "$source_dir/source"
       - name: Publish installer and matched assets
         env:
           GH_TOKEN: ${{ github.token }}

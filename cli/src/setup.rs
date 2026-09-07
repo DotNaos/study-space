@@ -12,10 +12,7 @@ pub fn install(
     requested_port: u16,
 ) -> Result<()> {
     ensure!(valid_version(version), "invalid release version");
-    ensure!(
-        bundle.join("compose.yaml").is_file() && bundle.join("release.env").is_file(),
-        "bundle lacks compose.yaml or release.env"
-    );
+    let release_metadata = crate::bundle::validate(bundle, version)?;
     prerequisites()?;
     crate::runtime::check_proxy()?;
     ensure!(
@@ -29,7 +26,7 @@ pub fn install(
     } else {
         None
     };
-    let schema_version = bundle_schema(bundle)?;
+    let schema_version = release_metadata.schema;
     if let Some(old) = &prior {
         ensure!(
             old.schema_version == schema_version,
@@ -55,6 +52,7 @@ pub fn install(
     };
     let config = Config {
         version: version.to_string(),
+        commit: Some(release_metadata.commit),
         public_url,
         port,
         schema_version,
@@ -95,24 +93,19 @@ pub fn install(
         ])?;
     }
     let release = installation.home.join("releases").join(version);
-    if !release.exists() {
-        let staging = installation
-            .home
-            .join("releases")
-            .join(format!(".{version}.staging"));
-        if staging.exists() {
-            fs::remove_dir_all(&staging)?;
-        }
-        copy_bundle(bundle, &staging)?;
-        fs::rename(&staging, &release)?;
-    } else {
-        for file in ["compose.yaml", "release.env"] {
-            ensure!(
-                fs::read(release.join(file))? == fs::read(bundle.join(file))?,
-                "release {version} already exists with different contents; publish a new version"
-            );
-        }
-    }
+    crate::bundle::retain(bundle, &release)?;
+    let env = env_content(&config, &data, &secrets)?;
+    // Build against a private candidate environment. The running installation's
+    // symlink, environment and metadata remain untouched until the build passes.
+    let candidate = tempfile::Builder::new()
+        .prefix(".candidate-")
+        .tempdir_in(&installation.home)?;
+    let candidate_env = candidate.path().join("install.env");
+    atomic_write(&candidate_env, env.as_bytes(), 0o600)?;
+    installation.compose_at(&release, &candidate_env, &["config", "--quiet"])?;
+    println!("Building Study Space from verified release source (existing layers are reused)…");
+    installation.compose_at(&release, &candidate_env, &["build", "app"])
+        .context("candidate image build failed; the current application and its configuration are unchanged")?;
     let current = installation.home.join("current");
     let old_target = fs::read_link(&current).ok();
     let config_path = installation.home.join("installation.json");
@@ -127,7 +120,6 @@ pub fn install(
             "study-space.yml already exists and is not owned by Study Space; preserve it and resolve the route collision first"
         );
     }
-    let env = env_content(&config, &data, &secrets)?;
     let result = (|| -> Result<()> {
         atomic_write(&env_path, env.as_bytes(), 0o600)?;
         atomic_write(&config_path, &serde_json::to_vec_pretty(&config)?, 0o600)?;
@@ -166,19 +158,6 @@ pub fn install(
     Ok(())
 }
 
-fn bundle_schema(bundle: &Path) -> Result<u32> {
-    let content = fs::read_to_string(bundle.join("release.env"))?;
-    let versions: Vec<_> = content
-        .lines()
-        .filter_map(|line| line.strip_prefix("STUDY_SCHEMA_VERSION="))
-        .collect();
-    ensure!(
-        versions.len() == 1,
-        "release.env must declare one STUDY_SCHEMA_VERSION"
-    );
-    versions[0].parse().context("invalid bundle schema version")
-}
-
 fn env_content(config: &Config, data: &Path, secrets: &Path) -> Result<String> {
     for path in [data, secrets] {
         let text = path.to_str().context("non-UTF8 installation path")?;
@@ -188,12 +167,11 @@ fn env_content(config: &Config, data: &Path, secrets: &Path) -> Result<String> {
         );
     }
     Ok(format!(
-        "STUDY_PUBLIC_URL='{}'\nSTUDY_HOST_PORT={}\nSTUDY_DATA_DIR='{}'\nSTUDY_SECRETS_DIR='{}'\nSTUDY_VERSION='{}'\nSTUDY_HOSTNAME='{}'\n",
+        "STUDY_PUBLIC_URL='{}'\nSTUDY_HOST_PORT={}\nSTUDY_DATA_DIR='{}'\nSTUDY_SECRETS_DIR='{}'\nSTUDY_HOSTNAME='{}'\n",
         config.public_url,
         config.port,
         data.display(),
         secrets.display(),
-        config.version,
         config
             .public_url
             .trim_start_matches("https://study.")
@@ -233,24 +211,6 @@ fn valid_version(version: &str) -> bool {
             .bytes()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, b'.' | b'-' | b'_'))
         && !version.starts_with('.')
-}
-
-fn copy_bundle(source: &Path, destination: &Path) -> Result<()> {
-    fs::create_dir_all(destination)?;
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let kind = entry.file_type()?;
-        ensure!(!kind.is_symlink(), "bundle must not contain symlinks");
-        let target = destination.join(entry.file_name());
-        if kind.is_dir() {
-            copy_bundle(&entry.path(), &target)?;
-        } else if kind.is_file() {
-            fs::copy(entry.path(), target)?;
-        } else {
-            anyhow::bail!("unsupported bundle entry");
-        }
-    }
-    Ok(())
 }
 
 fn activate(link: &Path, target: &Path) -> Result<()> {
@@ -351,13 +311,5 @@ mod tests {
             fs::read_link(link).unwrap(),
             std::path::PathBuf::from("release-two")
         );
-    }
-    #[test]
-    fn bundle_rejects_symlinks() {
-        let temp = tempfile::tempdir().unwrap();
-        let source = temp.path().join("source");
-        fs::create_dir(&source).unwrap();
-        std::os::unix::fs::symlink("/etc/passwd", source.join("secret")).unwrap();
-        assert!(copy_bundle(&source, &temp.path().join("dest")).is_err());
     }
 }

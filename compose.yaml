@@ -1,7 +1,13 @@
 name: study-space
 services:
   app:
-    image: ${STUDY_IMAGE:?release.env must select an application image}
+    image: ${STUDY_IMAGE:?release.env must select a local application image}
+    pull_policy: never
+    build:
+      context: ./source
+      args:
+        VERSION: ${STUDY_VERSION:?release version is required}
+        COMMIT: ${STUDY_COMMIT:?release commit is required}
     restart: unless-stopped
     user: "1654:1654"
     read_only: true

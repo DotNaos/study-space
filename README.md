@@ -10,11 +10,11 @@ Run this on **os-pc**, as your normal user:
 curl -fsSL https://github.com/DotNaos/study-space/releases/latest/download/install.sh | sh
 ```
 
-The installer downloads the native `study` command and its matching application release, checks their SHA-256 checksums, starts the containers, and registers its own route with the existing machine proxy. It needs Linux x86-64, Docker with Compose, `curl`, `tar`, `sha256sum`, Tailscale, and sudo access. The machine's [Systems proxy, wildcard DNS, and HTTPS certificate](https://github.com/DotNaos/systems/blob/main/docs/machine-proxy.md) must already be configured. Setup checks this and stops with an explanation if something is missing.
+The installer downloads the native `study` command and its matching source release, checks their SHA-256 checksums, builds the app on your machine, starts the containers, and registers its own route with the existing machine proxy. It needs Linux x86-64, Docker with Compose, `curl`, `tar`, `sha256sum`, Tailscale, sudo access, and enough disk space for the build. Docker downloads the public build tools, dependencies, and PostgreSQL image; no Study Space image is uploaded to or downloaded from GitHub Container Registry. The machine's [Systems proxy, wildcard DNS, and HTTPS certificate](https://github.com/DotNaos/systems/blob/main/docs/machine-proxy.md) must already be configured. Setup checks this and stops with an explanation if something is missing.
 
 Open [Study Space on os-pc](https://study.os-pc.vpn.os-home.net) from a device on your Tailnet. The app is single-user: everyone allowed to reach this address through your Tailnet can use it. The application listens only on the host's loopback interface; PostgreSQL has no published port.
 
-Repeating the command preserves the database, settings, and Moodle connection. Release bundles pin their application image by digest. Schema-changing upgrades stop for a dedicated migration procedure; compatible failed updates restore the prior application release.
+Repeating the command preserves the database, settings, and Moodle connection. Each release includes the source from its exact Git commit and locked application dependencies. Docker reuses its local build cache on later runs. The new image is built before the running release is replaced, so a failed build leaves the current app running. Schema-changing upgrades stop for a dedicated migration procedure; compatible failed updates restore the prior application release.
 
 ## Connect Moodle
 
