@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="de" data-theme="system">
+  <head>
+    <meta charset="UTF-8" />
+    <script>
+      (() => {
+        if (location.pathname !== "/moodle-return") return;
+        const fragment = location.hash;
+        history.replaceState(null, "", "/moodle-return");
+        const parameters = new URLSearchParams(fragment.slice(1));
+        window.__studyMoodleReturn = {
+          id: parameters.get("id") || "",
+          callbackUrl: parameters.get("callback") || "",
+        };
+      })();
+    </script>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#ffffff" />
+    <script>
+      (() => {
+        let theme;
+        try {
+          theme = localStorage.getItem("study-space:theme");
+        } catch {}
+        if (theme !== "dark" && theme !== "light")
+          theme = matchMedia("(prefers-color-scheme: dark)").matches
+            ? "dark"
+            : "light";
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        document.querySelector('meta[name="theme-color"]').content =
+          theme === "dark" ? "#111111" : "#ffffff";
+      })();
+    </script>
+    <meta name="referrer" content="no-referrer" />
+    <title>Study Space</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  </head>
+  <body class="min-h-screen bg-bg-0 font-sans text-text antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,59 @@
+name: study-space
+services:
+  app:
+    image: ${STUDY_IMAGE:?release.env must select an application image}
+    restart: unless-stopped
+    user: "1654:1654"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    ports:
+      - "127.0.0.1:${STUDY_HOST_PORT:-18081}:8080"
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: study_space
+      PGUSER: study
+      PGPASSWORD_FILE: /run/secrets/postgres_password
+      STUDY_PUBLIC_URL: ${STUDY_PUBLIC_URL:?installation URL is required}
+      STUDY_HOSTNAME: ${STUDY_HOSTNAME:-os-pc}
+      STUDY_DATA_DIR: /var/lib/study-space
+      STUDY_PRIVATE_DIR: /var/lib/study-space-private
+    volumes:
+      - ${STUDY_DATA_DIR:?}/app:/var/lib/study-space
+      - ${STUDY_SECRETS_DIR:?}/app-private:/var/lib/study-space-private
+    secrets: [postgres_password]
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "5", http://127.0.0.1:8080/health/ready]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+  db:
+    image: postgres:18.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: study_space
+      POSTGRES_USER: study
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - ${STUDY_DATA_DIR:?}/postgres:/var/lib/postgresql
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U study -d study_space"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+secrets:
+  postgres_password:
+    file: ${STUDY_SECRETS_DIR:?}/postgres_password
