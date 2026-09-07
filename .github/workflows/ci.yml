@@ -35,5 +35,7 @@ jobs:
         run: python3 cli/tests/test_native.py
       - name: Installer contract
         run: python3 scripts/install/test_installer.py
+      - name: Source bundle contract
+        run: python3 scripts/release/test_package.py
       - name: Full application image
         run: docker build --build-arg COMMIT="$GITHUB_SHA" --build-arg VERSION=development -t study-space:verify .

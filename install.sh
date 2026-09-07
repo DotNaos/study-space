@@ -79,6 +79,9 @@ tar -xzf "$work/study-space-bundle.tar.gz" --no-same-owner -C "$work/bundle"
 [ -f "$work/cli/bin/study" ] || fail 'Release archive lacks bin/study.'
 [ -f "$work/bundle/compose.yaml" ] || fail 'Application bundle lacks compose.yaml.'
 [ -f "$work/bundle/release.env" ] || fail 'Application bundle lacks release.env.'
+[ -f "$work/bundle/source/Dockerfile" ] || fail 'Application bundle lacks the released Dockerfile.'
+[ -f "$work/bundle/source/.dockerignore" ] || fail 'Application bundle lacks the released build context rules.'
+[ -d "$work/bundle/source/server" ] && [ -d "$work/bundle/source/web" ] || fail 'Application bundle lacks released application source.'
 chmod 755 "$work/cli/bin/study"
 "$work/cli/bin/study" --version
 

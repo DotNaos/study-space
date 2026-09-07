@@ -37,7 +37,7 @@ except FileNotFoundError: sys.exit(22)
 """)
         cli = b'#!/bin/sh\nif [ "$1" = --version ]; then echo "study 0.1.0"; exit; fi\nprintf "%s\\n" "$@" > "$TEST_INVOCATION"\nexit "${TEST_SETUP_EXIT:-0}"\n'
         self.archive("study-linux-x86_64.tar.gz", {"bin/study": cli})
-        self.archive("study-space-bundle.tar.gz", {"compose.yaml": b"services: {}\n", "release.env": b"STUDY_SCHEMA_VERSION=1\n"})
+        self.archive("study-space-bundle.tar.gz", {"compose.yaml": b"services: {}\n", "release.env": b"STUDY_SCHEMA_VERSION=1\n", "source/Dockerfile": b"FROM scratch\n", "source/.dockerignore": b".git\n", "source/server/app.cs": b"// fixture\n", "source/web/app.ts": b"// fixture\n"})
         (self.release / "VERSION").write_text("0.1.0\n")
         self.checksums()
         self.env = {**os.environ, "PATH": f"{self.mock}:{os.environ['PATH']}",
@@ -120,6 +120,15 @@ except FileNotFoundError: sys.exit(22)
         result = self.run_installer(TEST_ARCH="aarch64")
         self.assertNotEqual(result.returncode, 0)
         self.assertFalse((self.root / "state").exists())
+
+    def test_missing_source_keeps_existing_cli(self):
+        (self.bin / "study").write_text("old-cli")
+        self.archive("study-space-bundle.tar.gz", {"compose.yaml": b"services: {}\n", "release.env": b"STUDY_SCHEMA_VERSION=1\n"})
+        self.checksums()
+        result = self.run_installer()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("released Dockerfile", result.stderr)
+        self.assertEqual((self.bin / "study").read_text(), "old-cli")
 
     def test_manifest_duplicates_rejected(self):
         manifest = self.release / "SHA256SUMS"
