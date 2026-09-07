@@ -1,0 +1,79 @@
+name: Release
+on:
+  push:
+    tags: ['v[0-9]*']
+permissions:
+  contents: write
+  packages: write
+concurrency:
+  group: release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_DB: study_space_test
+          POSTGRES_USER: study_fixture
+          POSTGRES_PASSWORD: synthetic-ci-fixture
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U study_fixture -d study_space_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+        with:
+          fetch-depth: 0
+      - name: Validate release source
+        run: |
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+          version="${GITHUB_REF_NAME#v}"
+          test "$(sed -n 's/^version = "\([^"]*\)"/\1/p' cli/Cargo.toml | head -1)" = "$version"
+      - name: API tests
+        env:
+          STUDY_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=study_space_test;Username=study_fixture;Password=synthetic-ci-fixture
+        run: docker run --rm --network host -e STUDY_TEST_POSTGRES -v "$PWD/server:/source" -w /source mcr.microsoft.com/dotnet/sdk:10.0 dotnet test StudySpace.Api.Tests/StudySpace.Api.Tests.csproj -c Release -p:RestoreLockedMode=true
+      - name: CLI tests and build
+        run: docker run --rm -v "$PWD/cli:/source" -w /source rust:1.93-bookworm sh -c 'cargo test --locked && cargo build --release --locked'
+      - name: Native CLI contract
+        run: python3 cli/tests/test_native.py
+      - name: Installer contract
+        run: python3 scripts/install/test_installer.py
+      - uses: docker/setup-buildx-action@5ac4a31b15f1c45ec652b8af78c2096c3a08368c
+      - uses: docker/login-action@0a596b2e7a325f0cedf8e9bd21ab002cbd3c9241
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish image
+        id: image
+        uses: docker/build-push-action@2ca78c6bec76527009825f31aae0532b4d40d820
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ghcr.io/dotnaos/study-space:${{ github.ref_name }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Package immutable release bundle
+        env:
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: bash scripts/release/package.sh "${GITHUB_REF_NAME#v}" "ghcr.io/dotnaos/study-space@$IMAGE_DIGEST" "$GITHUB_SHA"
+      - name: Publish installer and matched assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          flags=(--verify-tag --generate-notes)
+          if [[ "${GITHUB_REF_NAME#v}" == *-* ]]; then
+            flags+=(--prerelease --latest=false)
+          fi
+          gh release create "$GITHUB_REF_NAME" \
+            artifacts/VERSION artifacts/SHA256SUMS artifacts/manifest.json \
+            artifacts/install.sh artifacts/study-linux-x86_64.tar.gz artifacts/study-space-bundle.tar.gz \
+            --title "Study Space $GITHUB_REF_NAME" "${flags[@]}"

@@ -1,0 +1,12 @@
+**/node_modules/
+**/dist/
+**/bin/
+**/obj/
+**/target/
+.env
+.env.*
+!.env.example
+install.env
+release.env
+artifacts/
+.DS_Store

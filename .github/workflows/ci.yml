@@ -1,0 +1,39 @@
+name: Verify
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_DB: study_space_test
+          POSTGRES_USER: study_fixture
+          POSTGRES_PASSWORD: synthetic-ci-fixture
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U study_fixture -d study_space_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@f548e57e544e1ff5a4c46bf1e1b8685f8e4a348a
+      - name: API tests
+        env:
+          STUDY_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=study_space_test;Username=study_fixture;Password=synthetic-ci-fixture
+        run: docker run --rm --network host -e STUDY_TEST_POSTGRES -v "$PWD/server:/source" -w /source mcr.microsoft.com/dotnet/sdk:10.0 dotnet test StudySpace.Api.Tests/StudySpace.Api.Tests.csproj -c Release -p:RestoreLockedMode=true
+      - name: CLI tests and build
+        run: docker run --rm -v "$PWD/cli:/source" -w /source rust:1.93-bookworm sh -c 'cargo test --locked && cargo build --release --locked'
+      - name: Native CLI contract
+        run: python3 cli/tests/test_native.py
+      - name: Installer contract
+        run: python3 scripts/install/test_installer.py
+      - name: Full application image
+        run: docker build --build-arg COMMIT="$GITHUB_SHA" --build-arg VERSION=development -t study-space:verify .

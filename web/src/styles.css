@@ -1,0 +1,6 @@
+@import "tailwindcss";
+@import "@dotnaos/design/styles.css";
+@import "@dotnaos/design/tailwind-theme.css";
+@import "@dotnaos/design/tokens.css";
+@import "@dotnaos/design/theme.css";
+@source "../node_modules/@dotnaos/ui-base/dist";

@@ -1,0 +1,153 @@
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using Microsoft.AspNetCore.WebUtilities;
+using System.Text.RegularExpressions;
+using StudySpace.Api.Infrastructure;
+namespace StudySpace.Api.Providers.Moodle;
+
+public sealed class MoodleService(IMoodleTransport transport, CredentialStore credentials, TimeProvider clock)
+{
+    private readonly ConcurrentDictionary<string, PendingLogin> logins = new();
+    private readonly SemaphoreSlim changes = new(1, 1);
+    private static readonly string[] QrInstructions = [
+        "Öffne dein Moodle-Profil und melde dich auf der Seite deiner Hochschule an.",
+        "Zeige im Bereich Mobile App den Anmelde-QR-Code an und lade sein Bild hier hoch.",
+        "Browser und Study-Space-Server müssen dieselbe öffentliche Internetadresse verwenden. Nutze dasselbe Heimnetz oder einen bereits eingerichteten Exit Node des Servers.",
+        "Halte den QR-Code privat. Er ist kurz gültig und kann nur einmal verwendet werden."
+    ];
+    public async Task<Discovery> Discover(string raw, CancellationToken ct)
+    {
+        var site = MoodleSite.Parse(raw);
+        var config = await transport.Public(site, "tool_mobile_get_public_config", new { }, ct);
+        var canonical = MoodleJson.Text(config, "httpswwwroot");
+        if (string.IsNullOrWhiteSpace(canonical)) canonical = MoodleJson.Text(config, "wwwroot");
+        if (canonical is not null && MoodleSite.Parse(canonical) != site)
+            throw new ApiFailure("site_canonical_mismatch", "Use the site's canonical Moodle address. The supplied address reports a different installation.");
+        var enabled = MoodleJson.Number(config, "enablemobilewebservice") == 1 && MoodleJson.Number(config, "enablewebservices") == 1;
+        var qr = enabled && MoodleJson.Number(config, "tool_mobile_qrcodetype") == 2;
+        var browser = enabled && MoodleJson.Number(config, "typeoflogin") is 2 or 3;
+        var advertisedLaunch = MoodleJson.Text(config, "launchurl");
+        var expectedLaunch = site.AbsoluteUri.TrimEnd('/') + "/admin/tool/mobile/launch.php";
+        if (!string.IsNullOrEmpty(advertisedLaunch) && advertisedLaunch != expectedLaunch) browser = false;
+        var warnings = new List<string>();
+        if (!enabled) warnings.Add("Diese Moodle-Seite hat mobile Webdienste deaktiviert. Die Administration muss sie vor der Verbindung aktivieren.");
+        else if (!qr && !browser) warnings.Add("Diese Moodle-Seite bietet keine Anmeldung per mobilem QR-Code an. Dafür benötigt Study Space noch eine native Browser-Rückgabe. Hier wird kein Passwort abgefragt.");
+        if (qr) warnings.Add("Für die QR-Anmeldung müssen Moodle im Browser und dieser Server dieselbe öffentliche Internetverbindung verwenden.");
+        if (browser) warnings.Add("Die Browser-Anmeldung benötigt einen Browser mit Protokoll-Registrierung, etwa Chrome oder Edge am Computer. Erlaube Study Space als Handler, bevor du Moodle öffnest.");
+        var methods = new List<string>();
+        if (browser) methods.Add("browser-sso");
+        if (qr) methods.Add("qr");
+        return new Discovery(site.AbsoluteUri.TrimEnd('/'), MoodleJson.Text(config, "sitename") ?? "Moodle", browser ? "browser-sso" : "site-login", methods.ToArray(), warnings.ToArray());
+    }
+    public async Task<LoginView> Start(LoginRequest request, CancellationToken ct)
+    {
+        var discovery = await Discover(request.SiteUrl, ct);
+        if (!discovery.Methods.Contains(request.Method)) throw new ApiFailure("login_unsupported", "This site does not support the selected password-free connection method.", 422);
+        await changes.WaitAsync(ct);
+        try
+        {
+            // One active connection flow for a single-user installation; bound storage and invalidate old flows.
+            logins.Clear();
+            var id = Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32));
+            var login = new PendingLogin(MoodleSite.Parse(discovery.SiteUrl), clock.GetUtcNow().AddMinutes(5), request.Method, Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)));
+            logins[id] = login;
+            var launch = request.Method == "qr" ? discovery.SiteUrl + "/user/profile.php" : QueryHelpers.AddQueryString(discovery.SiteUrl + "/admin/tool/mobile/launch.php",
+                new Dictionary<string, string?> { ["service"] = "moodle_mobile_app", ["passport"] = login.Passport, ["urlscheme"] = MoodleBrowserReturn.Scheme });
+            string[] instructions = request.Method == "qr" ? QrInstructions : [
+                "Erlaube Study Space in deinem Browser, Anmeldelinks zu öffnen.",
+                "Öffne anschließend Moodle und melde dich auf der Seite deiner Hochschule an.",
+                "Erlaube die Rückkehr zu Study Space. Dein Passwort bleibt auf der Seite deiner Hochschule."
+            ];
+            return new LoginView(id, "pending", request.Method, login.ExpiresAt, launch, instructions);
+        }
+        finally { changes.Release(); }
+    }
+    public LoginStatus Status(string id)
+    {
+        var login = Find(id);
+        return new LoginStatus(id, login.ExpiresAt <= clock.GetUtcNow() && login.Status == "pending" ? "expired" : login.Status, login.ExpiresAt);
+    }
+    public async Task<LoginStatus> Complete(string id, CompleteRequest request, CancellationToken ct)
+    {
+        await changes.WaitAsync(ct);
+        try
+        {
+            var login = Find(id);
+            if (login.ExpiresAt <= clock.GetUtcNow()) throw new ApiFailure("login_expired", "This connection request expired. Start again.", 410);
+            if (login.Status != "pending") throw new ApiFailure("login_consumed", "This connection request was already used. Start again.", 409);
+            string token;
+            long? expectedUserId = null;
+            if (login.Method == "qr")
+            {
+                if (request.CallbackUrl is not null) throw new ApiFailure("login_method_mismatch", "Use the selected connection method.");
+                var qr = MoodleSite.ParseQr(request.QrCode, login.Site);
+                expectedUserId = qr.UserId;
+                login.Status = "failed";
+                var exchange = await transport.Public(login.Site, "tool_mobile_get_tokens_for_qr_login", new { qrloginkey = qr.Key, userid = qr.UserId }, ct);
+                token = MoodleJson.Text(exchange, "token") ?? "";
+            }
+            else
+            {
+                if (request.QrCode is not null) throw new ApiFailure("login_method_mismatch", "Use the selected connection method.");
+                token = MoodleBrowserReturn.Token(request.CallbackUrl, login.Site, login.Passport);
+                login.Status = "failed";
+            }
+            if (!Regex.IsMatch(token, "^[a-zA-Z0-9]{16,256}$")) throw new ApiFailure("moodle_response", "Moodle did not return a valid mobile connection.", 502);
+            var info = await transport.Authenticated(login.Site, token, "core_webservice_get_site_info", null, ct);
+            var userId = MoodleJson.Number(info, "userid");
+            if (userId <= 0 || expectedUserId is not null && userId != expectedUserId || MoodleSite.Parse(MoodleJson.Text(info, "siteurl")) != login.Site)
+                throw new ApiFailure("account_mismatch", "Moodle returned a different site or account. Start a new connection.", 422);
+            var credential = new MoodleCredential(login.Site.AbsoluteUri.TrimEnd('/'), MoodleJson.Text(info, "sitename") ?? "Moodle", userId,
+                MoodleJson.Text(info, "fullname") ?? MoodleJson.Text(info, "username") ?? "Moodle user", token, clock.GetUtcNow());
+            await credentials.Write(credential);
+            login.Status = "completed";
+            return new LoginStatus(id, login.Status, login.ExpiresAt);
+        }
+        finally { changes.Release(); }
+    }
+    public async Task<MoodleState> State(CancellationToken ct)
+    {
+        var credential = await credentials.Read();
+        if (credential is null) return new("disconnected");
+        try { await Validate(credential, ct); }
+        catch (ApiFailure error) when (error.Code == "moodle_token_rejected")
+        { return new("expired", credential.SiteUrl, credential.SiteName, credential.DisplayName, credential.LastVerifiedAt); }
+        return new("connected", credential.SiteUrl, credential.SiteName, credential.DisplayName, clock.GetUtcNow());
+    }
+    public async Task<Course[]> Courses(CancellationToken ct)
+    {
+        var credential = await credentials.Read() ?? throw new ApiFailure("moodle_disconnected", "Connect Moodle first.", 409);
+        await Validate(credential, ct);
+        var result = await transport.Authenticated(MoodleSite.Parse(credential.SiteUrl), credential.Token, "core_enrol_get_users_courses", new() { ["userid"] = credential.UserId.ToString() }, ct);
+        if (result.ValueKind != System.Text.Json.JsonValueKind.Array) throw new ApiFailure("moodle_response", "Moodle returned an unsupported course list.", 502);
+        return result.EnumerateArray().Select(x => new Course(MoodleJson.Number(x, "id"), MoodleJson.Text(x, "fullname") ?? "Course", MoodleJson.Text(x, "shortname") ?? "", MoodleJson.Text(x, "summary") ?? "")).ToArray();
+    }
+    private async Task Validate(MoodleCredential credential, CancellationToken ct)
+    {
+        var site = MoodleSite.Parse(credential.SiteUrl);
+        var info = await transport.Authenticated(site, credential.Token, "core_webservice_get_site_info", null, ct);
+        if (MoodleJson.Number(info, "userid") != credential.UserId || MoodleSite.Parse(MoodleJson.Text(info, "siteurl")) != site)
+            throw new ApiFailure("moodle_token_rejected", "The saved connection no longer matches this account. Reconnect Moodle.", 401);
+    }
+    public async Task Cancel(string id, CancellationToken ct)
+    {
+        await changes.WaitAsync(ct);
+        try { logins.TryRemove(id, out _); }
+        finally { changes.Release(); }
+    }
+    public async Task Disconnect(CancellationToken ct)
+    {
+        await changes.WaitAsync(ct);
+        try { logins.Clear(); credentials.Delete(); }
+        finally { changes.Release(); }
+    }
+    private PendingLogin Find(string id) => logins.TryGetValue(id, out var login) ? login : throw new ApiFailure("login_unknown", "This connection request is no longer available. Start again.", 404);
+    private sealed class PendingLogin(Uri site, DateTimeOffset expiresAt, string method, string passport)
+    {
+        public Uri Site { get; } = site;
+        public string Method { get; } = method;
+        public string Passport { get; } = passport;
+        public DateTimeOffset ExpiresAt { get; } = expiresAt;
+        public string Status { get; set; } = "pending";
+    }
+}
