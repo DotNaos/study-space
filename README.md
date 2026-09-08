@@ -19,8 +19,8 @@ Repeating the command preserves the database, settings, and Moodle connection. E
 ## Connect Moodle
 
 1. Open **Quellen** and enter your Moodle address, including any path such as `/moodle`.
-2. Choose browser login. Allow Study Space to handle its return link when your browser asks, then open Moodle.
-3. Sign in on your school's website. Moodle shows its app-return page. If it does not return automatically, use the visible link to open the app. Study Space verifies and saves the connection.
+2. Choose browser login. Allow Study Space to handle its return link when your browser asks, then open Moodle in a new tab. Keep the original Study Space tab open; it checks for completion automatically.
+3. Sign in on your school's website. Moodle shows its app-return page. If it does not return automatically, use the visible link to open the app. Study Space verifies and saves the connection. If the link does nothing in Chrome, open Settings → Privacy and security → Site settings → Additional permissions → Protocol handlers, then select **Set as default** from the Study Space entry’s menu under `web+studyspace`. A listed handler is not necessarily the default.
 4. Open **Kurse** to search your enrolled courses. Open a course to browse its sections, activities, and files. Links open the original material in Moodle; downloading and processing materials is a later step.
 
 Browser login uses Moodle's mobile-app launch flow with a registered `web+studyspace` return link. The return address stays the same across attempts; the server matches each return to the current single-use login. Use a supporting desktop browser such as Chrome or Edge. Study Space never assumes that you granted the browser's permission; it explains the required step. Safari and some embedded/mobile browsers do not support this return mechanism.
