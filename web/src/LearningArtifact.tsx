@@ -10,6 +10,7 @@ import {
 import { SafeMarkdown } from "./SafeMarkdown";
 import { SourceChips, type SourceSelection } from "./SourceViewer";
 import { ExerciseAnswer } from "./ExerciseAnswer";
+import { ChapterNavigation } from "./ChapterNavigation";
 import { Notice } from "./shared";
 
 export function LearningArtifact({
@@ -33,13 +34,14 @@ export function LearningArtifact({
   const [error, setError] = useState("");
   async function goToSection(id: string) {
     document
-      .getElementById(`learning-section-${id}`)
-      ?.scrollIntoView({
-        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "instant"
-          : "smooth",
-        block: "start",
-      });
+      .getElementById(`learning-heading-${id}`)
+      ?.focus({ preventScroll: true });
+    document.getElementById(`learning-section-${id}`)?.scrollIntoView({
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+      block: "start",
+    });
     onPosition(id);
     try {
       await api<LearningState>(`${learningPath(courseId)}/position`, {
@@ -97,24 +99,11 @@ export function LearningArtifact({
       )}
       {view === "script" ? (
         <div className="pt-5">
-          {version.sections.length > 1 && (
-            <nav
-              aria-label="Kapitel im Lernskript"
-              className="mb-6 flex flex-wrap gap-x-4 gap-y-2 border-b border-border pb-5"
-            >
-              {version.sections.map((section, index) => (
-                <button
-                  key={section.id}
-                  type="button"
-                  onClick={() => void goToSection(section.id)}
-                  className="max-w-full text-left text-xs leading-5 text-text-muted hover:text-text"
-                >
-                  <span className="mr-1.5 text-text-muted/60">{index + 1}</span>
-                  {section.title}
-                </button>
-              ))}
-            </nav>
-          )}
+          <ChapterNavigation
+            sections={version.sections}
+            readingSectionId={readingSectionId}
+            onSelect={(id) => void goToSection(id)}
+          />
           <div className="space-y-9">
             {version.sections.map((section, index) => (
               <section
@@ -124,6 +113,7 @@ export function LearningArtifact({
                 aria-labelledby={`learning-heading-${section.id}`}
               >
                 <h3
+                  tabIndex={-1}
                   id={`learning-heading-${section.id}`}
                   className="text-lg font-medium tracking-tight"
                 >

@@ -11,7 +11,7 @@ public sealed class LearningService(LearningStore store, IMaterialCatalog materi
     public Task<LearningVersion> Version(long courseId, string id, CancellationToken ct) => store.WithCourse(courseId, async state =>
     {
         if (!state.Versions.Any(version => version.Id == id)) throw Missing();
-        return await store.Version(courseId, id, ct);
+        return await LearningPresentation.Version(await store.Version(courseId, id, ct), materials, ct);
     }, ct);
 
     public async Task<LearningState> Generate(long courseId, GenerateRequest request, CancellationToken ct)
@@ -90,7 +90,7 @@ public sealed class LearningService(LearningStore store, IMaterialCatalog materi
     internal bool Register(long courseId, CancellationTokenSource source) => running.TryAdd(courseId, source);
     internal void Unregister(long courseId) => running.TryRemove(courseId, out _);
     private async Task<LearningState> View(LearningManifest state, CancellationToken ct) => new(state.CourseId, state.ActiveVersionId,
-        state.Versions.ToArray(), state.ActiveVersionId is null ? null : await store.Version(state.CourseId, state.ActiveVersionId, ct),
+        state.Versions.ToArray(), state.ActiveVersionId is null ? null : await LearningPresentation.Version(await store.Version(state.CourseId, state.ActiveVersionId, ct), materials, ct),
         state.Job, new(state.Drafts), state.ReadingSectionId, state.Messages.ToArray());
     private static ApiFailure Missing() => new("learning_content_missing", "This saved learning content is not available.", 404);
 }

@@ -29,6 +29,7 @@ let generationDelay = 1400;
 let importDelay = 1000;
 let failGeneration = false;
 let initialSaved = false;
+let largeCourse = false;
 let imported = false;
 const courses = new Map<number, LearningState>();
 const imports = new Map<number, MaterialSnapshot>();
@@ -40,7 +41,7 @@ const problem = (detail: string, status = 400) =>
   json({ detail, code: "synthetic_learning_failure" }, status);
 
 function version(number: number): LearningVersion {
-  return {
+  const result: LearningVersion = {
     id: `version-${number}`,
     createdAt: new Date().toISOString(),
     snapshotId,
@@ -93,6 +94,26 @@ function version(number: number): LearningVersion {
       },
     ],
   };
+  if (largeCourse) {
+    const topics = [
+      "Zellstruktur und die Aufgaben der Organellen",
+      "Membrantransport und das Gleichgewicht in der Zelle",
+      "Enzyme und die Regulation des Stoffwechsels",
+      "Genetische Information und ihre Weitergabe",
+      "Ökologische Beziehungen und biologische Vielfalt",
+    ];
+    result.title = "Biologie: Grundlagen und Zusammenhänge";
+    result.sections = Array.from({ length: 120 }, (_, index) => ({
+      ...result.sections[index % 2],
+      id: `section-${number}-${index + 1}`,
+      title: `${topics[index % topics.length]} · Teil ${Math.floor(index / topics.length) + 1}`,
+    }));
+    result.exercises = Array.from({ length: 70 }, (_, index) => ({
+      ...result.exercises[index % 2],
+      id: `exercise-${number}-${index + 1}`,
+    }));
+  }
+  return result;
 }
 function addVersion(state: LearningState) {
   const next = version(state.versions.length + 1);
@@ -235,7 +256,12 @@ export function configureLearning(next: Record<string, unknown>) {
   imports.clear();
   generationStarted.clear();
   importStarted.clear();
-  initialSaved = next.learning === "saved" || next.learning === "malicious";
+  largeCourse = next.learning === "large";
+  initialSaved =
+    largeCourse ||
+    next.learning === "saved" ||
+    next.learning === "malicious" ||
+    next.learning === "tex";
   imported = next.learning === "partial" || initialSaved;
   failGeneration = next.learning === "generation-error";
   codexStatus = (next.codex as CodexConnection["status"]) || "disconnected";
@@ -247,6 +273,22 @@ export function configureLearning(next: Record<string, unknown>) {
     const state = stateFor(41);
     state.activeVersion!.sections[0].markdown +=
       '\n\n<script>alert("do not run")</script>\n\n![Remote tracking image](https://example.invalid/track.png)\n\n[Untrusted action](/api/codex/logout)\n\n$\\href{https://example.invalid/track}{blocked}$';
+  }
+  if (next.learning === "tex") {
+    const state = stateFor(41);
+    state.activeVersion!.sections[0].title = "Formeln und Schreibweisen";
+    state.activeVersion!.sections[0].markdown = [
+      String.raw`Inline: \(x^2 + y^2 = r^2\).` +
+        " Eine Hälfte ist " +
+        String.raw`\(\frac{1}{2}\).`,
+      String.raw`\[\frac{-b \pm \sqrt{b^2-4ac}}{2a}\]`,
+      String.raw`\[
+\begin{pmatrix}1 & 2 \\ 3 & 4\end{pmatrix}
+\]`,
+      "Ein Codebeispiel bleibt wörtlich: `" + String.raw`\(x^2\)` + "`.",
+      "```tex\n" + String.raw`\[\frac{1}{2}\]` + "\n```",
+      String.raw`Auch Dollar-Formeln funktionieren: $E=mc^2$.`,
+    ].join("\n\n");
   }
 }
 export async function learningResponse(
