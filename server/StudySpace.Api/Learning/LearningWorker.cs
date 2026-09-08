@@ -52,7 +52,11 @@ public sealed class LearningWorker(LearningStore store, LearningService service,
                     using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token);
                     deadline.CancelAfter(TimeSpan.FromMinutes(4));
                     string raw;
-                    try { raw = await model.Generate(LearningChunks.Prompt(chunk), LearningChunks.Schema, deadline.Token); }
+                    try
+                    {
+                        var images = await LearningImages.Load(chunk, materials, deadline.Token);
+                        raw = await model.Generate(LearningChunks.Prompt(chunk), LearningChunks.Schema, deadline.Token, images);
+                    }
                     catch (OperationCanceledException) when (!cancellation.IsCancellationRequested)
                     { throw new ApiFailure("learning_timeout", "Codex took too long for one source chapter. Completed chapters are saved; try again to resume.", 504); }
                     result = LearningChunks.Validate(raw, chunk);

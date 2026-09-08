@@ -65,6 +65,16 @@ public sealed class LearningTests : IDisposable
         Assert.Throws<ApiFailure>(() => LearningChunks.Validate(value, chunk));
     }
 
+    [Fact] public async Task SourceImagesReachTheModelBeforeVersionPublication()
+    {
+        catalog.WithImage = true;
+        await StartAndProcess();
+        Assert.Equal("completed", (await service.Get(7)).Job!.Status);
+        var image = Assert.Single(model.Images);
+        Assert.Equal("image/png", image.MimeType);
+        Assert.Equal(Catalog.ImageBytes, Convert.FromBase64String(image.Base64));
+    }
+
     [Fact] public async Task NewGenerationKeepsActiveVersionAnswersAndOlderVersionsUntilActivation()
     {
         await StartAndProcess();
@@ -191,25 +201,29 @@ public sealed class LearningTests : IDisposable
         public static readonly MaterialDocument Document = new(Input.MaterialId, Input.Revision, Input.Name, "application/pdf", [Block], [], [], [], true);
         public bool Complete { get; set; } = true;
         public bool Long { get; set; }
+        public bool WithImage { get; set; }
+        public static readonly byte[] ImageBytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jV1kAAAAASUVORK5CYII=");
         public Task<MaterialSnapshot> GetSnapshot(long courseId, CancellationToken ct = default) => Task.FromResult(new MaterialSnapshot(courseId, SnapshotId, Complete ? "ready" : "partial",
             new(Complete ? 1 : 2, 1, Complete ? 0 : 1, 0, 0, Complete),
             [new(Input.MaterialId, Input.Revision, Input.Name, "file", "application/pdf", 1, Input.SectionName, 1, "ready", null, null, null, [])], null, DateTimeOffset.UtcNow));
         public Task<MaterialDocument> GetDocument(string materialId, string revision, CancellationToken ct = default) =>
-            Task.FromResult(Long ? Document with { Blocks = [Block with { Text = new string('x', 17000) }] } : Document);
+            Task.FromResult(WithImage ? Document with { Assets = [new("page-0001", "page-image", "image/png", "Page 1.png", "/asset", MaterialStore.Hash(ImageBytes), ImageBytes.Length, 1)] } : Long ? Document with { Blocks = [Block with { Text = new string('x', 17000) }] } : Document);
         public Task<MaterialSnapshot> StartImport(long courseId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<MaterialSnapshot> Cancel(long courseId, string jobId, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task<MaterialAssetContent> GetAsset(string materialId, string revision, string assetId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task<MaterialAssetContent> GetAsset(string materialId, string revision, string assetId, CancellationToken ct = default) => Task.FromResult(new MaterialAssetContent(ImageBytes, "image/png", "Page 1.png"));
     }
     private sealed class Model : ILearningModel
     {
         public int Calls { get; private set; }
+        public List<LearningImage> Images { get; } = [];
         public int FailAt { get; set; }
         public bool PauseUntilCancelled { get; set; }
         public TaskCompletionSource<bool> Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public TaskCompletionSource<bool> ReleaseCancellation { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public async Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct)
+        public async Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct, IReadOnlyList<LearningImage>? images = null)
         {
             Calls++;
+            Images.AddRange(images ?? []);
             if (PauseUntilCancelled)
             {
                 Entered.TrySetResult(true);

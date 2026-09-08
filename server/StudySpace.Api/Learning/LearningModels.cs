@@ -43,7 +43,9 @@ public sealed class LearningManifest
 
 public interface ILearningModel
 {
-    Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct);
+    Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct, IReadOnlyList<LearningImage>? images = null);
     IAsyncEnumerable<LearningModelDelta> Chat(string prompt, CancellationToken ct);
 }
 public sealed record LearningModelDelta(string Text, bool IsFinal = false);
+
+public sealed record LearningImage(string MimeType, string Base64);

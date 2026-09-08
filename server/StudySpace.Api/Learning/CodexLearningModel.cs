@@ -7,11 +7,11 @@ namespace StudySpace.Api.Learning;
 
 public sealed class CodexLearningModel(ICodexRuntime codex) : ILearningModel
 {
-    public async Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct)
+    public async Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct, IReadOnlyList<LearningImage>? images = null)
     {
         var text = new StringBuilder();
         string? completed = null;
-        await foreach (var delta in codex.GenerateAsync(prompt, schema, ct))
+        await foreach (var delta in codex.GenerateAsync(prompt, schema, ct, images?.Select(image => new CodexImage(image.MimeType, image.Base64)).ToArray()))
         {
             if (delta.Type == "text") text.Append(delta.Text);
             if (delta.Type == "completed") completed = delta.Text ?? text.ToString();

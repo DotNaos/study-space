@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Encodings.Web;
 
 namespace StudySpace.Api.Codex;
 
@@ -8,7 +9,11 @@ public static class CodexPolicy
     public const int MaximumPromptCharacters = 250_000;
     public const int MaximumOutputCharacters = 500_000;
     public const int MaximumLineCharacters = 2_000_000;
+    public const int MaximumRpcLineCharacters = 16 * 1024 * 1024;
     public static readonly TimeSpan GenerationTimeout = TimeSpan.FromMinutes(5);
+    // This JSON is an internal wire format, never embedded in HTML. Keeping
+    // base64 and Unicode literal makes its size predictable under the body limit.
+    internal static readonly JsonSerializerOptions WireJson = new(JsonSerializerDefaults.Web) { Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 
     public static object ThreadStart() => new
     {
@@ -26,12 +31,19 @@ public static class CodexPolicy
         }
     };
 
-    public static object TurnStart(string threadId, string prompt, JsonElement? schema) => new
+    public static object TurnStart(string threadId, string prompt, JsonElement? schema, IReadOnlyList<CodexImage>? images = null) => new
     {
-        threadId, input = new[] { new { type = "text", text = prompt, text_elements = Array.Empty<object>() } },
+        threadId, input = Input(prompt, images),
         environments = Array.Empty<object>(), approvalPolicy = "never",
         sandboxPolicy = new { type = "readOnly", networkAccess = false }, outputSchema = schema
     };
+
+    private static object[] Input(string prompt, IReadOnlyList<CodexImage>? images)
+    {
+        var input = new List<object> { new { type = "text", text = prompt, text_elements = Array.Empty<object>() } };
+        foreach (var image in images ?? []) input.Add(new { type = "image", url = $"data:{image.MimeType};base64,{image.Base64}", detail = "original" });
+        return input.ToArray();
+    }
 
     public static ProcessStartInfo Process(string binary, string privateDirectory)
     {

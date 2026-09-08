@@ -51,8 +51,8 @@ export function CourseDetail({
   const materials = useMaterialSnapshot(course.id);
   useEffect(() => {
     if (!tabChosen && !learning.loading)
-      setTab(learning.state?.activeVersion ? "learning" : "materials");
-  }, [learning.loading, learning.state?.activeVersionId, tabChosen]);
+      setTab(learning.state?.activeVersion || learning.state?.job ? "learning" : "materials");
+  }, [learning.loading, learning.state?.activeVersionId, learning.state?.job?.id, tabChosen]);
   const semester = courseSemester(course);
   const subtitle = courseSubtitle(course);
   const load = useCallback(async () => {

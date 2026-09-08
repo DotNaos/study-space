@@ -63,7 +63,7 @@ public sealed class CodexProcess(IConfiguration config) : ICodexRpc
         try
         {
             var current = process ?? throw new CodexUnavailableException();
-            await current.StandardInput.WriteLineAsync(JsonSerializer.Serialize(value).AsMemory(), ct);
+            await current.StandardInput.WriteLineAsync(JsonSerializer.Serialize(value, CodexPolicy.WireJson).AsMemory(), ct);
             await current.StandardInput.FlushAsync(ct);
         }
         finally { writes.Release(); }
@@ -73,7 +73,7 @@ public sealed class CodexProcess(IConfiguration config) : ICodexRpc
     {
         try
         {
-            await foreach (var line in ReadLinesAsync(current.StandardOutput, CancellationToken.None))
+            await foreach (var line in ReadLinesAsync(current.StandardOutput, CancellationToken.None, CodexPolicy.MaximumRpcLineCharacters))
             {
                 using var document = JsonDocument.Parse(line);
                 var message = document.RootElement;
@@ -82,6 +82,10 @@ public sealed class CodexProcess(IConfiguration config) : ICodexRpc
                     // A server request is never a client response, even when its id collides.
                     // No approvals or tool calls are supported. Terminating fails closed.
                     if (message.TryGetProperty("id", out _)) throw new CodexUnavailableException();
+                    // Codex echoes inline image bytes in userMessage items. They
+                    // are our own bounded inputs, not model output or tool activity.
+                    // Discard the echo before cloning or queueing notifications.
+                    if (IsInputEcho(message)) continue;
                     Notification?.Invoke(message.Clone());
                 }
                 else if (message.TryGetProperty("id", out var id) && id.TryGetInt64(out var number) && pending.TryRemove(number, out var completion))
@@ -95,22 +99,39 @@ public sealed class CodexProcess(IConfiguration config) : ICodexRpc
         finally { if (ReferenceEquals(process, current)) Abort(); }
     }
 
-    public static async IAsyncEnumerable<string> ReadLinesAsync(StreamReader stream, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct)
+    private static bool IsInputEcho(JsonElement message) =>
+        message.GetProperty("method").GetString() is "item/started" or "item/completed" &&
+        message.TryGetProperty("params", out var parameters) && parameters.TryGetProperty("item", out var item) &&
+        item.TryGetProperty("type", out var type) && type.GetString() == "userMessage";
+
+    public static async IAsyncEnumerable<string> ReadLinesAsync(StreamReader stream, [System.Runtime.CompilerServices.EnumeratorCancellation] CancellationToken ct,
+        int maximumCharacters = CodexPolicy.MaximumLineCharacters)
     {
-        var buffer = new char[4096];
+        if (maximumCharacters is < 1 or > CodexPolicy.MaximumRpcLineCharacters) throw new ArgumentOutOfRangeException(nameof(maximumCharacters));
+        var bytes = new byte[4096];
+        var characters = new char[4097];
+        var decoder = new UTF8Encoding(false, true).GetDecoder();
         var line = new StringBuilder();
-        int count;
-        while ((count = await stream.ReadAsync(buffer.AsMemory(), ct)) > 0)
+        var firstCharacter = true;
+        while (true)
         {
-            for (var index = 0; index < count; index++)
+            // StreamReader.ReadAsync can wait for another read after receiving an
+            // exact internal buffer. A byte-stream read returns available bytes,
+            // letting complete NDJSON records through while the connection stays open.
+            var count = await stream.BaseStream.ReadAsync(bytes.AsMemory(), ct);
+            var decoded = decoder.GetChars(bytes.AsSpan(0, count), characters.AsSpan(), flush: count == 0);
+            for (var index = 0; index < decoded; index++)
             {
-                if (buffer[index] == '\n') { yield return line.ToString().TrimEnd('\r'); line.Clear(); }
+                var character = characters[index];
+                if (firstCharacter) { firstCharacter = false; if (character == '\uFEFF') continue; }
+                if (character == '\n') { yield return line.ToString().TrimEnd('\r'); line.Clear(); }
                 else
                 {
-                    if (line.Length >= CodexPolicy.MaximumLineCharacters) throw new CodexUnavailableException();
-                    line.Append(buffer[index]);
+                    if (line.Length >= maximumCharacters) throw new CodexUnavailableException();
+                    line.Append(character);
                 }
             }
+            if (count == 0) break;
         }
         if (line.Length > 0) yield return line.ToString();
     }
@@ -131,7 +152,10 @@ public sealed class CodexProcess(IConfiguration config) : ICodexRpc
             finally { current.Dispose(); }
         }
         foreach (var item in pending) if (pending.TryRemove(item.Key, out var completion)) completion.TrySetException(new CodexUnavailableException());
-        Notification?.Invoke(JsonSerializer.SerializeToElement(new { method = "study/process-stopped", @params = new { } }));
+        // Lazy startup calls Abort to clear stale state. A missing process is not
+        // a failure event for a generation that subscribed before its first RPC.
+        if (current is not null)
+            Notification?.Invoke(JsonSerializer.SerializeToElement(new { method = "study/process-stopped", @params = new { } }));
     }
 
     public async ValueTask DisposeAsync()
