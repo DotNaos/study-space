@@ -44,7 +44,7 @@ public sealed class LearningTests : IDisposable
     [Fact] public void InvalidSourceReferencesNeverBecomeSavedCitations()
     {
         var chunk = LearningChunks.Build([(Catalog.Input, Catalog.Document)])[0];
-        var json = Model.Result(chunk.Blocks[0].Source with { MaterialId = new string('f', 64) });
+        var json = Model.Result(2);
         Assert.Equal("learning_result_invalid", Assert.Throws<ApiFailure>(() => LearningChunks.Validate(json, chunk)).Code);
         Assert.Throws<ApiFailure>(() => LearningChunks.Validate("not JSON", chunk));
     }
@@ -52,7 +52,7 @@ public sealed class LearningTests : IDisposable
     [Fact] public void GeneratedExerciseCannotMisrepresentItselfAsVerbatimSourceExercise()
     {
         var chunk = LearningChunks.Build([(Catalog.Input, Catalog.Document)])[0];
-        var result = LearningChunks.Validate(Model.Result(chunk.Blocks[0].Source, "source"), chunk);
+        var result = LearningChunks.Validate(Model.Result(1, "source"), chunk);
         Assert.Equal("generated", result.Exercises[0].Origin);
     }
 
@@ -60,7 +60,7 @@ public sealed class LearningTests : IDisposable
     {
         var chunk = LearningChunks.Build([(Catalog.Input, Catalog.Document)])[0];
         var value = JsonSerializer.Serialize(new { title = "Cells", sections = new[] {
-            new { title = "Membrane", markdown = "A membrane bounds a cell.", sources = new[] { chunk.Blocks[0].Source } }
+            new { title = "Membrane", markdown = "A membrane bounds a cell.", sources = new[] { 1 } }
         }, exercises = Array.Empty<object>() }, LearningStore.Json);
         Assert.Throws<ApiFailure>(() => LearningChunks.Validate(value, chunk));
     }
@@ -238,10 +238,10 @@ public sealed class LearningTests : IDisposable
                     chapterOrder = outline.RootElement.GetProperty("chapters").EnumerateArray().Select(chapter => chapter.GetProperty("id").GetString()).ToArray() }, LearningStore.Json);
             }
             using var json = JsonDocument.Parse(prompt[prompt.IndexOf("{\"name\"", StringComparison.Ordinal)..]);
-            var source = json.RootElement.GetProperty("blocks")[0].GetProperty("source").Deserialize<SourceRef>(LearningStore.Json)!;
+            var source = json.RootElement.GetProperty("blocks")[0].GetProperty("citation").GetInt32();
             return Result(source);
         }
-        public static string Result(SourceRef source, string origin = "generated") => JsonSerializer.Serialize(new
+        public static string Result(int source, string origin = "generated") => JsonSerializer.Serialize(new
         {
             title = "Cells", sections = new[] { new { title = "Cell membrane", markdown = "The membrane bounds a cell.", sources = new[] { source } } },
             exercises = new[] { new { title = "Cell question", prompt = "What bounds a cell?", hint = "Consider its boundary.", solution = "Generated suggestion: its membrane.", origin, sources = new[] { source } } }
