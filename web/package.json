@@ -12,12 +12,18 @@
   },
   "dependencies": {
     "@dotnaos/design": "0.0.26",
+    "@dotnaos/ui": "0.0.26",
     "@dotnaos/ui-base": "0.0.26",
     "jsqr": "1.4.0",
+    "katex": "0.16.47",
     "lucide-react": "0.562.0",
     "pdfjs-dist": "6.3.289",
     "react": "19.2.0",
-    "react-dom": "19.2.0"
+    "react-dom": "19.2.0",
+    "react-markdown": "10.1.0",
+    "rehype-katex": "7.0.1",
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.18",

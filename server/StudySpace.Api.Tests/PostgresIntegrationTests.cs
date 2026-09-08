@@ -42,7 +42,7 @@ public sealed class PostgresIntegrationTests : IDisposable
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["STUDY_PRIVATE_DIR"] = directory, ["STUDY_SKIP_MIGRATIONS"] = skipMigrations ? "true" : "false",
+            ["STUDY_DATA_DIR"] = System.IO.Path.Combine(directory, "data"), ["STUDY_PRIVATE_DIR"] = directory, ["STUDY_SKIP_MIGRATIONS"] = skipMigrations ? "true" : "false",
             ["STUDY_PUBLIC_URL"] = "https://study.example.test", ["ConnectionStrings:Database"] = connection
         }));
     });

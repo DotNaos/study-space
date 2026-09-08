@@ -7,6 +7,20 @@ using Microsoft.EntityFrameworkCore;
 using StudySpace.Api.Data;
 using StudySpace.Api.Infrastructure;
 using StudySpace.Api.Providers.Moodle;
+using StudySpace.Api.Codex;
+using StudySpace.Api.Learning;
+using StudySpace.Api.Materials;
+
+if (args.Contains("--codex-health", StringComparer.Ordinal))
+{
+    Environment.ExitCode = await CodexBridge.CheckHealthAsync() ? 0 : 1;
+    return;
+}
+if (Environment.GetEnvironmentVariable("STUDY_ROLE") == "codex")
+{
+    await CodexBridge.RunAsync(args);
+    return;
+}
 
 var builder = WebApplication.CreateBuilder(args);
 builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 16 * 1024);
@@ -21,6 +35,9 @@ builder.Services.AddSingleton<IMoodleImageTransport, MoodleImageTransport>();
 builder.Services.AddSingleton<MoodleFileService>();
 builder.Services.AddSingleton<IMoodleFileTransport, MoodleFileTransport>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddStudyCodex(config);
+builder.Services.AddStudyMaterials();
+builder.Services.AddStudyLearning();
 builder.Services.AddSingleton<IMoodleTransport, MoodleTransport>();
 builder.Services.AddHttpClient("moodle", client =>
 {
@@ -83,6 +100,9 @@ var staticTypes = new FileExtensionContentTypeProvider();
 staticTypes.Mappings[".bcmap"] = "application/octet-stream";
 app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = staticTypes });
 app.MapStudyApi();
+app.MapStudyCodex();
+app.MapStudyMaterials();
+app.MapStudyLearning();
 app.MapFallback(async context =>
 {
     if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/health"))

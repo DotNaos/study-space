@@ -26,15 +26,47 @@ services:
       STUDY_HOSTNAME: ${STUDY_HOSTNAME:-os-pc}
       STUDY_DATA_DIR: /var/lib/study-space
       STUDY_PRIVATE_DIR: /var/lib/study-space-private
+      STUDY_CODEX_BRIDGE_URL: http://codex:8080
+      STUDY_CODEX_BRIDGE_TOKEN_FILE: /run/secrets/codex_bridge_token
     volumes:
       - ${STUDY_DATA_DIR:?}/app:/var/lib/study-space
       - ${STUDY_SECRETS_DIR:?}/app-private:/var/lib/study-space-private
-    secrets: [postgres_password]
+    secrets: [postgres_password, codex_bridge_token]
+    networks: [default, codex]
     depends_on:
       db:
         condition: service_healthy
+      codex:
+        condition: service_healthy
     healthcheck:
       test: [CMD, curl, --fail, --silent, --max-time, "5", http://127.0.0.1:8080/health/ready]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
+  codex:
+    image: ${STUDY_IMAGE:?release.env must select a local application image}
+    pull_policy: never
+    restart: unless-stopped
+    user: "1654:1654"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    environment:
+      STUDY_ROLE: codex
+      STUDY_CODEX_PRIVATE_DIR: /var/lib/study-codex
+      STUDY_CODEX_BINARY: /opt/codex/bin/codex
+      STUDY_CODEX_BRIDGE_TOKEN_FILE: /run/secrets/codex_bridge_token
+    volumes:
+      - ${STUDY_SECRETS_DIR:?}/codex-private:/var/lib/study-codex
+    secrets: [codex_bridge_token]
+    networks: [codex]
+    healthcheck:
+      test: [CMD, dotnet, StudySpace.Api.dll, --codex-health]
       interval: 10s
       timeout: 6s
       retries: 12
@@ -63,3 +95,7 @@ services:
 secrets:
   postgres_password:
     file: ${STUDY_SECRETS_DIR:?}/postgres_password
+  codex_bridge_token:
+    file: ${STUDY_SECRETS_DIR:?}/codex_bridge_token
+networks:
+  codex: {}

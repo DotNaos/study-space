@@ -26,7 +26,7 @@ public sealed class StaticAssetTests : IDisposable
             builder.UseEnvironment("Testing"); builder.UseWebRoot(webRoot);
             builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["STUDY_PRIVATE_DIR"] = Path.Combine(directory, "private"), ["STUDY_SKIP_MIGRATIONS"] = "true",
+                ["STUDY_DATA_DIR"] = System.IO.Path.Combine(directory, "data"), ["STUDY_PRIVATE_DIR"] = Path.Combine(directory, "private"), ["STUDY_SKIP_MIGRATIONS"] = "true",
                 ["ConnectionStrings:Database"] = "Host=127.0.0.1;Port=1;Database=unused;Username=fixture;Password=fixture;Timeout=1"
             }));
         });

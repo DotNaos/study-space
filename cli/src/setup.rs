@@ -66,7 +66,11 @@ pub fn install(
     fs::create_dir_all(&secrets)?;
     private(&secrets, 0o700)?;
     fs::create_dir_all(&data)?;
-    for path in [data.join("app"), secrets.join("app-private")] {
+    for path in [
+        data.join("app"),
+        secrets.join("app-private"),
+        secrets.join("codex-private"),
+    ] {
         sudo(&[
             "install",
             "-d",
@@ -80,17 +84,24 @@ pub fn install(
             path.to_str().context("non-UTF8 path")?,
         ])?;
     }
-    let password = secrets.join("postgres_password");
-    if !password.exists() {
-        let mut bytes = [0u8; 32];
-        fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
-        let secret: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
-        atomic_write(&password, secret.as_bytes(), 0o600)?;
+    for name in ["postgres_password", "codex_bridge_token"] {
+        let password = secrets.join(name);
+        if !password.exists() {
+            let mut bytes = [0u8; 32];
+            fs::File::open("/dev/urandom")?.read_exact(&mut bytes)?;
+            let secret: String = bytes.iter().map(|b| format!("{b:02x}")).collect();
+            atomic_write(&password, secret.as_bytes(), 0o600)?;
+        }
+        ensure!(
+            fs::symlink_metadata(&password)?.file_type().is_file(),
+            "runtime secret must be a regular installation-owned file"
+        );
         sudo(&[
             "chown",
             "1654:1654",
             password.to_str().context("non-UTF8 path")?,
         ])?;
+        sudo(&["chmod", "0600", password.to_str().context("non-UTF8 path")?])?;
     }
     let release = installation.home.join("releases").join(version);
     crate::bundle::retain(bundle, &release)?;

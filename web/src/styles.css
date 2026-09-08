@@ -1,3 +1,4 @@
+@layer dotnaos-ai, theme, base, components, utilities;
 @import "tailwindcss";
 @import "@dotnaos/design/styles.css";
 @import "@dotnaos/design/tailwind-theme.css";

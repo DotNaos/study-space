@@ -30,7 +30,9 @@ jobs:
       - name: API tests
         env:
           STUDY_TEST_POSTGRES: Host=127.0.0.1;Port=5432;Database=study_space_test;Username=study_fixture;Password=synthetic-ci-fixture
-        run: docker run --rm --network host -e STUDY_TEST_POSTGRES -v "$PWD/server:/source" -w /source mcr.microsoft.com/dotnet/sdk:10.0 dotnet test StudySpace.Api.Tests/StudySpace.Api.Tests.csproj -c Release -p:RestoreLockedMode=true
+        run: |
+          docker build --target checks -t study-space:checks .
+          docker run --rm --network host -e STUDY_TEST_POSTGRES study-space:checks
       - name: CLI tests and build
         run: docker run --rm -v "$PWD/cli:/source" -w /source rust:1.93-bookworm sh -c 'cargo test --locked && cargo build --release --locked'
       - name: Native CLI contract

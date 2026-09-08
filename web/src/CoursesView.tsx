@@ -32,6 +32,20 @@ export function CoursesView({
   useEffect(() => {
     void load();
   }, [load]);
+  if (courseId && (connection.status !== "connected" || error))
+    return (
+      <CourseDetail
+        key={courseId}
+        course={{
+          id: courseId,
+          name: `Kurs ${courseId}`,
+          shortName: "",
+          summary: "",
+        }}
+        moodleConnected={connection.status === "connected"}
+        navigate={navigate}
+      />
+    );
   if (connection.status !== "connected")
     return (
       <div className="max-w-md space-y-5">
