@@ -258,7 +258,10 @@ export function configureLearning(next: Record<string, unknown>) {
   importStarted.clear();
   largeCourse = next.learning === "large";
   initialSaved =
-    largeCourse || next.learning === "saved" || next.learning === "malicious";
+    largeCourse ||
+    next.learning === "saved" ||
+    next.learning === "malicious" ||
+    next.learning === "tex";
   imported = next.learning === "partial" || initialSaved;
   failGeneration = next.learning === "generation-error";
   codexStatus = (next.codex as CodexConnection["status"]) || "disconnected";
@@ -270,6 +273,22 @@ export function configureLearning(next: Record<string, unknown>) {
     const state = stateFor(41);
     state.activeVersion!.sections[0].markdown +=
       '\n\n<script>alert("do not run")</script>\n\n![Remote tracking image](https://example.invalid/track.png)\n\n[Untrusted action](/api/codex/logout)\n\n$\\href{https://example.invalid/track}{blocked}$';
+  }
+  if (next.learning === "tex") {
+    const state = stateFor(41);
+    state.activeVersion!.sections[0].title = "Formeln und Schreibweisen";
+    state.activeVersion!.sections[0].markdown = [
+      String.raw`Inline: \(x^2 + y^2 = r^2\).` +
+        " Eine Hälfte ist " +
+        String.raw`\(\frac{1}{2}\).`,
+      String.raw`\[\frac{-b \pm \sqrt{b^2-4ac}}{2a}\]`,
+      String.raw`\[
+\begin{pmatrix}1 & 2 \\ 3 & 4\end{pmatrix}
+\]`,
+      "Ein Codebeispiel bleibt wörtlich: `" + String.raw`\(x^2\)` + "`.",
+      "```tex\n" + String.raw`\[\frac{1}{2}\]` + "\n```",
+      String.raw`Auch Dollar-Formeln funktionieren: $E=mc^2$.`,
+    ].join("\n\n");
   }
 }
 export async function learningResponse(

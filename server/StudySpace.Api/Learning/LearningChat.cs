@@ -3,9 +3,10 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using StudySpace.Api.Infrastructure;
+using StudySpace.Api.Materials;
 namespace StudySpace.Api.Learning;
 
-public sealed class LearningChat(LearningStore store, ILearningModel model)
+public sealed class LearningChat(LearningStore store, ILearningModel model, IMaterialCatalog materials)
 {
     private readonly ConcurrentDictionary<long, byte> active = new();
 
@@ -26,7 +27,7 @@ public sealed class LearningChat(LearningStore store, ILearningModel model)
                 if (!state.Versions.Any(version => version.Id == request.VersionId))
                     throw new ApiFailure("learning_version_missing", "Choose an existing learning version first.", 404);
                 if (state.Messages.Count >= 200) throw new ApiFailure("chat_history_full", "This course conversation has reached its current message limit. Your saved conversation is preserved.", 409);
-                var version = await store.Version(courseId, request.VersionId, context.RequestAborted);
+                var version = await LearningPresentation.Version(await store.Version(courseId, request.VersionId, context.RequestAborted), materials, context.RequestAborted);
                 var result = BuildPrompt(version, state.ReadingSectionId, state.Messages.TakeLast(8).ToArray(), request.Message);
                 state.Messages.Add(new(Guid.NewGuid().ToString("N"), "user", request.Message, "completed"));
                 state.Messages.Add(new(answerId, "assistant", "", "interrupted"));

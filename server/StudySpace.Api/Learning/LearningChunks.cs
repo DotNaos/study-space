@@ -103,7 +103,7 @@ public static class LearningChunks
         Preserve existing source exercises and their subquestions. Add one to three useful exercises only where
         needed, with separate hints and solutions. The result must contain at least one exercise.
         Existing source exercises should preserve wording and subquestions. Additional exercises use origin generated.
-        Use origin source only when prompt is an exact extract of a supplied source block; otherwise generated.
+        Use origin source only for an exact extract of contiguous supplied source blocks; otherwise generated.
         Existing solutions and generated solution suggestions must be clearly distinguished in the solution text.
         Every section and exercise must cite at least one provided integer citation label in its sources array.
         Choose relevant citations; do not repeatedly cite every source block for an individual claim.
@@ -151,9 +151,8 @@ public static class LearningChunks
                 var refs = References(exercise, chunk);
                 var origin = Text(exercise, "origin", 20);
                 if (origin is not ("source" or "generated")) throw new JsonException();
-                if (origin == "source" && !chunk.Blocks.Any(block => refs.Contains(block.Source) && block.Text.Contains(prompt, StringComparison.Ordinal))) origin = "generated";
-                return new LearningExercise(Hash(chunk.Id + "exercise" + index + prompt), Text(exercise, "title", 250), prompt,
-                    Text(exercise, "hint", 10000, true), Text(exercise, "solution", 16000, true), origin, refs);
+                return LearningPresentation.Exercise(new LearningExercise(Hash(chunk.Id + "exercise" + index + prompt), Text(exercise, "title", 250), prompt,
+                    Text(exercise, "hint", 10000, true), Text(exercise, "solution", 16000, true), origin, refs), chunk.Blocks);
             }).ToArray();
             if (sections.Length is < 1 or > 20 || exercises.Length is < 1 or > 15) throw new JsonException();
             return new(title, sections, exercises);
@@ -174,8 +173,8 @@ public static class LearningChunks
     }
     private static string Text(JsonElement value, string key, int limit, bool allowEmpty = false)
     {
-        var text = value.GetProperty(key).GetString() ?? throw new JsonException();
-        if ((!allowEmpty && string.IsNullOrWhiteSpace(text)) || text.Length > limit || text.Contains('\0')) throw new JsonException();
+        var text = LearningPresentation.RepairDirections(value.GetProperty(key).GetString() ?? throw new JsonException());
+        if ((!allowEmpty && string.IsNullOrWhiteSpace(text)) || text.Length > limit || LearningPresentation.HasInvalidControls(text)) throw new JsonException();
         return text.Trim();
     }
 }
