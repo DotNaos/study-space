@@ -9,6 +9,8 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
 {
     private readonly ConcurrentDictionary<string, PendingLogin> logins = new();
     private readonly SemaphoreSlim changes = new(1, 1);
+    private readonly SemaphoreSlim courseReads = new(1, 1);
+    private volatile CourseSnapshot? courseSnapshot;
     private static readonly string[] QrInstructions = [
         "Öffne dein Moodle-Profil und melde dich auf der Seite deiner Hochschule an.",
         "Zeige im Bereich Mobile App den Anmelde-QR-Code an und lade sein Bild hier hoch.",
@@ -117,6 +119,7 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
             var credential = new MoodleCredential(login.Site.AbsoluteUri.TrimEnd('/'), MoodleJson.Text(info, "sitename") ?? "Moodle", userId,
                 MoodleJson.Text(info, "fullname") ?? MoodleJson.Text(info, "username") ?? "Moodle user", token, clock.GetUtcNow());
             await credentials.Write(credential);
+            courseSnapshot = null;
             login.Status = "completed";
             return new LoginStatus(id, login.Status, login.ExpiresAt);
     }
@@ -136,15 +139,44 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
     }
     private async Task<Course[]> Courses(MoodleCredential credential, CancellationToken ct)
     {
-        await Validate(credential, ct);
-        var result = await transport.Authenticated(MoodleSite.Parse(credential.SiteUrl), credential.Token, "core_enrol_get_users_courses", new() { ["userid"] = credential.UserId.ToString() }, ct);
-        if (result.ValueKind != System.Text.Json.JsonValueKind.Array) throw new ApiFailure("moodle_response", "Moodle returned an unsupported course list.", 502);
-        return result.EnumerateArray().Select(x =>
+        return (await CourseEntries(credential, ct)).Select(entry => entry.Course).ToArray();
+    }
+    private async Task<CourseEntry[]> CourseEntries(MoodleCredential credential, CancellationToken ct)
+    {
+        await courseReads.WaitAsync(ct);
+        try
         {
-            if (x.ValueKind != System.Text.Json.JsonValueKind.Object || MoodleJson.Number(x, "id") <= 0)
-                throw new ApiFailure("moodle_response", "Moodle returned an unsupported course list.", 502);
-            return new Course(MoodleJson.Number(x, "id"), MoodleText.Plain(MoodleJson.Text(x, "fullname") ?? "Course"), MoodleText.Plain(MoodleJson.Text(x, "shortname")), MoodleText.Plain(MoodleJson.Text(x, "summary")));
-        }).ToArray();
+            if (courseSnapshot is { } cached && cached.ExpiresAt > clock.GetUtcNow() &&
+                cached.Credential.SiteUrl == credential.SiteUrl && cached.Credential.UserId == credential.UserId &&
+                cached.Credential.Token == credential.Token && cached.Credential.LastVerifiedAt == credential.LastVerifiedAt)
+                return cached.Entries;
+            await Validate(credential, ct);
+            var site = MoodleSite.Parse(credential.SiteUrl);
+            var result = await transport.Authenticated(site, credential.Token, "core_enrol_get_users_courses", new() { ["userid"] = credential.UserId.ToString() }, ct);
+            if (result.ValueKind != System.Text.Json.JsonValueKind.Array) throw new ApiFailure("moodle_response", "Moodle returned an unsupported course list.", 502);
+            var entries = result.EnumerateArray().Select(x =>
+            {
+                if (x.ValueKind != System.Text.Json.JsonValueKind.Object || MoodleJson.Number(x, "id") <= 0)
+                    throw new ApiFailure("moodle_response", "Moodle returned an unsupported course list.", 502);
+                var id = MoodleJson.Number(x, "id");
+                var image = MoodleCourseImages.Select(x, site);
+                var startDate = MoodleJson.Number(x, "startdate");
+                var endDate = MoodleJson.Number(x, "enddate");
+                var course = new Course(id, MoodleText.Plain(MoodleJson.Text(x, "fullname") ?? "Course"),
+                    MoodleText.Plain(MoodleJson.Text(x, "shortname")), MoodleText.Plain(MoodleJson.Text(x, "summary")),
+                    image is null ? null : $"/api/providers/moodle/courses/{id}/image", startDate > 0 ? startDate : null, endDate > 0 ? endDate : null);
+                return new CourseEntry(course, image);
+            }).ToArray();
+            courseSnapshot = new(credential, clock.GetUtcNow().AddSeconds(30), entries);
+            return entries;
+        }
+        finally { courseReads.Release(); }
+    }
+    internal async Task<Uri> ImageSource(MoodleCredential credential, long courseId, CancellationToken ct)
+    {
+        var course = (await CourseEntries(credential, ct)).SingleOrDefault(entry => entry.Course.Id == courseId);
+        if (course is null) throw new ApiFailure("course_unavailable", "This course is not available in your Moodle course list.", 404);
+        return course.Image ?? throw new ApiFailure("course_image_unavailable", "This course has no supported image.", 404);
     }
     public async Task<CourseSection[]> Contents(long courseId, CancellationToken ct)
     {
@@ -171,10 +203,12 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
     public async Task Disconnect(CancellationToken ct)
     {
         await changes.WaitAsync(ct);
-        try { logins.Clear(); credentials.Delete(); }
+        try { logins.Clear(); credentials.Delete(); courseSnapshot = null; }
         finally { changes.Release(); }
     }
     private PendingLogin Find(string id) => logins.TryGetValue(id, out var login) ? login : throw new ApiFailure("login_unknown", "This connection request is no longer available. Start again.", 404);
+    private sealed record CourseEntry(Course Course, Uri? Image);
+    private sealed record CourseSnapshot(MoodleCredential Credential, DateTimeOffset ExpiresAt, CourseEntry[] Entries);
     private sealed class PendingLogin(Uri site, DateTimeOffset expiresAt, string method, string passport)
     {
         public Uri Site { get; } = site;

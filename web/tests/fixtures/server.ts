@@ -1,5 +1,6 @@
 // Disposable, synthetic browser-QA server. Never imports real data or credentials.
 // Run after `bun run build`: bun tests/fixtures/server.ts
+import { syntheticCourseImage } from "./course-images";
 const origin = process.env.STUDY_FIXTURE_ORIGIN || "http://localhost:18141";
 const site = `${origin}/moodle`;
 let mode = "connected";
@@ -14,21 +15,52 @@ const htmlHeaders = {
 const courses = [
   {
     id: 41,
-    name: "Mathematik I",
+    name: "Mathematik I · HS26",
     shortName: "MATH-HS26",
     summary: "Grundlagen und Übungen",
+    imageUrl: "/api/providers/moodle/courses/41/image",
   },
   {
     id: 42,
     name: "Einführung in die Informatik",
-    shortName: "INF-HS26",
+    shortName: "2026_FS_INF",
     summary: "",
+    imageUrl: "/api/providers/moodle/courses/42/image",
   },
   {
     id: 43,
-    name: "Wissenschaftliches Arbeiten und interdisziplinäre Forschungsmethoden",
-    shortName: "WA-HS26",
+    name: "Wissenschaftliches Arbeiten und interdisziplinäre Forschungsmethoden · 2025 FS",
+    shortName: "2025_FS_WA",
     summary: "",
+    imageUrl: "/api/providers/moodle/courses/43/image",
+  },
+  {
+    id: 44,
+    name: "Studienorganisation",
+    shortName: "Studienorganisation",
+    summary: "",
+    imageUrl: null,
+  },
+  {
+    id: 45,
+    name: "Statistik · HS24",
+    shortName: "STAT-HS24",
+    summary: "",
+    imageUrl: "/api/providers/moodle/courses/45/image",
+  },
+  {
+    id: 46,
+    name: "Seminar HS25 / FS26",
+    shortName: "Seminar_HS25_FS26",
+    summary: "",
+    imageUrl: null,
+  },
+  {
+    id: 47,
+    name: "Biologie",
+    shortName: "BIO-HS26",
+    summary: "",
+    imageUrl: "/api/providers/moodle/courses/47/image",
   },
 ];
 const sections = [
@@ -103,6 +135,57 @@ const sections = [
         description: "Diese Aktivität ist derzeit nicht verlinkt.",
         resources: [],
       },
+      {
+        id: 505,
+        name: "Online-Atlas",
+        type: "url",
+        url: `${site}/mod/url/view.php?id=505`,
+        description: "Ergänzende Beispiele zur Vorlesung.",
+        resources: [
+          {
+            type: "url",
+            name: "index.html",
+            mimeType: null,
+            size: 0,
+            modifiedAt: null,
+            url: null,
+          },
+        ],
+      },
+      {
+        id: 506,
+        name: "________________",
+        type: "label",
+        url: null,
+        description: "----------------",
+        resources: [],
+      },
+      {
+        id: 507,
+        name: "Hinweis zur Abgabe",
+        type: "label",
+        url: null,
+        description:
+          "Bitte die Lösungen bis Freitag hochladen.\n___________\nRückfragen sind im Forum möglich.",
+        resources: [],
+      },
+      {
+        id: 508,
+        name: "Übungsblatt 02",
+        type: "resource",
+        url: `${site}/mod/resource/view.php?id=508`,
+        description: "",
+        resources: [
+          {
+            type: "file",
+            name: "Übungsblatt_02.pdf",
+            mimeType: "application/pdf",
+            size: 0,
+            modifiedAt: null,
+            url: null,
+          },
+        ],
+      },
     ],
   },
   { id: 3, name: "Woche 2", summary: "", modules: [] },
@@ -134,6 +217,20 @@ Bun.serve({
     if (url.pathname === "/__fixture/requests") return json(requests);
     if (url.pathname.startsWith("/api/"))
       requests.push(`${request.method} ${url.pathname}`);
+    const imageCourse = url.pathname.match(
+      /^\/api\/providers\/moodle\/courses\/(\d+)\/image$/,
+    );
+    if (imageCourse) {
+      const id = Number(imageCourse[1]);
+      return id === 43
+        ? new Response("Missing synthetic cover", { status: 404 })
+        : new Response(syntheticCourseImage(id), {
+            headers: {
+              "Content-Type": "image/png",
+              "Cache-Control": "private, max-age=300",
+            },
+          });
+    }
     if (url.pathname === "/api/status")
       return json({
         app: "study-space",

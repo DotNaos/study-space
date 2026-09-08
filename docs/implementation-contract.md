@@ -1,6 +1,6 @@
 # Installation and Moodle course browsing
 
-This implementation covers local installation, Moodle connection, and course browsing in issues #2 and #11. Material import, pipeline and learning-agent work in #12 remain deferred. Google Drive backups are also deferred at the user's request.
+This implementation covers local installation, Moodle connection, and course browsing in issues #2, #11 and #22. Material import, pipeline and learning-agent work in #12 remain deferred. Google Drive backups are also deferred at the user's request.
 
 ## Deployment
 
@@ -33,6 +33,7 @@ JSON camelCase; failures use ProblemDetails with a user-safe title/detail and a 
 - `POST /api/providers/moodle/browser-return` with `{callbackUrl}`: complete the active browser login under the service lock after validating the returned site/passport digest. Expired, stale, replayed, and QR-mixed returns fail without consuming a different active login.
 - `DELETE /api/providers/moodle`: disconnect, remove local credential, preserve imported material data.
 - `GET /api/providers/moodle/courses`: normalized enrolled course list after real token validation.
+- `GET /api/providers/moodle/courses/{id}/image`: verify enrollment against a short-lived course snapshot scoped to the saved connection, then return a bounded PNG, JPEG or WebP image. Only uploaded course overview files on the configured Moodle site qualify. The server supplies the token in the upstream request body; the browser receives only a same-origin image path. Reject redirects, unsafe paths, unsupported formats and oversized responses. Failed or absent images use the frontend placeholder.
 - `GET /api/providers/moodle/courses/{id}/contents`: verify the course is in the connected account's enrolled list, then return sections `{id,name,summary,modules:[{id,name,type,url,description,resources:[{type,name,mimeType,size,modifiedAt,url}]}]}`. Names and descriptions are rendered as text. Activity links are generated on the configured Moodle origin; unsafe URLs and token-only file endpoints are omitted. The UI opens such files through their owning Moodle activity. This endpoint returns metadata only and does not import files.
 
 No Moodle username/password fields. Credentials remain on the user's own host. The user performs any real school authentication personally; automated tests use an isolated fake Moodle service and synthetic tokens, never existing personal credentials.
@@ -48,5 +49,6 @@ This checkpoint supports browser SSO through the browser's registered `web+study
 - QR start opens `{siteUrl}/user/profile.php`. The user authenticates only on Moodle/the school website, shows its Mobile app login QR, then uploads/decodes it in Study Space.
 - `POST /api/providers/moodle/login/{id}/complete` JSON: `{ "qrCode": "moodlemobile://https://moodle.example/...?..." }`. Accept the exact decoded QR text, including Moodle's encoded `https//` variant. Never persist/display/log the value. The request ID is a random, single-use, five-minute correlation identifier. New login starts invalidate older requests. Site and QR user ID are checked before saving a token, using `core_webservice_get_site_info`.
 - The QR creation browser and server-side exchange must share the same public egress IP (Moodle limitation). Same home network or an already configured Tailscale exit node can satisfy this; ordinary Tailnet reachability alone does not. Surface the supplied warning before login. Do not silently alter VPN settings.
-- `courses` returns an array of `{id:number,name:string,shortName:string,summary:string}`. Summaries and descriptions are converted to plain text on the server and must never be rendered as raw HTML.
+- `courses` returns an array of `{id:number,name:string,shortName:string,summary:string,imageUrl:string|null,startDate:number|null,endDate:number|null}`. Dates are upstream Unix seconds when present; they do not establish a semester. Summaries and descriptions are converted to plain text on the server and must never be rendered as raw HTML.
+- Course browsing groups only explicit HS/FS year labels from course names or short names, newest first. Missing or conflicting semester labels remain under **Allgemein**. Search spans the groups. Course details show section navigation, activity-specific icons and actual file metadata; link-only metadata and decorative punctuation labels do not become duplicate file rows.
 - Runtime tokens and Data Protection key material live exclusively below `STUDY_PRIVATE_DIR`; app database/general backups contain no token. A restore intentionally requires reconnecting Moodle unless the private directory is recovered separately.

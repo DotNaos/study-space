@@ -1,15 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
-import { ArrowLeft, ArrowUpRight, FileText } from "lucide-react";
-import {
-  api,
-  message,
-  safeWebUrl,
-  type Course,
-  type CourseSection,
-} from "./api";
+import { ArrowLeft, CalendarDays } from "lucide-react";
+import { api, message, type Course, type CourseSection } from "./api";
 import { AppLink, type Navigate } from "./navigation";
-import { formatFileSize } from "./course-content";
+import { cleanCourseText } from "./course-content";
+import { courseSemester, courseSubtitle } from "./course-library";
+import { CourseArtwork } from "./CourseArtwork";
+import { CourseActivities } from "./CourseActivities";
 import { Loading, Notice, linkClass } from "./shared";
 
 export function CourseDetail({
@@ -21,6 +18,8 @@ export function CourseDetail({
 }) {
   const [sections, setSections] = useState<CourseSection[]>();
   const [error, setError] = useState("");
+  const semester = courseSemester(course);
+  const subtitle = courseSubtitle(course);
   const load = useCallback(async () => {
     setError("");
     setSections(undefined);
@@ -37,23 +36,41 @@ export function CourseDetail({
   useEffect(() => {
     void load();
   }, [load]);
+  const sectionName = (section: CourseSection, index: number) =>
+    cleanCourseText(section.name) || `Abschnitt ${index + 1}`;
   return (
-    <div className="max-w-3xl">
+    <div className="max-w-5xl">
       <AppLink
         navigate={navigate}
         href="/courses"
-        className={`${linkClass} mb-6`}
+        className={`${linkClass} mb-7`}
       >
-        <ArrowLeft size={15} aria-hidden="true" />
-        Alle Kurse
+        <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
       </AppLink>
-      <h1 className="break-words text-2xl font-medium tracking-tight">
-        {course.name}
-      </h1>
-      {course.shortName && course.shortName !== course.name && (
-        <p className="mt-2 text-sm text-text-muted">{course.shortName}</p>
-      )}
-      <div className="mt-8">
+      <header className="flex flex-col-reverse gap-4 border-b border-border pb-8 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+        <div className="min-w-0 flex-1">
+          {semester && (
+            <p className="mb-3 flex items-center gap-2 text-xs font-medium text-text-muted">
+              <CalendarDays size={14} aria-hidden="true" />
+              {semester.label}
+            </p>
+          )}
+          <h1 className="break-words text-2xl font-medium leading-tight tracking-tight sm:text-4xl">
+            {course.name}
+          </h1>
+          {subtitle && (
+            <p className="mt-3 break-words text-sm leading-6 text-text-muted">
+              {subtitle}
+            </p>
+          )}
+        </div>
+        <CourseArtwork
+          course={course}
+          eager
+          className="h-20 w-28 sm:h-36 sm:w-48"
+        />
+      </header>
+      <div className="mt-7">
         {error ? (
           <div className="space-y-4">
             <Notice>{error}</Notice>
@@ -66,92 +83,67 @@ export function CourseDetail({
             In diesem Kurs sind noch keine Inhalte verfügbar.
           </p>
         ) : (
-          sections.map((section, index) => (
-            <section
-              key={section.id}
-              aria-labelledby={`section-${section.id}`}
-              className="border-t border-border py-6"
-            >
-              <h2
-                id={`section-${section.id}`}
-                className="text-base font-medium"
+          <div className="flex flex-col gap-8 xl:flex-row xl:gap-10">
+            {sections.length > 1 && (
+              <nav
+                aria-label="Kursabschnitte"
+                className="min-w-0 border-b border-border pb-3 xl:sticky xl:top-8 xl:max-h-[calc(100vh-4rem)] xl:w-44 xl:shrink-0 xl:self-start xl:overflow-y-auto xl:border-0 xl:pb-0"
               >
-                {section.name || `Abschnitt ${index + 1}`}
-              </h2>
-              {section.summary && (
-                <p className="mt-2 whitespace-pre-line text-sm leading-6 text-text-muted">
-                  {section.summary}
+                <p className="mb-3 hidden text-xs font-medium uppercase tracking-wider text-text-muted xl:block">
+                  In diesem Kurs
                 </p>
-              )}
-              {section.modules.length === 0 ? (
-                <p className="mt-3 text-sm text-text-muted">
-                  Noch keine Materialien.
-                </p>
-              ) : (
-                <ul className="mt-4 space-y-6">
-                  {section.modules.map((module) => {
-                    const url = safeWebUrl(module.url);
-                    const description = module.description;
-                    return (
-                      <li key={module.id}>
-                        {url ? (
-                          <a
-                            href={url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="group inline-flex max-w-full items-start gap-2 rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-focus-ring"
-                          >
-                            <span className="min-w-0 break-words">
-                              {module.name}
-                            </span>
-                            <ArrowUpRight
-                              size={16}
-                              className="mt-0.5 shrink-0 text-text-muted"
-                              aria-hidden="true"
-                            />
-                            <span className="sr-only"> – in Moodle öffnen</span>
-                          </a>
-                        ) : (
-                          <p className="break-words text-sm font-medium">
-                            {module.name}
-                          </p>
-                        )}
-                        {description && (
-                          <p className="mt-2 whitespace-pre-line text-sm leading-6 text-text-muted">
-                            {description}
-                          </p>
-                        )}
-                        {module.resources.length > 0 && (
-                          <ul className="mt-3 space-y-2">
-                            {module.resources.map((resource, resourceIndex) => (
-                              <li
-                                key={`${resource.name}-${resourceIndex}`}
-                                className="flex items-start gap-2 text-xs leading-5 text-text-muted"
-                              >
-                                <FileText
-                                  size={14}
-                                  className="mt-0.5 shrink-0"
-                                  aria-hidden="true"
-                                />
-                                <span className="min-w-0 break-words">
-                                  {resource.name}
-                                </span>
-                                {formatFileSize(resource.size) && (
-                                  <span className="ml-auto shrink-0">
-                                    {formatFileSize(resource.size)}
-                                  </span>
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </section>
-          ))
+                <ol className="flex gap-5 overflow-x-auto pb-1 xl:block xl:space-y-1 xl:overflow-visible">
+                  {sections.map((section, index) => (
+                    <li key={section.id} className="shrink-0 xl:shrink">
+                      <a
+                        href={`#section-${section.id}`}
+                        className="flex items-baseline gap-2 rounded-sm py-1.5 text-xs leading-5 text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+                      >
+                        <span className="shrink-0 tabular-nums text-text-muted/60">
+                          {String(index + 1).padStart(2, "0")}
+                        </span>
+                        <span className="xl:break-words">
+                          {sectionName(section, index)}
+                        </span>
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              </nav>
+            )}
+            <div className="min-w-0 flex-1 space-y-9">
+              {sections.map((section, index) => {
+                const summary = cleanCourseText(section.summary);
+                return (
+                  <section
+                    key={section.id}
+                    aria-labelledby={`section-${section.id}`}
+                  >
+                    <div className="mb-2 flex items-baseline gap-3 border-b border-border pb-3">
+                      <span
+                        className="text-xs tabular-nums text-text-muted/60"
+                        aria-hidden="true"
+                      >
+                        {String(index + 1).padStart(2, "0")}
+                      </span>
+                      <h2
+                        id={`section-${section.id}`}
+                        className="scroll-mt-8 break-words text-xl font-medium tracking-tight"
+                      >
+                        {sectionName(section, index)}
+                      </h2>
+                    </div>
+                    {summary && (
+                      <p className="my-4 whitespace-pre-line break-words text-sm leading-6 text-text-muted">
+                        {summary}
+                      </p>
+                    )}
+                    <CourseActivities modules={section.modules} />
+                  </section>
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>

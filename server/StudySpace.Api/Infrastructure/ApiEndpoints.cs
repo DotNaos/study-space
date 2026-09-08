@@ -40,6 +40,11 @@ public static class ApiEndpoints
         moodle.MapPost("/login/{id}/complete", (string id, CompleteRequest request, MoodleService service, CancellationToken ct) => service.Complete(id, request, ct));
         moodle.MapDelete("", async (MoodleService service, CancellationToken ct) => { await service.Disconnect(ct); return Results.NoContent(); });
         moodle.MapGet("/courses", (MoodleService service, CancellationToken ct) => service.Courses(ct));
+        moodle.MapGet("/courses/{id:long}/image", async (long id, MoodleImageService service, CancellationToken ct) =>
+        {
+            var image = await service.Get(id, ct);
+            return Results.File(image.Bytes, image.ContentType);
+        }).RequireRateLimiting("moodle-images");
         moodle.MapGet("/courses/{id:long}/contents", (long id, MoodleService service, CancellationToken ct) => service.Contents(id, ct));
     }
     public sealed record SettingsRequest(string DisplayName, string Locale);

@@ -15,6 +15,8 @@ builder.Services.AddSingleton<IDataProtectionProvider>(services => RuntimeConfig
 builder.Services.AddSingleton<CredentialStore>();
 builder.Services.AddSingleton<ProjectConfigurationStore>();
 builder.Services.AddSingleton<MoodleService>();
+builder.Services.AddSingleton<MoodleImageService>();
+builder.Services.AddSingleton<IMoodleImageTransport, MoodleImageTransport>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IMoodleTransport, MoodleTransport>();
 builder.Services.AddHttpClient("moodle", client =>
@@ -28,6 +30,8 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = 429;
     options.AddPolicy("moodle", _ => RateLimitPartition.GetFixedWindowLimiter("single-user", _ => new FixedWindowRateLimiterOptions
     { PermitLimit = 90, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("moodle-images", _ => RateLimitPartition.GetFixedWindowLimiter("single-user-images", _ => new FixedWindowRateLimiterOptions
+    { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
