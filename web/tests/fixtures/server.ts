@@ -1,5 +1,6 @@
 // Disposable, synthetic browser-QA server. Never imports real data or credentials.
 // Run after `bun run build`: bun tests/fixtures/server.ts
+import { fileSections, fileResponse } from "./course-files";
 import { syntheticCourseImage } from "./course-images";
 const origin = process.env.STUDY_FIXTURE_ORIGIN || "http://localhost:18141";
 const site = `${origin}/moodle`;
@@ -67,8 +68,7 @@ const sections = [
   {
     id: 1,
     name: "Start und Organisation",
-    summary:
-      "Alle Unterlagen zum Kurs.\nDateien und Aktivitäten öffnen sich in Moodle.",
+    summary: "Alle Unterlagen zum Kurs.",
     modules: [
       {
         id: 501,
@@ -217,6 +217,8 @@ Bun.serve({
     if (url.pathname === "/__fixture/requests") return json(requests);
     if (url.pathname.startsWith("/api/"))
       requests.push(`${request.method} ${url.pathname}`);
+    const resource = await fileResponse(url.pathname);
+    if (resource) return resource;
     const imageCourse = url.pathname.match(
       /^\/api\/providers\/moodle\/courses\/(\d+)\/image$/,
     );
@@ -306,7 +308,15 @@ Bun.serve({
     if (/\/courses\/\d+\/contents$/.test(url.pathname))
       return mode === "content-error"
         ? problem("Die Kursinhalte konnten nicht geladen werden.")
-        : json(mode === "empty-sections" ? [] : sections);
+        : json(
+            mode === "empty-sections"
+              ? []
+              : fileSections(
+                  sections,
+                  Number(url.pathname.split("/")[5]),
+                  site,
+                ),
+          );
     if (url.pathname.startsWith("/moodle/mod/"))
       return new Response(
         '<!doctype html><html lang="de"><title>Moodle-Testaktivität</title><h1>Moodle-Testaktivität</h1><p>Diese Seite enthält ausschliesslich synthetische Testdaten.</p></html>',

@@ -44,6 +44,10 @@ export type Course = {
 
 export type ProjectConfig = { moodle: { siteUrl: string | null } };
 export type CourseResource = {
+  id?: string | null;
+  previewUrl?: string | null;
+  downloadUrl?: string | null;
+  previewKind?: "pdf" | "image" | null;
   type: string;
   name: string;
   mimeType: string | null;

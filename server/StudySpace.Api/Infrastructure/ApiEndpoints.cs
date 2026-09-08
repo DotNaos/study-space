@@ -46,6 +46,19 @@ public static class ApiEndpoints
             return Results.File(image.Bytes, image.ContentType);
         }).RequireRateLimiting("moodle-images");
         moodle.MapGet("/courses/{id:long}/contents", (long id, MoodleService service, CancellationToken ct) => service.Contents(id, ct));
+        moodle.MapGet("/courses/{courseId:long}/modules/{moduleId:long}/resources/{resourceId}/preview",
+            (long courseId, long moduleId, string resourceId, MoodleFileService service, HttpContext context, CancellationToken ct) =>
+                CourseFile(courseId, moduleId, resourceId, true, service, context, ct)).RequireRateLimiting("moodle-files");
+        moodle.MapGet("/courses/{courseId:long}/modules/{moduleId:long}/resources/{resourceId}/download",
+            (long courseId, long moduleId, string resourceId, MoodleFileService service, HttpContext context, CancellationToken ct) =>
+                CourseFile(courseId, moduleId, resourceId, false, service, context, ct)).RequireRateLimiting("moodle-files");
+    }
+    private static async Task<IResult> CourseFile(long courseId, long moduleId, string resourceId, bool preview,
+        MoodleFileService service, HttpContext context, CancellationToken ct)
+    {
+        var file = await service.Get(courseId, moduleId, resourceId, preview, ct);
+        context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'; sandbox";
+        return Results.File(file.Bytes, file.ContentType, fileDownloadName: preview ? null : file.Name, enableRangeProcessing: true);
     }
     public sealed record SettingsRequest(string DisplayName, string Locale);
 }

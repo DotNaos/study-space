@@ -11,9 +11,14 @@ export function cleanCourseText(value: string): string {
 export function visibleResources(module: CourseModule): CourseResource[] {
   // Moodle URL activities expose bookkeeping contents as well as the activity
   // link. They are not downloadable files; do not display them as "0 B" files.
-  return module.resources.filter(
-    (resource) => resource.type === "file" && cleanCourseText(resource.name),
-  );
+  return module.resources.filter((resource) => {
+    if (resource.type !== "file" || !cleanCourseText(resource.name))
+      return false;
+    return !(
+      ["page", "book", "url"].includes(module.type) &&
+      /^index\.html?$/i.test(resource.name)
+    );
+  });
 }
 
 export function visibleModule(module: CourseModule): boolean {

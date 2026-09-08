@@ -167,6 +167,8 @@ test("content keeps meaningful labels and files while removing separators and UR
   };
   const html = renderToStaticMarkup(
     createElement(CourseActivities, {
+      courseId: 1,
+      onPreview: () => {},
       modules: [
         label,
         url,
