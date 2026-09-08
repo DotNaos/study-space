@@ -174,6 +174,45 @@ test("Moodle HTTPS launch opens a separate protected tab and rejects unsafe sche
   }
 });
 
+test("browser setup exposes all three steps and the current host before permission is requested", async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { location: { hostname: "study.example.test" } },
+  });
+  try {
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { BrowserLoginStep } = await import("../src/BrowserLoginStep");
+    const html = renderToStaticMarkup(
+      createElement(BrowserLoginStep, {
+        login: {
+          id,
+          status: "pending",
+          method: "browser-sso",
+          expiresAt: "2099-01-01T00:00:00Z",
+          launchUrl: "https://moodle.example.test/login",
+        },
+      }),
+    );
+    expect(html.match(/<li\b/g)).toHaveLength(3);
+    expect(html).toContain("chrome://settings/handlers");
+    expect(html).toContain("study.example.test");
+    expect(html).toContain("web+studyspace");
+    expect(html).toContain("Set as default");
+    expect(html).toContain("„Standard“ (Default)");
+    expect(html).toContain('href="https://moodle.example.test/login"');
+    expect(html).toContain("Rückkehr anfragen");
+    expect(html).not.toContain("<details");
+    expect(html).not.toContain('href="chrome:');
+    expect(html).not.toContain("Anfrage gesendet");
+  } finally {
+    if (originalWindow)
+      Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
 test("Moodle form renders with null siteUrl from a disconnected API response", async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   Object.defineProperty(globalThis, "window", {
