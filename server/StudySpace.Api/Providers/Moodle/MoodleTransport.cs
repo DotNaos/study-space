@@ -60,6 +60,8 @@ public sealed class MoodleTransport(IHttpClientFactory clients) : IMoodleTranspo
             {
                 if (MoodleJson.Text(root, "errorcode") == "invalidtoken")
                     throw new ApiFailure("moodle_token_rejected", "Moodle no longer accepts this connection. Reconnect Moodle.", 401);
+                if (MoodleJson.Text(root, "errorcode") is "nopermissions" or "requireloginerror" or "coursehidden" or "notenrolled")
+                    throw new ApiFailure("moodle_access_denied", "Moodle does not allow access to this course or material.", 403);
                 throw new ApiFailure("moodle_rejected", "Moodle could not complete the request. Try again later; the saved connection is preserved.", 502);
             }
             return root.Clone();

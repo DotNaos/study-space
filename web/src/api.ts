@@ -39,6 +39,30 @@ export type Course = {
   summary: string;
 };
 
+export type ProjectConfig = { moodle: { siteUrl: string | null } };
+export type CourseResource = {
+  type: string;
+  name: string;
+  mimeType: string | null;
+  size: number | null;
+  modifiedAt: number | null;
+  url: string | null;
+};
+export type CourseModule = {
+  id: number;
+  name: string;
+  type: string;
+  url: string | null;
+  description: string;
+  resources: CourseResource[];
+};
+export type CourseSection = {
+  id: number;
+  name: string;
+  summary: string;
+  modules: CourseModule[];
+};
+
 export class ApiError extends Error {
   constructor(
     public readonly status: number,

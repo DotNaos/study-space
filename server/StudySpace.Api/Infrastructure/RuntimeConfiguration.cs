@@ -4,6 +4,8 @@ namespace StudySpace.Api.Infrastructure;
 
 public static class RuntimeConfiguration
 {
+    public static string DataDirectory(IConfiguration config) => config["STUDY_DATA_DIR"] ?? "/var/lib/study-space";
+
     public static IDataProtectionProvider DataProtection(IConfiguration config)
     {
         var path = Path.Combine(config["STUDY_PRIVATE_DIR"] ?? "/var/lib/study-space-private", "keys");

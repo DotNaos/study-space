@@ -13,6 +13,7 @@ var config = builder.Configuration;
 builder.Services.AddDbContext<StudyDb>((services, options) => options.UseNpgsql(RuntimeConfiguration.Database(services.GetRequiredService<IConfiguration>())));
 builder.Services.AddSingleton<IDataProtectionProvider>(services => RuntimeConfiguration.DataProtection(services.GetRequiredService<IConfiguration>()));
 builder.Services.AddSingleton<CredentialStore>();
+builder.Services.AddSingleton<ProjectConfigurationStore>();
 builder.Services.AddSingleton<MoodleService>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IMoodleTransport, MoodleTransport>();

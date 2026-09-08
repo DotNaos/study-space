@@ -1,19 +1,38 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
 import { BookOpen, Link2, Settings2, Circle } from "lucide-react";
-import { api, type Settings, type SystemStatus } from "./api";
+import {
+  api,
+  message,
+  type Connection,
+  type Settings,
+  type SystemStatus,
+} from "./api";
 import { Sources } from "./Sources";
 import { MoodleReturn } from "./MoodleReturn";
-import { moodleReturnPath } from "./browser-login";
+import { CoursesView } from "./CoursesView";
+import { AppLink, useRoute } from "./navigation";
 import { ThemeToggle } from "./ThemeToggle";
 import { SettingsView } from "./SettingsView";
 import { Loading, Notice } from "./shared";
 
 export function App() {
-  const [returning, setReturning] = useState(
-    window.location.pathname === moodleReturnPath,
-  );
-  const [page, setPage] = useState<"sources" | "settings">("sources");
+  const { route, navigate } = useRoute();
+  const [connection, setConnection] = useState<Connection>();
+  const [connectionError, setConnectionError] = useState("");
+  const refreshConnection = useCallback(async () => {
+    setConnectionError("");
+    try {
+      setConnection(await api<Connection>("/api/providers/moodle"));
+    } catch (error) {
+      setConnectionError(message(error));
+      throw error;
+    }
+  }, []);
+  const connected = useCallback(async () => {
+    await refreshConnection();
+    navigate("/courses", true);
+  }, [refreshConnection, navigate]);
   const [settings, setSettings] = useState<Settings>({
     displayName: "Study Space",
     locale: "de",
@@ -32,6 +51,24 @@ export function App() {
       .catch(() => setSettingsError(true));
   }, []);
   useEffect(() => {
+    void refreshConnection().catch(() => {});
+    try {
+      localStorage.removeItem("study-space:moodle-site");
+    } catch {
+      /* Retire the old browser-only setting. */
+    }
+  }, [refreshConnection]);
+  useEffect(() => {
+    if (route.page === "sources") void refreshConnection().catch(() => {});
+  }, [route.page, refreshConnection]);
+  useEffect(() => {
+    if (route.page === "home" && connection)
+      navigate(
+        connection.status === "connected" ? "/courses" : "/sources",
+        true,
+      );
+  }, [route.page, connection, navigate]);
+  useEffect(() => {
     loadSettings();
     const refreshStatus = () => {
       void api<SystemStatus>("/api/status")
@@ -44,8 +81,14 @@ export function App() {
     return () => clearInterval(timer);
   }, [loadSettings]);
   useEffect(() => {
-    document.title = `${page === "sources" ? "Quellen" : "Einstellungen"} · ${settings.displayName}`;
-  }, [page, settings.displayName]);
+    const title =
+      route.page === "courses"
+        ? "Kurse"
+        : route.page === "settings"
+          ? "Einstellungen"
+          : "Quellen";
+    document.title = `${title} · ${settings.displayName}`;
+  }, [route.page, settings.displayName]);
   return (
     <div className="min-h-screen md:grid md:grid-cols-[236px_minmax(0,1fr)]">
       <a
@@ -66,24 +109,25 @@ export function App() {
         </div>
         <nav
           aria-label="Hauptnavigation"
-          className="mt-5 flex gap-1 md:mt-12 md:flex-col"
+          className="mt-5 flex flex-wrap gap-1 md:mt-12 md:flex-col md:flex-nowrap"
         >
           {(
             [
+              { id: "courses", label: "Kurse", icon: BookOpen },
               { id: "sources", label: "Quellen", icon: Link2 },
               { id: "settings", label: "Einstellungen", icon: Settings2 },
             ] as const
           ).map((item) => (
-            <button
+            <AppLink
               key={item.id}
-              type="button"
-              aria-current={page === item.id ? "page" : undefined}
-              onClick={() => setPage(item.id)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring ${page === item.id ? "bg-bg-0 font-medium shadow-sm" : "text-text-muted hover:bg-bg-2 hover:text-text"}`}
+              navigate={navigate}
+              href={`/${item.id}`}
+              aria-current={route.page === item.id ? "page" : undefined}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring ${route.page === item.id ? "bg-bg-0 font-medium shadow-sm" : "text-text-muted hover:bg-bg-2 hover:text-text"}`}
             >
               <item.icon size={17} aria-hidden="true" />
               {item.label}
-            </button>
+            </AppLink>
           ))}
         </nav>
         <div className="mt-auto hidden pt-8 md:block">
@@ -117,16 +161,46 @@ export function App() {
         tabIndex={-1}
         className="min-w-0 px-6 py-10 sm:px-10 md:px-14 md:py-16 lg:px-20 lg:py-20"
       >
-        {returning ? (
+        {route.page === "moodle-return" ? (
           <MoodleReturn
-            onContinue={() => {
-              window.history.replaceState(null, "", "/");
-              setReturning(false);
-              setPage("sources");
+            onContinue={(success) => {
+              if (success)
+                void connected().catch(() => navigate("/sources", true));
+              else navigate("/sources", true);
             }}
           />
-        ) : page === "sources" ? (
-          <Sources />
+        ) : route.page === "not-found" ? (
+          <div className="space-y-4">
+            <h1 className="text-2xl font-medium">Diese Seite gibt es nicht.</h1>
+            <Button
+              label="Zu Study Space"
+              onPress={() => navigate("/", true)}
+            />
+          </div>
+        ) : route.page !== "settings" ? (
+          connectionError ? (
+            <div className="max-w-xl space-y-4">
+              <Notice>{connectionError}</Notice>
+              <Button
+                label="Erneut laden"
+                onPress={() => void refreshConnection().catch(() => {})}
+              />
+            </div>
+          ) : !connection || route.page === "home" ? (
+            <Loading />
+          ) : route.page === "courses" ? (
+            <CoursesView
+              connection={connection}
+              courseId={route.courseId}
+              navigate={navigate}
+            />
+          ) : (
+            <Sources
+              connection={connection}
+              onConnected={connected}
+              onDisconnected={refreshConnection}
+            />
+          )
         ) : settingsReady ? (
           <SettingsView
             settings={settings}

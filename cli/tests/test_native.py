@@ -20,9 +20,28 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):
         self.seen.append((self.command, self.path, self.headers.get("Origin"), None))
+        code, body = 200, {"status": "disconnected"}
+        if self.path == "/api/providers/moodle/courses":
+            body = [{"id": 42, "name": "Algebra 1", "shortName": "ALG1", "summary": "Linear equations"}]
+        elif self.path == "/api/providers/moodle/courses/42/contents":
+            body = [{"id": 7, "name": "Week 1", "summary": "Introduction", "modules": [
+                {"id": 15, "name": "Practice", "type": "resource", "url": "https://moodle.example/mod/resource/view.php?id=15",
+                 "description": "", "resources": [{"type": "file", "name": "Übung 1.pdf", "mimeType": "application/pdf",
+                     "size": 2048, "modifiedAt": 1700000000, "url": "https://moodle.example/pluginfile.php/15/exercise.pdf"}]}]}]
+        elif self.path == "/api/providers/moodle/courses/43/contents":
+            body = []
+        elif self.path == "/api/providers/moodle/courses/999/contents":
+            code, body = 404, {"title": "Course unavailable", "detail": "This course is not available in your Moodle course list."}
+        self.send_response(code)
+        self.end_headers()
+        self.wfile.write(json.dumps(body).encode())
+
+    def do_PUT(self):
+        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        self.seen.append((self.command, self.path, self.headers.get("Origin"), body))
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(json.dumps({"status": "disconnected"}).encode())
+        self.wfile.write(json.dumps({"moodle": {"siteUrl": body["moodle"]["siteUrl"].rstrip("/")}}).encode())
 
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
@@ -80,6 +99,44 @@ class NativeTests(unittest.TestCase):
         result = self.run_cli("status")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("run the README installer first", result.stderr)
+
+    def test_lists_enrolled_courses(self):
+        result = self.run_cli("moodle", "courses")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [{"id": 42, "name": "Algebra 1", "shortName": "ALG1", "summary": "Linear equations"}])
+        self.assertEqual(Handler.seen[-1][1], "/api/providers/moodle/courses")
+
+    def test_reads_course_materials(self):
+        result = self.run_cli("moodle", "course", "42")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        section = json.loads(result.stdout)[0]
+        self.assertEqual(section["name"], "Week 1")
+        self.assertEqual(section["modules"][0]["resources"][0]["name"], "Übung 1.pdf")
+        self.assertEqual(Handler.seen[-1][1], "/api/providers/moodle/courses/42/contents")
+
+    def test_empty_course_is_valid(self):
+        result = self.run_cli("moodle", "course", "43")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout), [])
+
+    def test_unavailable_course_has_clear_error(self):
+        result = self.run_cli("moodle", "course", "999")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("This course is not available in your Moodle course list.", result.stderr)
+
+    def test_invalid_course_identifier_never_reaches_api(self):
+        before = len(Handler.seen)
+        for value in ["0", "-1", "../42", "not-a-number", "9223372036854775808"]:
+            result = self.run_cli("moodle", "course", value)
+            self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(Handler.seen), before)
+
+    def test_set_site_writes_project_configuration(self):
+        result = self.run_cli("moodle", "set-site", "https://moodle.example/school/")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Handler.seen[-1], ("PUT", "/api/config", "https://study.os-pc.vpn.os-home.net",
+            {"moodle": {"siteUrl": "https://moodle.example/school/"}}))
+        self.assertEqual(json.loads(result.stdout), {"moodle": {"siteUrl": "https://moodle.example/school"}})
 
     def test_connect_points_to_web_login(self):
         result = self.run_cli("moodle", "connect")

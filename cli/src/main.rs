@@ -69,6 +69,13 @@ enum MoodleCommands {
     Connect,
     /// List enrolled courses after connecting
     Courses,
+    /// Read sections, activities and materials in an enrolled course
+    Course {
+        #[arg(value_parser = clap::value_parser!(i64).range(1..))]
+        id: i64,
+    },
+    /// Save the Moodle HTTPS site address in the project configuration
+    SetSite { site_url: String },
 }
 
 fn run() -> Result<()> {
@@ -120,6 +127,18 @@ fn run() -> Result<()> {
             MoodleCommands::Courses => {
                 api::print(&installation, "GET", "/api/providers/moodle/courses", None)
             }
+            MoodleCommands::Course { id } => api::print(
+                &installation,
+                "GET",
+                &format!("/api/providers/moodle/courses/{id}/contents"),
+                None,
+            ),
+            MoodleCommands::SetSite { site_url } => api::print(
+                &installation,
+                "PUT",
+                "/api/config",
+                Some(serde_json::json!({"moodle":{"siteUrl":site_url}})),
+            ),
             MoodleCommands::Connect => {
                 println!(
                     "Connect Moodle in your browser: {}",

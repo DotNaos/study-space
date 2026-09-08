@@ -70,8 +70,24 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
     public async Task<LoginStatus> Complete(string id, CompleteRequest request, CancellationToken ct)
     {
         await changes.WaitAsync(ct);
+        try { return await CompleteLocked(id, request, ct); }
+        finally { changes.Release(); }
+    }
+    public async Task<LoginStatus> CompleteBrowserReturn(CompleteRequest request, CancellationToken ct)
+    {
+        await changes.WaitAsync(ct);
         try
         {
+            // A stable browser handler contains no login ID. Match the one active browser flow
+            // using Moodle's site/passport digest before CompleteLocked consumes the request.
+            var active = logins.SingleOrDefault(pair => pair.Value.Method == "browser-sso" && pair.Value.Status == "pending");
+            if (active.Value is null) throw new ApiFailure("login_unknown", "There is no active browser connection. Start again.", 404);
+            return await CompleteLocked(active.Key, request, ct);
+        }
+        finally { changes.Release(); }
+    }
+    private async Task<LoginStatus> CompleteLocked(string id, CompleteRequest request, CancellationToken ct)
+    {
             var login = Find(id);
             if (login.ExpiresAt <= clock.GetUtcNow()) throw new ApiFailure("login_expired", "This connection request expired. Start again.", 410);
             if (login.Status != "pending") throw new ApiFailure("login_consumed", "This connection request was already used. Start again.", 409);
@@ -102,8 +118,6 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
             await credentials.Write(credential);
             login.Status = "completed";
             return new LoginStatus(id, login.Status, login.ExpiresAt);
-        }
-        finally { changes.Release(); }
     }
     public async Task<MoodleState> State(CancellationToken ct)
     {
@@ -117,10 +131,28 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
     public async Task<Course[]> Courses(CancellationToken ct)
     {
         var credential = await credentials.Read() ?? throw new ApiFailure("moodle_disconnected", "Connect Moodle first.", 409);
+        return await Courses(credential, ct);
+    }
+    private async Task<Course[]> Courses(MoodleCredential credential, CancellationToken ct)
+    {
         await Validate(credential, ct);
         var result = await transport.Authenticated(MoodleSite.Parse(credential.SiteUrl), credential.Token, "core_enrol_get_users_courses", new() { ["userid"] = credential.UserId.ToString() }, ct);
         if (result.ValueKind != System.Text.Json.JsonValueKind.Array) throw new ApiFailure("moodle_response", "Moodle returned an unsupported course list.", 502);
-        return result.EnumerateArray().Select(x => new Course(MoodleJson.Number(x, "id"), MoodleJson.Text(x, "fullname") ?? "Course", MoodleJson.Text(x, "shortname") ?? "", MoodleJson.Text(x, "summary") ?? "")).ToArray();
+        return result.EnumerateArray().Select(x =>
+        {
+            if (x.ValueKind != System.Text.Json.JsonValueKind.Object || MoodleJson.Number(x, "id") <= 0)
+                throw new ApiFailure("moodle_response", "Moodle returned an unsupported course list.", 502);
+            return new Course(MoodleJson.Number(x, "id"), MoodleText.Plain(MoodleJson.Text(x, "fullname") ?? "Course"), MoodleText.Plain(MoodleJson.Text(x, "shortname")), MoodleText.Plain(MoodleJson.Text(x, "summary")));
+        }).ToArray();
+    }
+    public async Task<CourseSection[]> Contents(long courseId, CancellationToken ct)
+    {
+        var credential = await credentials.Read() ?? throw new ApiFailure("moodle_disconnected", "Connect Moodle first.", 409);
+        if (courseId <= 0 || !(await Courses(credential, ct)).Any(course => course.Id == courseId))
+            throw new ApiFailure("course_unavailable", "This course is not available in your Moodle course list.", 404);
+        var site = MoodleSite.Parse(credential.SiteUrl);
+        var result = await transport.Authenticated(site, credential.Token, "core_course_get_contents", new() { ["courseid"] = courseId.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
+        return MoodleCourseContents.Parse(result, site);
     }
     private async Task Validate(MoodleCredential credential, CancellationToken ct)
     {

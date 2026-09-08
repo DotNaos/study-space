@@ -28,15 +28,19 @@ public static class ApiEndpoints
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { settings.DisplayName, settings.Locale });
         });
+        app.MapGet("/api/config", (ProjectConfigurationStore store, CancellationToken ct) => store.Read(ct));
+        app.MapPut("/api/config", (ProjectConfiguration request, ProjectConfigurationStore store, CancellationToken ct) => store.Write(request, ct));
         var moodle = app.MapGroup("/api/providers/moodle").RequireRateLimiting("moodle");
         moodle.MapGet("", (MoodleService service, CancellationToken ct) => service.State(ct));
         moodle.MapPost("/discover", (SiteRequest request, MoodleService service, CancellationToken ct) => service.Discover(request.SiteUrl, ct));
         moodle.MapPost("/login/start", (LoginRequest request, MoodleService service, CancellationToken ct) => service.Start(request, ct));
+        moodle.MapPost("/browser-return", (CompleteRequest request, MoodleService service, CancellationToken ct) => service.CompleteBrowserReturn(request, ct));
         moodle.MapGet("/login/{id}", (string id, MoodleService service) => service.Status(id));
         moodle.MapDelete("/login/{id}", async (string id, MoodleService service, CancellationToken ct) => { await service.Cancel(id, ct); return Results.NoContent(); });
         moodle.MapPost("/login/{id}/complete", (string id, CompleteRequest request, MoodleService service, CancellationToken ct) => service.Complete(id, request, ct));
         moodle.MapDelete("", async (MoodleService service, CancellationToken ct) => { await service.Disconnect(ct); return Results.NoContent(); });
         moodle.MapGet("/courses", (MoodleService service, CancellationToken ct) => service.Courses(ct));
+        moodle.MapGet("/courses/{id:long}/contents", (long id, MoodleService service, CancellationToken ct) => service.Contents(id, ct));
     }
     public sealed record SettingsRequest(string DisplayName, string Locale);
 }

@@ -5,7 +5,11 @@ import { completeBrowserReturn } from "./browser-login";
 import { message } from "./api";
 import { Loading, Notice } from "./shared";
 
-export function MoodleReturn({ onContinue }: { onContinue: () => void }) {
+export function MoodleReturn({
+  onContinue,
+}: {
+  onContinue: (connected: boolean) => void;
+}) {
   const [status, setStatus] = useState<"pending" | "completed" | "failed">(
     "pending",
   );
@@ -49,14 +53,14 @@ export function MoodleReturn({ onContinue }: { onContinue: () => void }) {
           <Button
             variant="primary"
             label="Zu meinen Kursen"
-            onPress={onContinue}
+            onPress={() => onContinue(true)}
           />
         </>
       )}
       {status === "failed" && (
         <>
           <Notice>{error}</Notice>
-          <Button label="Zurück zu Quellen" onPress={onContinue} />
+          <Button label="Zurück zu Quellen" onPress={() => onContinue(false)} />
         </>
       )}
     </section>
