@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { Button, Input } from "@dotnaos/ui-base";
-import { ArrowRight } from "lucide-react";
+import { Search } from "lucide-react";
 import { api, message, type Connection, type Course } from "./api";
 import { CourseDetail } from "./CourseDetail";
-import { AppLink, type Navigate } from "./navigation";
+import { type Navigate } from "./navigation";
 import { Loading, Notice } from "./shared";
+import { CourseLibrary } from "./CourseLibrary";
+import { groupCourses } from "./course-library";
 
 export function CoursesView({
   connection,
@@ -57,15 +59,36 @@ export function CoursesView({
       </div>
     );
   }
-  const normalized = query.trim().toLocaleLowerCase("de");
-  const visible = courses?.filter((course) =>
-    `${course.name} ${course.shortName}`
-      .toLocaleLowerCase("de")
-      .includes(normalized),
-  );
+  const groups = groupCourses(courses || [], query);
   return (
-    <div className="max-w-3xl">
-      <h1 className="mb-8 text-2xl font-medium tracking-tight">Kurse</h1>
+    <div className="max-w-4xl">
+      <div className="mb-9 flex flex-wrap items-end justify-between gap-5">
+        <div>
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+            Kurse
+          </h1>
+          {courses && courses.length > 0 && (
+            <p className="mt-2 text-sm text-text-muted">
+              {courses.length}{" "}
+              {courses.length === 1
+                ? "Kurs in deiner Bibliothek"
+                : "Kurse in deiner Bibliothek"}
+            </p>
+          )}
+        </div>
+        {!!courses?.length && !error && (
+          <div className="relative w-full sm:w-72">
+            <Input
+              accessibilityLabel="Kurse durchsuchen"
+              type="search"
+              placeholder="Kurs oder Semester suchen"
+              value={query}
+              onValueChange={setQuery}
+              fullWidth
+            />
+          </div>
+        )}
+      </div>
       {error ? (
         <div className="space-y-4">
           <Notice>{error}</Notice>
@@ -87,47 +110,12 @@ export function CoursesView({
         </p>
       ) : (
         <>
-          <div className="mb-6 max-w-md">
-            <Input
-              accessibilityLabel="Kurse durchsuchen"
-              type="search"
-              placeholder="Kurse durchsuchen"
-              value={query}
-              onValueChange={setQuery}
-              fullWidth
-            />
-          </div>
-          {visible?.length ? (
-            <ul className="divide-y divide-border border-y border-border">
-              {visible.map((course) => (
-                <li key={course.id}>
-                  <AppLink
-                    href={`/courses/${course.id}`}
-                    navigate={navigate}
-                    className="group flex items-center gap-4 rounded-sm py-5 outline-offset-4 focus-visible:outline-2 focus-visible:outline-focus-ring"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="break-words text-sm font-medium group-hover:text-accent">
-                        {course.name}
-                      </p>
-                      {course.shortName && course.shortName !== course.name && (
-                        <p className="mt-1 break-words text-xs text-text-muted">
-                          {course.shortName}
-                        </p>
-                      )}
-                    </div>
-                    <ArrowRight
-                      size={17}
-                      className="shrink-0 text-text-muted"
-                      aria-hidden="true"
-                    />
-                  </AppLink>
-                </li>
-              ))}
-            </ul>
+          {groups.length ? (
+            <CourseLibrary groups={groups} navigate={navigate} />
           ) : (
             <div className="space-y-3">
               <p role="status" className="text-sm text-text-muted">
+                <Search size={18} className="mb-3" aria-hidden="true" />
                 Keine Kurse für „{query}“ gefunden.
               </p>
               <Button

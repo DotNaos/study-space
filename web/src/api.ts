@@ -37,6 +37,9 @@ export type Course = {
   name: string;
   shortName: string;
   summary: string;
+  imageUrl?: string | null;
+  startDate?: number | null;
+  endDate?: number | null;
 };
 
 export type ProjectConfig = { moodle: { siteUrl: string | null } };
