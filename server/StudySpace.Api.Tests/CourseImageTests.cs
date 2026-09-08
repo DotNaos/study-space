@@ -23,7 +23,7 @@ public sealed class CourseImageTests : IDisposable
 
     public CourseImageTests()
     {
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["STUDY_PRIVATE_DIR"] = directory }).Build();
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["STUDY_DATA_DIR"] = System.IO.Path.Combine(directory, "data"), ["STUDY_PRIVATE_DIR"] = directory }).Build();
         credentials = new(DataProtectionProvider.Create(new DirectoryInfo(Path.Combine(directory, "keys"))), configuration);
         moodle = new(metadata, credentials, clock);
         images = new(moodle, credentials, downloads);
@@ -155,7 +155,7 @@ public sealed class CourseImageTests : IDisposable
         builder.UseEnvironment("Testing");
         builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
         {
-            ["STUDY_PRIVATE_DIR"] = Path.Combine(directory, "api-private"), ["STUDY_SKIP_MIGRATIONS"] = "true",
+            ["STUDY_DATA_DIR"] = System.IO.Path.Combine(directory, "data"), ["STUDY_PRIVATE_DIR"] = Path.Combine(directory, "api-private"), ["STUDY_SKIP_MIGRATIONS"] = "true",
             ["STUDY_PUBLIC_URL"] = "https://study.example.test",
             ["ConnectionStrings:Database"] = "Host=127.0.0.1;Port=1;Database=unused;Username=fixture;Password=fixture;Timeout=1"
         }));

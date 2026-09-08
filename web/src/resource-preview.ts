@@ -6,6 +6,7 @@ export type ResourcePreview = {
   path: string;
   downloadUrl?: string;
   moodleUrl?: string;
+  initialPage?: number;
 };
 export type ResourceAction =
   | { kind: "preview"; preview: ResourcePreview }
@@ -14,6 +15,8 @@ export type ResourceAction =
 export const maxPreviewBytes = 32 * 1024 * 1024;
 const previewPathPattern =
   /^\/api\/providers\/moodle\/courses\/[1-9]\d*\/modules\/[1-9]\d*\/resources\/[a-f0-9]{64}\/preview$/;
+const importedAssetPattern =
+  /^\/api\/materials\/[a-f0-9]{64}\/revisions\/[a-f0-9]{64}\/assets\/[a-z0-9-]{1,80}$/;
 
 export function resourcePath(
   courseId: number,
@@ -72,7 +75,7 @@ export async function fetchPreviewBytes(
   kind: ResourcePreview["kind"],
   signal: AbortSignal,
 ): Promise<{ bytes: Uint8Array; mimeType: string }> {
-  if (!previewPathPattern.test(path))
+  if (!previewPathPattern.test(path) && !importedAssetPattern.test(path))
     throw new Error("Diese Vorschau ist nicht verfügbar.");
   const response = await fetch(path, {
     credentials: "same-origin",

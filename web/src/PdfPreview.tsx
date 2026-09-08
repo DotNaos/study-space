@@ -12,9 +12,11 @@ import { Loading } from "./shared";
 export function PdfPreview({
   bytes,
   onError,
+  initialPage = 1,
 }: {
   bytes: Uint8Array;
   onError: (error: string) => void;
+  initialPage?: number;
 }) {
   const [document, setDocument] = useState<PDFDocumentProxy>();
   const [pageNumber, setPageNumber] = useState(1);
@@ -46,7 +48,14 @@ export function PdfPreview({
     }, 20000);
     void loading.task.promise
       .then((document) => {
-        if (!stopped) setDocument(document);
+        if (!stopped) {
+          const page = Number.isSafeInteger(initialPage)
+            ? Math.max(1, Math.min(document.numPages, initialPage))
+            : 1;
+          setPageNumber(page);
+          setPageInput(String(page));
+          setDocument(document);
+        }
       })
       .catch((error: unknown) => {
         if (!stopped)
@@ -62,7 +71,7 @@ export function PdfPreview({
       window.clearTimeout(timeout);
       void loading.dispose();
     };
-  }, [bytes, onError]);
+  }, [bytes, initialPage, onError]);
   useEffect(() => {
     const host = scrollRef.current;
     if (!host) return;

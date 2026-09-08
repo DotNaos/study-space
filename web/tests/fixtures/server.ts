@@ -1,5 +1,6 @@
 // Disposable, synthetic browser-QA server. Never imports real data or credentials.
 // Run after `bun run build`: bun tests/fixtures/server.ts
+import { configureLearning, learningResponse } from "./learning-flow";
 import { fileSections, fileResponse } from "./course-files";
 import { syntheticCourseImage } from "./course-images";
 const origin = process.env.STUDY_FIXTURE_ORIGIN || "http://localhost:18141";
@@ -209,6 +210,7 @@ Bun.serve({
     const url = new URL(request.url);
     if (url.pathname === "/__fixture" && request.method === "POST") {
       const next = await request.json();
+      configureLearning(next);
       mode = next.mode || "connected";
       if ("siteUrl" in next) configuredSite = next.siteUrl;
       requests = [];
@@ -217,6 +219,8 @@ Bun.serve({
     if (url.pathname === "/__fixture/requests") return json(requests);
     if (url.pathname.startsWith("/api/"))
       requests.push(`${request.method} ${url.pathname}`);
+    const learning = await learningResponse(request, url);
+    if (learning) return learning;
     const resource = await fileResponse(url.pathname);
     if (resource) return resource;
     const imageCourse = url.pathname.match(

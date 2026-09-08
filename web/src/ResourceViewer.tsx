@@ -130,7 +130,11 @@ export function ResourceViewer({
           }
         >
           {preview.kind === "pdf" ? (
-            <PdfPreview bytes={file.bytes} onError={setError} />
+            <PdfPreview
+              bytes={file.bytes}
+              initialPage={preview.initialPage}
+              onError={setError}
+            />
           ) : (
             <ImagePreview
               bytes={file.bytes}

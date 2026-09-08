@@ -22,7 +22,7 @@ public sealed class CourseFileTests : IDisposable
     private readonly MoodleFileService files;
     public CourseFileTests()
     {
-        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["STUDY_PRIVATE_DIR"] = directory }).Build();
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["STUDY_DATA_DIR"] = System.IO.Path.Combine(directory, "data"), ["STUDY_PRIVATE_DIR"] = directory }).Build();
         credentials = new(DataProtectionProvider.Create(new DirectoryInfo(System.IO.Path.Combine(directory, "keys"))), config);
         moodle = new(metadata, credentials, TimeProvider.System); files = new(moodle, credentials, downloads);
     }
@@ -127,7 +127,7 @@ public sealed class CourseFileTests : IDisposable
     private WebApplicationFactory<Program> Factory() => new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
     {
         builder.UseEnvironment("Testing"); builder.ConfigureAppConfiguration((_, config) => config.AddInMemoryCollection(new Dictionary<string, string?>
-        { ["STUDY_PRIVATE_DIR"] = System.IO.Path.Combine(directory, "api-private"), ["STUDY_SKIP_MIGRATIONS"] = "true", ["STUDY_PUBLIC_URL"] = "https://study.example.test",
+        { ["STUDY_DATA_DIR"] = System.IO.Path.Combine(directory, "data"), ["STUDY_PRIVATE_DIR"] = System.IO.Path.Combine(directory, "api-private"), ["STUDY_SKIP_MIGRATIONS"] = "true", ["STUDY_PUBLIC_URL"] = "https://study.example.test",
             ["ConnectionStrings:Database"] = "Host=127.0.0.1;Port=1;Database=unused;Username=fixture;Password=fixture;Timeout=1" }));
         builder.ConfigureServices(services => { services.AddSingleton<IMoodleTransport>(metadata); services.AddSingleton<IMoodleFileTransport>(downloads); });
     });

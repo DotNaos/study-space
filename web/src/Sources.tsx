@@ -3,6 +3,8 @@ import { Button } from "@dotnaos/ui-base";
 import { api, message, type Connection, type ProjectConfig } from "./api";
 import { Loading, Notice } from "./shared";
 import { MoodleLogin } from "./MoodleLogin";
+import { CodexConnectionControl } from "./CodexConnection";
+import { useCodexConnection } from "./codex-api";
 
 export function Sources({
   connection,
@@ -13,6 +15,7 @@ export function Sources({
   onConnected: () => Promise<void>;
   onDisconnected: () => Promise<void>;
 }) {
+  const codex = useCodexConnection();
   const [config, setConfig] = useState<ProjectConfig>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -109,6 +112,16 @@ export function Sources({
       ) : !error ? (
         <Loading />
       ) : null}
+      <section
+        aria-label="ChatGPT-Verbindung"
+        className="mt-8 border-t border-border pt-6"
+      >
+        <CodexConnectionControl codex={codex} />
+        <p className="mt-2 text-xs leading-5 text-text-muted">
+          Erstelle Lernskripte und Übungen mit deinem ChatGPT-Konto. Kursinhalte
+          werden erst nach deiner ausdrücklichen Aktion übertragen.
+        </p>
+      </section>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 mod api;
 mod bundle;
+mod learning;
 mod runtime;
 mod setup;
 
@@ -56,6 +57,16 @@ enum Commands {
     Moodle {
         #[command(subcommand)]
         command: MoodleCommands,
+    },
+    /// Prepare materials and read persistent course learning state
+    Learning {
+        #[command(subcommand)]
+        command: learning::LearningCommands,
+    },
+    /// Show Codex connection status or open browser sign-in
+    Codex {
+        #[command(subcommand)]
+        command: learning::CodexCommands,
     },
 }
 
@@ -114,6 +125,8 @@ fn run() -> Result<()> {
             installation.compose(&args)
         }
         Commands::Update => installation.update(),
+        Commands::Learning { command } => learning::run(&installation, command),
+        Commands::Codex { command } => learning::codex(&installation, command),
         Commands::Moodle { command } => match command {
             MoodleCommands::Status => {
                 api::print(&installation, "GET", "/api/providers/moodle", None)

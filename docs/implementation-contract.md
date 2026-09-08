@@ -1,6 +1,6 @@
 # Installation and Moodle course browsing
 
-This implementation covers local installation, Moodle connection, course browsing and inline file previews in issues #2, #11, #22 and #25. Material import, pipeline and learning-agent work in #12 remain deferred. Google Drive backups are also deferred at the user's request.
+This implementation covers local installation, Moodle connection, course browsing and inline file previews in issues #2, #11, #22 and #25. Material preparation, Codex sign-in, script/exercises and question answering under #12 are specified in [learning-contract.md](learning-contract.md). Full agent editing and nested learning remain later stages. Google Drive backups are also deferred at the user's request.
 
 ## Deployment
 

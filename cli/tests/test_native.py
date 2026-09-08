@@ -44,8 +44,14 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(json.dumps({"moodle": {"siteUrl": body["moodle"]["siteUrl"].rstrip("/")}}).encode())
 
     def do_POST(self):
-        body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        raw = self.rfile.read(int(self.headers.get("Content-Length", "0")))
+        body = json.loads(raw) if raw else None
         self.seen.append((self.command, self.path, self.headers.get("Origin"), body))
+        if self.path.startswith(("/api/materials/", "/api/learning/")):
+            self.send_response(202)
+            self.end_headers()
+            self.wfile.write(json.dumps({"job": {"status": "queued"}}).encode())
+            return
         bad = body["siteUrl"] == "https://invalid.example"
         self.send_response(400 if bad else 200)
         self.end_headers()
@@ -142,6 +148,30 @@ class NativeTests(unittest.TestCase):
         result = self.run_cli("moodle", "connect")
         self.assertEqual(result.returncode, 0)
         self.assertIn("https://study.os-pc.vpn.os-home.net", result.stdout)
+
+    def test_learning_prepare_only_enqueues_local_import(self):
+        result = self.run_cli("learning", "prepare", "42")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["job"]["status"], "queued")
+        self.assertEqual(Handler.seen[-1], ("POST", "/api/materials/courses/42/import", "https://study.os-pc.vpn.os-home.net", None))
+
+    def test_generation_requires_explicit_transmission_flag_and_valid_snapshot(self):
+        before = len(Handler.seen)
+        result = self.run_cli("learning", "generate", "42", "--snapshot", "a" * 64)
+        self.assertNotEqual(result.returncode, 0)
+        result = self.run_cli("learning", "generate", "42", "--snapshot", "../secret", "--send-to-codex")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(len(Handler.seen), before)
+        result = self.run_cli("learning", "generate", "42", "--snapshot", "a" * 64, "--send-to-codex", "--allow-partial")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(Handler.seen[-1][3], {"snapshotId": "a" * 64, "consentToCodex": True, "allowPartial": True})
+
+    def test_codex_connect_does_not_start_login_or_read_credentials(self):
+        before = len(Handler.seen)
+        result = self.run_cli("codex", "connect")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("https://study.os-pc.vpn.os-home.net/sources", result.stdout)
+        self.assertEqual(len(Handler.seen), before)
 
 
 if __name__ == "__main__":

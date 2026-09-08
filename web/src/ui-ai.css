@@ -1,0 +1,2 @@
+/* Keep the published component sheet below app utilities when loaded lazily. */
+@import "@dotnaos/ui/styles.css" layer(dotnaos-ai);
