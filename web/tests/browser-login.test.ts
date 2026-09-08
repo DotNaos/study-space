@@ -135,6 +135,45 @@ describe("Moodle browser return privacy boundary", () => {
   });
 });
 
+test("Moodle HTTPS launch opens a separate protected tab and rejects unsafe schemes", async () => {
+  const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { isSecureContext: false },
+  });
+  try {
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    const { MoodleLaunchLink } = await import("../src/BrowserLoginStep");
+    const launchUrl =
+      "https://moodle.example.test/admin/tool/mobile/launch.php?confirmed=1";
+    const html = renderToStaticMarkup(
+      createElement(MoodleLaunchLink, { launchUrl }),
+    );
+    expect(html).toContain(`href="${launchUrl}"`);
+    expect(html).toContain('target="_blank"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain("öffnet einen neuen Tab");
+    expect(html).not.toContain("<button");
+    for (const unsafe of [
+      "javascript:alert(1)",
+      "http://moodle.example.test",
+      "web+studyspace://synthetic",
+      "not a URL",
+    ]) {
+      expect(
+        renderToStaticMarkup(
+          createElement(MoodleLaunchLink, { launchUrl: unsafe }),
+        ),
+      ).toBe("");
+    }
+  } finally {
+    if (originalWindow)
+      Object.defineProperty(globalThis, "window", originalWindow);
+    else Reflect.deleteProperty(globalThis, "window");
+  }
+});
+
 test("Moodle form renders with null siteUrl from a disconnected API response", async () => {
   const originalWindow = Object.getOwnPropertyDescriptor(globalThis, "window");
   Object.defineProperty(globalThis, "window", {
