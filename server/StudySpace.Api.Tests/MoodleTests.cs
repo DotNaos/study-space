@@ -102,11 +102,20 @@ public sealed class MoodleTests : IDisposable
         var query = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(launch.Query);
         Assert.Equal("web+studyspace", query["urlscheme"].ToString());
         Assert.Equal("moodle_mobile_app", query["service"].ToString());
+        Assert.Equal("1", query["confirmed"].ToString()); // Moodle renders its visible return link instead of a bare custom-scheme redirect.
         var callback = Callback(query["passport"].ToString());
         Assert.Equal("completed", (await service.Complete(login.Id, new(CallbackUrl: callback), default)).Status);
         Assert.Equal("connected", (await service.State(default)).Status);
         Assert.Equal(0, transport.Exchanges);
         Assert.Equal("login_consumed", (await Assert.ThrowsAsync<ApiFailure>(() => service.Complete(login.Id, new(CallbackUrl: callback), default))).Code);
+    }
+    [Fact] public async Task VisibleBrowserReturnSettingDoesNotAlterQrProfileLaunch()
+    {
+        var browser = await service.Start(new(Site, "browser-sso"), default);
+        Assert.Equal("1", Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(browser.LaunchUrl!).Query)["confirmed"].ToString());
+        var qr = await service.Start(new(Site, "qr"), default);
+        Assert.Equal(Site + "/user/profile.php", qr.LaunchUrl);
+        Assert.Equal("", new Uri(qr.LaunchUrl!).Query);
     }
     [Fact] public async Task BrowserReturnRejectsOtherFlowSiteSchemeAndMixedMethod()
     {

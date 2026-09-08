@@ -52,7 +52,8 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
             var login = new PendingLogin(MoodleSite.Parse(discovery.SiteUrl), clock.GetUtcNow().AddMinutes(5), request.Method, Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(32)));
             logins[id] = login;
             var launch = request.Method == "qr" ? discovery.SiteUrl + "/user/profile.php" : QueryHelpers.AddQueryString(discovery.SiteUrl + "/admin/tool/mobile/launch.php",
-                new Dictionary<string, string?> { ["service"] = "moodle_mobile_app", ["passport"] = login.Passport, ["urlscheme"] = MoodleBrowserReturn.Scheme });
+                new Dictionary<string, string?> { ["service"] = "moodle_mobile_app", ["passport"] = login.Passport,
+                    ["urlscheme"] = MoodleBrowserReturn.Scheme, ["confirmed"] = "1" });
             string[] instructions = request.Method == "qr" ? QrInstructions : [
                 "Erlaube Study Space in deinem Browser, Anmeldelinks zu öffnen.",
                 "Öffne anschließend Moodle und melde dich auf der Seite deiner Hochschule an.",
