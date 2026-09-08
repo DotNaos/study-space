@@ -21,14 +21,17 @@ Repeating the command preserves the database, settings, and Moodle connection. E
 1. Open **Quellen** and enter your Moodle address, including any path such as `/moodle`.
 2. Choose browser login. Allow Study Space to handle its return link when your browser asks, then open Moodle.
 3. Sign in on your school's website. Moodle returns you to Study Space, which verifies and saves the connection.
+4. Open **Kurse** to search your enrolled courses. Open a course to browse its sections, activities, and files. Links open the original material in Moodle; downloading and processing materials is a later step.
 
-Browser login uses Moodle's mobile-app launch flow with a registered `web+studyspace` return link. Use a supporting desktop browser such as Chrome or Edge. Study Space never assumes that you granted the browser's permission; it explains the required step. Safari and some embedded/mobile browsers do not support this return mechanism.
+Browser login uses Moodle's mobile-app launch flow with a registered `web+studyspace` return link. The return address stays the same across attempts; the server matches each return to the current single-use login. Use a supporting desktop browser such as Chrome or Edge. Study Space never assumes that you granted the browser's permission; it explains the required step. Safari and some embedded/mobile browsers do not support this return mechanism.
 
 If your school enables profile QR login, it is also available as a fallback: sign in to Moodle, display the mobile-app login QR in your profile, and upload a screenshot. The image is decoded in your browser; only the decoded pairing request goes to your own Study Space server. QR login can require the browser and os-pc to use the same public internet address. Being on the same Tailnet alone does not guarantee this. Use the same home connection or an exit node you have already configured. Study Space does not change VPN settings.
 
 Connection requests expire after five minutes and can be used once. Study Space verifies the returned Moodle site and account before saving a token. Passwords are entered only on Moodle. Tokens and encryption keys stay in a private directory on os-pc; disconnecting removes the saved token.
 
-The school must enable Moodle mobile web services and a supported login method. After connecting, Study Space can list enrolled courses. Material import, script/exercise generation, and Codex integration are the next milestone.
+The school must enable Moodle mobile web services and a supported login method. Only courses available to the connected Moodle account are shown. Material import, script/exercise generation, and Codex integration are a later milestone.
+
+The Moodle address is saved for this single-user installation in the generated `data/app/config.json` file under the installation directory. Fresh installations have no school address configured. Saving an address in the app updates this file for every browser; clearing it does not silently disconnect an existing Moodle account. The file contains configuration only, while login credentials remain in the separate private directory.
 
 ## Manage the installation
 
@@ -41,6 +44,9 @@ study logs
 study update
 study moodle status
 study moodle discover https://moodle.example.edu
+study moodle set-site https://moodle.example.edu
+study moodle courses
+study moodle course 123
 ```
 
 The command is installed in `~/.local/bin/study`. If your shell does not find it, use that full path or add `~/.local/bin` to your PATH. Persistent state defaults to `~/.local/share/study-space/`: `data/` holds PostgreSQL and application data, `secrets/` holds private credentials, and `releases/` retains installed bundles. Do not delete these directories to update the app.

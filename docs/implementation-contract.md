@@ -1,6 +1,6 @@
-# Installation through Moodle connection checkpoint
+# Installation and Moodle course browsing
 
-This implementation covers the local installation and Moodle connection checkpoint in issues #2 and #11. Pipeline and learning-agent work in #12 is deliberately deferred until the requested user checkpoint.
+This implementation covers local installation, Moodle connection, and course browsing in issues #2 and #11. Material import, pipeline and learning-agent work in #12 remain deferred. Google Drive backups are also deferred at the user's request.
 
 ## Deployment
 
@@ -23,15 +23,17 @@ JSON camelCase; failures use ProblemDetails with a user-safe title/detail and a 
 - `GET /health/live`: process liveness; `GET /health/ready`: checks database and returns non-2xx when unavailable.
 - `GET /api/status`: `{ app: "study-space", version, commit, hostname, publicUrl, database: "ready"|"unavailable" }`.
 - `GET /api/settings` and `PUT /api/settings`: `{ displayName, locale }`, defaults `Study Space` / `de`, persisted in database.
+- `GET /api/config` and `PUT /api/config`: `{moodle:{siteUrl:string|null}}`. Stored atomically with mode `0600` at `STUDY_DATA_DIR/config.json` (installation `data/app/config.json`). The file is generated when first requested, with a blank address on a fresh installation. Only missing-file generation may seed the address from an existing connection. Explicitly clearing an existing value stays cleared. Saving a configured address does not change or delete an active credential. No school address is hardcoded or stored in browser local storage.
 - `GET /api/providers/moodle`: `{ status: "disconnected"|"connected"|"expired", siteUrl?, siteName?, displayName?, lastVerifiedAt? }`; no token.
 - `POST /api/providers/moodle/discover` with `{siteUrl}`: `{siteUrl, siteName, loginMode, methods: ["browser-sso"|"qr"], warnings: string[]}`. Discover real public configuration; no fabricated OAuth endpoint.
 - `POST /api/providers/moodle/login/start` with `{siteUrl, method}`: `{id, status:"pending", method, expiresAt, launchUrl?, pairingUrl?, instructions: string[]}`. A browser custom-scheme callback requires a concrete supported handler/bridge; do not claim an arbitrary HTTPS callback is supported by Moodle.
 - `GET /api/providers/moodle/login/{id}`: `{id,status:"pending"|"completed"|"expired"|"failed", expiresAt, message?}`.
 - `DELETE /api/providers/moodle/login/{id}`: idempotently cancel/invalidate the pending request so delayed callbacks cannot complete it; preserve any already saved connection. Wait for successful cancellation before clearing the pending UI.
 - `POST /api/providers/moodle/login/{id}/complete`: secured single-use callback/QR exchange. Exact method payload is owned by backend and must be documented here and communicated to frontend/CLI before integration. Never accept arbitrary token imports without validating the intended site, account and pending login.
+- `POST /api/providers/moodle/browser-return` with `{callbackUrl}`: complete the active browser login under the service lock after validating the returned site/passport digest. Expired, stale, replayed, and QR-mixed returns fail without consuming a different active login.
 - `DELETE /api/providers/moodle`: disconnect, remove local credential, preserve imported material data.
 - `GET /api/providers/moodle/courses`: normalized enrolled course list after real token validation.
-- Additional content/material endpoints remain provider-neutral and may follow after the requested live Moodle-login checkpoint.
+- `GET /api/providers/moodle/courses/{id}/contents`: verify the course is in the connected account's enrolled list, then return sections `{id,name,summary,modules:[{id,name,type,url,description,resources:[{type,name,mimeType,size,modifiedAt,url}]}]}`. Names and descriptions are rendered as text. Activity links are generated on the configured Moodle origin; unsafe URLs and token-only file endpoints are omitted. The UI opens such files through their owning Moodle activity. This endpoint returns metadata only and does not import files.
 
 No Moodle username/password fields. Credentials remain on the user's own host. The user performs any real school authentication personally; automated tests use an isolated fake Moodle service and synthetic tokens, never existing personal credentials.
 
@@ -40,11 +42,11 @@ No Moodle username/password fields. Credentials remain on the user's own host. T
 This checkpoint supports browser SSO through the browser's registered `web+studyspace` protocol handler and profile QR login as fallback. `loginMode` describes the site's upstream login (`browser-sso` or `site-login`); `methods` advertises browser SSO only for enabled mobile web services, Moodle login type 2/3, and the expected same-site launch endpoint. QR requires `tool_mobile_qrcodetype: 2`.
 
 - Browser start uses Moodle's real `/admin/tool/mobile/launch.php?service=moodle_mobile_app&passport=...&urlscheme=web%2Bstudyspace`. Study Space supplies a random 256-bit passport and validates Moodle's MD5(site+passport) correlation digest, exact return scheme, single use, expiry and site information before saving.
-- The browser must support and approve `navigator.registerProtocolHandler('web+studyspace', origin + '/moodle-return#id=' + encodeURIComponent(id) + '&callback=%s')`. Chrome/Edge desktop can support this; do not promise Safari/iOS support. Registration must follow a user gesture before launching Moodle. This is a web protocol bridge, not an arbitrary HTTPS callback accepted by Moodle.
-- Browser completion JSON is `{ "callbackUrl": "web+studyspace://token=..." }`. The return value stays in the fragment, which must be scrubbed synchronously before application requests/resources. Never persist/log the value. Persisting the nonsecret pending request ID and expiry for cross-tab correlation is permitted. A newer start invalidates the previous passport and ID.
+- The browser must support and approve `navigator.registerProtocolHandler('web+studyspace', origin + '/moodle-return#callback=%s')`. Chrome/Edge desktop can support this; do not promise Safari/iOS support. Registration must follow a user gesture before launching Moodle. The handler URL is stable across login attempts. This is a web protocol bridge, not an arbitrary HTTPS callback accepted by Moodle.
+- Browser completion JSON is `{ "callbackUrl": "web+studyspace://token=..." }`. The return value stays in the fragment, which must be scrubbed synchronously before application requests/resources. Never persist/log the value. The return posts to `/api/providers/moodle/browser-return`; correlation stays on the server and requires no browser storage. Legacy handler fragments may contain an ID, which the new frontend ignores while validating the returned passport against the active flow. A newer start invalidates the previous passport and ID.
 
 - QR start opens `{siteUrl}/user/profile.php`. The user authenticates only on Moodle/the school website, shows its Mobile app login QR, then uploads/decodes it in Study Space.
 - `POST /api/providers/moodle/login/{id}/complete` JSON: `{ "qrCode": "moodlemobile://https://moodle.example/...?..." }`. Accept the exact decoded QR text, including Moodle's encoded `https//` variant. Never persist/display/log the value. The request ID is a random, single-use, five-minute correlation identifier. New login starts invalidate older requests. Site and QR user ID are checked before saving a token, using `core_webservice_get_site_info`.
 - The QR creation browser and server-side exchange must share the same public egress IP (Moodle limitation). Same home network or an already configured Tailscale exit node can satisfy this; ordinary Tailnet reachability alone does not. Surface the supplied warning before login. Do not silently alter VPN settings.
-- `courses` returns an array of `{id:number,name:string,shortName:string,summary:string}`. Treat summaries as untrusted text/HTML; do not render them as raw HTML.
+- `courses` returns an array of `{id:number,name:string,shortName:string,summary:string}`. Summaries and descriptions are converted to plain text on the server and must never be rendered as raw HTML.
 - Runtime tokens and Data Protection key material live exclusively below `STUDY_PRIVATE_DIR`; app database/general backups contain no token. A restore intentionally requires reconnecting Moodle unless the private directory is recovered separately.

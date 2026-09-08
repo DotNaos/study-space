@@ -41,6 +41,10 @@ public sealed class ApiTests : IDisposable
         Assert.Equal("no-store", invalid.Headers.CacheControl!.ToString());
         Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/api/providers/moodle/login/unknown")).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await client.DeleteAsync("/api/providers/moodle/login/unknown")).StatusCode);
+        var browserReturn = await client.PostAsJsonAsync("/api/providers/moodle/browser-return", new { callbackUrl = "synthetic-invalid-return" });
+        Assert.Equal(HttpStatusCode.NotFound, browserReturn.StatusCode);
+        Assert.Contains("login_unknown", await browserReturn.Content.ReadAsStringAsync());
+        Assert.DoesNotContain("synthetic-invalid-return", await browserReturn.Content.ReadAsStringAsync());
     }
     [Fact] public async Task ProtectedCredentialsSurviveHostRestartWithEncryptedKeyRing()
     {

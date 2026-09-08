@@ -11,7 +11,7 @@ export function BrowserLoginStep({ login }: { login: Login }) {
   function register() {
     setError("");
     try {
-      registerMoodleReturn(login);
+      registerMoodleReturn();
       setRequested(true);
     } catch {
       setError(

@@ -9,42 +9,44 @@ const id = "a".repeat(64);
 
 describe("Moodle browser return privacy boundary", () => {
   for (const htmlPath of ["../index.html", "../dist/index.html"]) {
-    test(`${htmlPath}: scrubs the URL before decoding or loading app resources`, () => {
-      const html = readFileSync(new URL(htmlPath, import.meta.url), "utf8");
-      const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
-      expect(script).toBeDefined();
-      expect(html.indexOf("history.replaceState")).toBeLessThan(
-        html.search(/<script[^>]*src=/),
-      );
-      expect(html.indexOf("history.replaceState")).toBeLessThan(
-        html.indexOf("<link"),
-      );
-      let cleared = false;
-      const location = {
-        pathname: "/moodle-return",
-        hash: `#id=${id}&callback=${encodeURIComponent(callbackUrl)}`,
-      };
-      const target: Record<string, unknown> = {};
-      runInNewContext(script!, {
-        location,
-        window: target,
-        history: {
-          replaceState: (_state: unknown, _title: string, url: string) => {
-            expect(url).toBe("/moodle-return");
-            location.hash = "";
-            cleared = true;
+    for (const prefix of ["", `id=${id}&`]) {
+      test(`${htmlPath}: scrubs ${prefix ? "legacy" : "stable"} callback before decoding or loading resources`, () => {
+        const html = readFileSync(new URL(htmlPath, import.meta.url), "utf8");
+        const script = html.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+        expect(script).toBeDefined();
+        expect(html.indexOf("history.replaceState")).toBeLessThan(
+          html.search(/<script[^>]*src=/),
+        );
+        expect(html.indexOf("history.replaceState")).toBeLessThan(
+          html.indexOf("<link"),
+        );
+        let cleared = false;
+        const location = {
+          pathname: "/moodle-return",
+          hash: `#${prefix}callback=${encodeURIComponent(callbackUrl)}`,
+        };
+        const target: Record<string, unknown> = {};
+        runInNewContext(script!, {
+          location,
+          window: target,
+          history: {
+            replaceState: (_state: unknown, _title: string, url: string) => {
+              expect(url).toBe("/moodle-return");
+              location.hash = "";
+              cleared = true;
+            },
           },
-        },
-        URLSearchParams: class extends URLSearchParams {
-          constructor(value: string) {
-            expect(cleared).toBe(true);
-            super(value);
-          }
-        },
+          URLSearchParams: class extends URLSearchParams {
+            constructor(value: string) {
+              expect(cleared).toBe(true);
+              super(value);
+            }
+          },
+        });
+        expect(location.hash).toBe("");
+        expect(target.__studyMoodleReturn).toEqual({ callbackUrl });
       });
-      expect(location.hash).toBe("");
-      expect(target.__studyMoodleReturn).toEqual({ id, callbackUrl });
-    });
+    }
   }
 
   test("normal page anchors are not interpreted as authentication", () => {
@@ -80,7 +82,7 @@ describe("Moodle browser return privacy boundary", () => {
     const target = {
       isSecureContext: true,
       location: { origin: "https://study.test" },
-      __studyMoodleReturn: { id, callbackUrl },
+      __studyMoodleReturn: { callbackUrl },
     };
     Object.defineProperty(globalThis, "window", {
       configurable: true,
@@ -95,10 +97,15 @@ describe("Moodle browser return privacy boundary", () => {
       const bridge = await import("../src/browser-login");
       expect(target.__studyMoodleReturn).toBeUndefined();
       expect(bridge.supportsBrowserLogin()).toBe(true);
-      bridge.registerMoodleReturn({ id });
+      bridge.registerMoodleReturn();
+      bridge.registerMoodleReturn();
+      expect(registerProtocolHandler).toHaveBeenCalledTimes(2);
       expect(registerProtocolHandler).toHaveBeenCalledWith(
         "web+studyspace",
-        `https://study.test/moodle-return#id=${id}&callback=%s`,
+        "https://study.test/moodle-return#callback=%s",
+      );
+      expect(registerProtocolHandler.mock.calls[0]).toEqual(
+        registerProtocolHandler.mock.calls[1],
       );
       await Promise.all([
         bridge.completeBrowserReturn(),
@@ -109,7 +116,7 @@ describe("Moodle browser return privacy boundary", () => {
         string,
         RequestInit,
       ];
-      expect(path).toBe(`/api/providers/moodle/login/${id}/complete`);
+      expect(path).toBe("/api/providers/moodle/browser-return");
       expect(path).not.toContain("token");
       expect(request.method).toBe("POST");
       expect(JSON.parse(request.body as string)).toEqual({ callbackUrl });

@@ -1,4 +1,4 @@
-import { api, type Login } from "./api";
+import { api } from "./api";
 
 export const moodleReturnPath = "/moodle-return";
 export const moodleProtocol = "web+studyspace";
@@ -12,18 +12,20 @@ export function supportsBrowserLogin(): boolean {
 
 // Must be called directly from a user gesture. Registration can prompt for browser
 // permission; a successful call does not mean that the user granted permission.
-export function registerMoodleReturn(login: Pick<Login, "id">): void {
+// Keep this URL identical across login attempts: the server correlates the return
+// with its active pending login using Moodle's passport digest.
+export function registerMoodleReturn(): void {
   if (!supportsBrowserLogin())
     throw new Error(
       "Bitte die Browser-Anmeldung in Chrome oder Edge öffnen, oder den Moodle-QR-Code verwenden.",
     );
   navigator.registerProtocolHandler(
     moodleProtocol,
-    `${window.location.origin}${moodleReturnPath}#id=${encodeURIComponent(login.id)}&callback=%s`,
+    `${window.location.origin}${moodleReturnPath}#callback=%s`,
   );
 }
 
-type BrowserReturn = { id: string; callbackUrl: string };
+type BrowserReturn = { callbackUrl: string };
 declare global {
   interface Window {
     __studyMoodleReturn?: BrowserReturn;
@@ -41,16 +43,12 @@ export function completeBrowserReturn(): Promise<void> {
   const callback = returned;
   returned = undefined;
   completion = (async () => {
-    if (
-      !callback ||
-      !/^[a-f0-9]{64}$/.test(callback.id) ||
-      !callback.callbackUrl.startsWith(`${moodleProtocol}://`)
-    ) {
+    if (!callback || !callback.callbackUrl.startsWith(`${moodleProtocol}://`)) {
       throw new Error(
         "Diese Rückkehr gehört zu keiner gültigen Anmeldung. Bitte starte die Verbindung erneut.",
       );
     }
-    await api(`/api/providers/moodle/login/${callback.id}/complete`, {
+    await api("/api/providers/moodle/browser-return", {
       method: "POST",
       body: JSON.stringify({ callbackUrl: callback.callbackUrl }),
     });

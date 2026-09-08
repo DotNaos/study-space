@@ -10,6 +10,8 @@ public sealed class TransportTests
     [InlineData("invalidtoken", "moodle_token_rejected", 401)]
     [InlineData("maintenance", "moodle_rejected", 502)]
     [InlineData("invalidparameter", "moodle_rejected", 502)]
+    [InlineData("nopermissions", "moodle_access_denied", 403)]
+    [InlineData("requireloginerror", "moodle_access_denied", 403)]
     public async Task OnlyExplicitInvalidTokenMeansReconnect(string upstreamCode, string expectedCode, int expectedStatus)
     {
         var handler = new RecordingHandler($"{{\"exception\":\"moodle_exception\",\"errorcode\":\"{upstreamCode}\",\"message\":\"PRIVATE UPSTREAM DETAILS\"}}");

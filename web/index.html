@@ -9,7 +9,6 @@
         history.replaceState(null, "", "/moodle-return");
         const parameters = new URLSearchParams(fragment.slice(1));
         window.__studyMoodleReturn = {
-          id: parameters.get("id") || "",
           callbackUrl: parameters.get("callback") || "",
         };
       })();

@@ -123,6 +123,45 @@ public sealed class MoodleTests : IDisposable
         var signature = Convert.ToHexStringLower(System.Security.Cryptography.MD5.HashData(Encoding.UTF8.GetBytes(site + passport)));
         return "web+studyspace://token=" + Convert.ToBase64String(Encoding.UTF8.GetBytes(signature + ":::" + FixtureTransport.Token + ":::discardedPrivateToken"));
     }
+    private static string Passport(LoginView login) => Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(new Uri(login.LaunchUrl!).Query)["passport"].ToString();
+    [Fact] public async Task StableBrowserReturnCompletesOnlyOnceWithoutLoginId()
+    {
+        var login = await service.Start(new(Site, "browser-sso"), default);
+        var request = new CompleteRequest(CallbackUrl: Callback(Passport(login)));
+        var outcomes = await Task.WhenAll(Enumerable.Range(0, 2).Select(async _ =>
+        { try { return (await service.CompleteBrowserReturn(request, default)).Status; } catch (ApiFailure error) { return error.Code; } }));
+        Assert.Contains("completed", outcomes);
+        Assert.Contains("login_unknown", outcomes);
+        Assert.Equal("connected", (await service.State(default)).Status);
+        Assert.Equal("login_consumed", (await Assert.ThrowsAsync<ApiFailure>(() => service.Complete(login.Id, request, default))).Code);
+    }
+    [Fact] public async Task StableBrowserReturnRejectsStaleWrongSiteAndMalformedCallbacksWithoutConsumingNewFlow()
+    {
+        var old = await service.Start(new(Site, "browser-sso"), default);
+        var active = await service.Start(new(Site, "browser-sso"), default);
+        foreach (var callback in new[] { Callback(Passport(old)), Callback(Passport(active), "https://other.example.test") })
+            Assert.Equal("login_signature_mismatch", (await Assert.ThrowsAsync<ApiFailure>(() => service.CompleteBrowserReturn(new(CallbackUrl: callback), default))).Code);
+        Assert.Equal("login_callback_invalid", (await Assert.ThrowsAsync<ApiFailure>(() => service.CompleteBrowserReturn(new(CallbackUrl: "invalid"), default))).Code);
+        Assert.Equal("login_method_mismatch", (await Assert.ThrowsAsync<ApiFailure>(() => service.CompleteBrowserReturn(new(QrCode: Qr), default))).Code);
+        Assert.Null(await store.Read());
+        Assert.Equal("pending", service.Status(active.Id).Status);
+        Assert.Equal("completed", (await service.CompleteBrowserReturn(new(CallbackUrl: Callback(Passport(active))), default)).Status);
+    }
+    [Fact] public async Task StableBrowserReturnCannotCompleteCancelledExpiredOrQrFlows()
+    {
+        var login = await service.Start(new(Site, "browser-sso"), default);
+        var callback = new CompleteRequest(CallbackUrl: Callback(Passport(login)));
+        await service.Cancel(login.Id, default);
+        Assert.Equal("login_unknown", (await Assert.ThrowsAsync<ApiFailure>(() => service.CompleteBrowserReturn(callback, default))).Code);
+        var expired = await service.Start(new(Site, "browser-sso"), default);
+        clock.Advance(TimeSpan.FromMinutes(6));
+        Assert.Equal("login_expired", (await Assert.ThrowsAsync<ApiFailure>(() => service.CompleteBrowserReturn(new(CallbackUrl: Callback(Passport(expired))), default))).Code);
+        var qr = await service.Start(new(Site, "qr"), default);
+        Assert.Equal("login_unknown", (await Assert.ThrowsAsync<ApiFailure>(() => service.CompleteBrowserReturn(callback, default))).Code);
+        Assert.Equal("pending", service.Status(qr.Id).Status);
+        Assert.Equal(0, transport.Exchanges);
+        Assert.Null(await store.Read());
+    }
     [Fact] public async Task CancelInvalidatesDelayedCallbackAndPreservesExistingConnection()
     {
         var connected = await service.Start(new(Site, "qr"), default);

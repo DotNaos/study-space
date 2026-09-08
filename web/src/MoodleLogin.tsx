@@ -8,6 +8,7 @@ import {
   type Discovery,
   type Login,
   type LoginMethod,
+  type ProjectConfig,
 } from "./api";
 import { Loading, Notice, linkClass } from "./shared";
 import { BrowserLoginStep } from "./BrowserLoginStep";
@@ -15,15 +16,6 @@ import { supportsBrowserLogin } from "./browser-login";
 const QrUpload = lazy(() =>
   import("./QrUpload").then((module) => ({ default: module.QrUpload })),
 );
-const sitePreference = "study-space:moodle-site";
-function rememberedSite(): string {
-  try {
-    return localStorage.getItem(sitePreference) || "";
-  } catch {
-    return "";
-  }
-}
-
 export function MoodleLogin({
   initialUrl,
   onConnected,
@@ -31,7 +23,7 @@ export function MoodleLogin({
   initialUrl?: string | null;
   onConnected: () => Promise<void>;
 }) {
-  const [siteUrl, setSiteUrl] = useState(() => initialUrl || rememberedSite());
+  const [siteUrl, setSiteUrl] = useState(initialUrl ?? "");
   const [discovery, setDiscovery] = useState<Discovery>();
   const [login, setLogin] = useState<Login>();
   const [busy, setBusy] = useState(false);
@@ -118,18 +110,20 @@ export function MoodleLogin({
         throw new Error(
           "Bitte die HTTPS-Adresse deiner Moodle-Plattform eingeben.",
         );
+      const config = await api<ProjectConfig>("/api/config", {
+        method: "PUT",
+        body: JSON.stringify({ moodle: { siteUrl: url.href } }),
+      });
+      const configuredUrl = config.moodle.siteUrl;
+      if (!configuredUrl)
+        throw new Error("Die Moodle-Adresse wurde nicht gespeichert.");
+      setSiteUrl(configuredUrl);
       const result = await api<Discovery>("/api/providers/moodle/discover", {
         method: "POST",
-        body: JSON.stringify({ siteUrl: url.href }),
+        body: JSON.stringify({ siteUrl: configuredUrl }),
       });
       setDiscovery(result);
       setSiteUrl(result.siteUrl);
-      // Persist only the server-validated canonical address, never callback data.
-      try {
-        localStorage.setItem(sitePreference, result.siteUrl);
-      } catch {
-        /* Storage can be disabled. */
-      }
       if (result.methods.includes("browser-sso") && browserSupported)
         await start("browser-sso", result);
     } catch (error) {
