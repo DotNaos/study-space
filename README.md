@@ -38,7 +38,7 @@ The Moodle address is saved for this single-user installation in the generated `
 
 1. Open a course, choose **Lernen**, then **Materialien erfassen**. Study Space imports original files and extracts their content locally on os-pc. PDFs, scanned pages/images, PPTX, DOCX, Moodle HTML and text have local adapters. Every inventoried item has a visible outcome; unsupported visuals, inaccessible references and failed files remain listed. An incomplete import is never labelled complete.
 2. Connect your existing ChatGPT/Codex account under **Quellen**, or directly in the learning setup. Open the displayed OpenAI verification page and enter the short device code yourself. Device sign-in must be enabled for your account/workspace. No API key or copied login file is needed.
-3. Review material coverage and choose **Lernbereich erstellen**. This action sends readable content from that exact prepared snapshot to OpenAI through your Codex account. Local extraction alone does not send content to OpenAI. If coverage is incomplete, explicitly select the partial-version option first.
+3. Review material coverage and choose **Lernbereich erstellen**. This action sends extracted text and supported source images from that exact prepared snapshot to OpenAI through your Codex account. Local extraction alone does not send content to OpenAI. If coverage is incomplete, explicitly select the partial-version option first.
 4. Read the source-linked script and work through the exercises. Hints and solutions are collapsed separately. Answer drafts save when you leave the field or choose **Antwort speichern**. Source buttons open the saved excerpt and original page from the revision used to create the learning version.
 5. Ask questions through the assistant. Sending a question shares it and a relevant subset of the saved learning context with Codex. This milestone answers questions; it does not let the agent edit your script or exercises yet.
 
@@ -46,7 +46,7 @@ Jobs save completed work and can resume after cancellation, failure or restart. 
 
 Material originals and extracted results live below `data/app/materials`; versioned learning content and answers live below `data/app/learning`. The isolated Codex runtime stores only its own login state under `secrets/codex-private`. It has no application-data, Moodle-credential, database or Docker-socket mount. Model turns have no execution environment or tools. Do not copy account credentials into the app or a general backup.
 
-The first processing profile limits individual files to 32 MiB, generated source images to 128 MiB per document, and generation to 128 bounded source chunks. Processing errors preserve previously usable results. Larger or unsupported input remains explicitly incomplete; do not assume the first learning version covers unprocessed material.
+The first processing profile limits individual files to 32 MiB, generated source images to 128 MiB per document, and generation to 128 bounded source chunks. Each model request includes at most eight source images and 8 MiB of decoded image data; larger inputs are split without omitting pages, or rejected with a clear error. Processing errors preserve previously usable results. Larger or unsupported input remains explicitly incomplete; do not assume the first learning version covers unprocessed material.
 
 ## Manage the installation
 

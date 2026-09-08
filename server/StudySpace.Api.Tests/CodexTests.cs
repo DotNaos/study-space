@@ -94,6 +94,8 @@ public sealed class CodexTests
         rpc.BeforeResponse = (method, _) =>
         {
             if (method != "turn/start") return;
+            rpc.Emit("item/started", new { threadId = "thread", turnId = "turn", item = new
+            { type = "userMessage", content = new string('A', CodexPolicy.MaximumLineCharacters + 1) } });
             rpc.Emit("item/agentMessage/delta", new { threadId = "unrelated", turnId = "turn", delta = "wrong" });
             rpc.Emit("item/completed", new { threadId = "thread", turnId = "turn", item = new { type = "reasoning" } });
             rpc.Emit("item/agentMessage/delta", new { threadId = "thread", turnId = "turn", delta = "partial" });
@@ -137,6 +139,15 @@ public sealed class CodexTests
         await Assert.ThrowsAsync<ArgumentException>(async () => await Collect(runtime.GenerateAsync(new string('x', CodexPolicy.MaximumPromptCharacters + 1), null, default)));
         using var reader = new StreamReader(new MemoryStream(Encoding.UTF8.GetBytes(new string('x', CodexPolicy.MaximumLineCharacters + 1))));
         await Assert.ThrowsAsync<CodexUnavailableException>(async () => { await foreach (var _ in CodexProcess.ReadLinesAsync(reader, default)) { } });
+        Assert.Empty(rpc.Calls);
+    }
+
+    [Fact] public async Task InvalidImageFailsBeforeStartingAnyProviderRequest()
+    {
+        await using var rpc = new FakeRpc();
+        using var runtime = new CodexRuntime(rpc);
+        await Assert.ThrowsAsync<ArgumentException>(async () => await Collect(runtime.GenerateAsync("synthetic", null, default,
+            [new("image/png", "https://example.test/image.png")])));
         Assert.Empty(rpc.Calls);
     }
 

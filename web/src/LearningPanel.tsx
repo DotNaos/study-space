@@ -194,7 +194,7 @@ export function LearningPanel({
                 </label>
               )}
               <p className="max-w-2xl text-xs leading-5 text-text-muted">
-                Beim Erstellen werden die lesbaren Kursinhalte über dein
+                Beim Erstellen werden die erfassten Texte und Quellenbilder über dein
                 verbundenes Codex-Konto an OpenAI übermittelt. Daraus entstehen
                 ein Lernskript und passende Übungen mit Quellen.
               </p>

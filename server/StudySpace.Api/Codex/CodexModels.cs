@@ -5,7 +5,8 @@ namespace StudySpace.Api.Codex;
 public sealed record CodexConnection(string Status, string? AccountLabel = null, CodexLogin? Login = null, string? Message = null);
 public sealed record CodexLogin(string Id, string UserCode, string VerificationUrl, DateTimeOffset ExpiresAt, string Status);
 public sealed record CodexDelta(string Type, string? Text = null);
-public sealed record CodexGenerationRequest(string Prompt, JsonElement? OutputSchema);
+public sealed record CodexImage(string MimeType, string Base64);
+public sealed record CodexGenerationRequest(string Prompt, JsonElement? OutputSchema, IReadOnlyList<CodexImage>? Images = null);
 
 public interface ICodexRuntime
 {
@@ -14,7 +15,7 @@ public interface ICodexRuntime
     Task<CodexLogin> ReadLoginAsync(string id, CancellationToken ct);
     Task CancelLoginAsync(string id, CancellationToken ct);
     Task LogoutAsync(CancellationToken ct);
-    IAsyncEnumerable<CodexDelta> GenerateAsync(string prompt, JsonElement? outputSchema, CancellationToken ct);
+    IAsyncEnumerable<CodexDelta> GenerateAsync(string prompt, JsonElement? outputSchema, CancellationToken ct, IReadOnlyList<CodexImage>? images = null);
 }
 
 public interface ICodexRpc : IAsyncDisposable

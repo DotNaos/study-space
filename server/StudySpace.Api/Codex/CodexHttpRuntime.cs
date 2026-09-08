@@ -20,7 +20,7 @@ public sealed class CodexHttpRuntime(IHttpClientFactory clients, IConfiguration 
         if (token.Length < 32 || token.Length > 256) throw new CodexUnavailableException();
         using var request = new HttpRequestMessage(method, new Uri(origin, path));
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-        if (body is not null) request.Content = JsonContent.Create(body);
+        if (body is not null) request.Content = JsonContent.Create(body, options: CodexPolicy.WireJson);
         var response = await clients.CreateClient("codex-bridge").SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!response.IsSuccessStatusCode) { response.Dispose(); throw new CodexUnavailableException(); }
         return response;
@@ -55,11 +55,12 @@ public sealed class CodexHttpRuntime(IHttpClientFactory clients, IConfiguration 
         using var response = await SendAsync(HttpMethod.Delete, path, null, deadline.Token);
     }
 
-    public async IAsyncEnumerable<CodexDelta> GenerateAsync(string prompt, JsonElement? outputSchema, [EnumeratorCancellation] CancellationToken ct)
+    public async IAsyncEnumerable<CodexDelta> GenerateAsync(string prompt, JsonElement? outputSchema, [EnumeratorCancellation] CancellationToken ct, IReadOnlyList<CodexImage>? images = null)
     {
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(CodexPolicy.GenerationTimeout + TimeSpan.FromSeconds(10));
-        using var response = await SendAsync(HttpMethod.Post, "/internal/generate", new CodexGenerationRequest(prompt, outputSchema), deadline.Token);
+        var validatedImages = CodexImages.Validate(images);
+        using var response = await SendAsync(HttpMethod.Post, "/internal/generate", new CodexGenerationRequest(prompt, outputSchema, validatedImages), deadline.Token);
         using var stream = new StreamReader(await response.Content.ReadAsStreamAsync(deadline.Token));
         var count = 0;
         var completed = false;

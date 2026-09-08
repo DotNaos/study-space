@@ -101,8 +101,8 @@ public sealed partial class CodexRuntime : ICodexRuntime, IDisposable
         finally { mutations.Release(); }
     }
 
-    public IAsyncEnumerable<CodexDelta> GenerateAsync(string prompt, JsonElement? outputSchema, CancellationToken ct)
-        => generation.RunAsync(prompt, outputSchema, ct);
+    public IAsyncEnumerable<CodexDelta> GenerateAsync(string prompt, JsonElement? outputSchema, CancellationToken ct, IReadOnlyList<CodexImage>? images = null)
+        => generation.RunAsync(prompt, outputSchema, ct, images);
 
     private CodexLogin FindLogin(string id) => login?.Id == id ? login : throw new KeyNotFoundException("The sign-in request was not found.");
     private void ExpireLogin()

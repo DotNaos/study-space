@@ -9,10 +9,11 @@ public sealed class CodexGeneration(ICodexRpc rpc) : IDisposable
 {
     private readonly SemaphoreSlim active = new(1);
 
-    public async IAsyncEnumerable<CodexDelta> RunAsync(string prompt, JsonElement? schema, [EnumeratorCancellation] CancellationToken ct)
+    public async IAsyncEnumerable<CodexDelta> RunAsync(string prompt, JsonElement? schema, [EnumeratorCancellation] CancellationToken ct, IReadOnlyList<CodexImage>? images = null)
     {
         if (string.IsNullOrWhiteSpace(prompt) || prompt.Length > CodexPolicy.MaximumPromptCharacters ||
             (schema?.GetRawText().Length ?? 0) > 64_000) throw new ArgumentException("The generation request is too large or empty.");
+        var validatedImages = CodexImages.Validate(images);
         if (!await active.WaitAsync(0, ct)) throw new InvalidOperationException("Codex is already generating study material.");
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(ct);
         deadline.CancelAfter(CodexPolicy.GenerationTimeout);
@@ -25,6 +26,8 @@ public sealed class CodexGeneration(ICodexRpc rpc) : IDisposable
         {
             var method = message.GetProperty("method").GetString();
             if (method is not ("study/process-stopped" or "turn/completed" or "item/agentMessage/delta" or "item/started" or "item/completed")) return;
+            if (method is "item/started" or "item/completed" && message.TryGetProperty("params", out var parameters) &&
+                parameters.TryGetProperty("item", out var item) && item.TryGetProperty("type", out var type) && type.GetString() == "userMessage") return;
             if (Interlocked.Add(ref queuedCharacters, message.GetRawText().Length) > CodexPolicy.MaximumLineCharacters || !events.Writer.TryWrite(message))
                 events.Writer.TryComplete(new CodexUnavailableException());
         }
@@ -36,7 +39,7 @@ public sealed class CodexGeneration(ICodexRpc rpc) : IDisposable
                 accountValue.GetProperty("type").GetString() != "chatgpt") throw new CodexUnavailableException();
             var thread = await rpc.CallAsync("thread/start", CodexPolicy.ThreadStart(), deadline.Token);
             threadId = thread.GetProperty("thread").GetProperty("id").GetString() ?? throw new CodexUnavailableException();
-            var turn = await rpc.CallAsync("turn/start", CodexPolicy.TurnStart(threadId, prompt, schema), deadline.Token);
+            var turn = await rpc.CallAsync("turn/start", CodexPolicy.TurnStart(threadId, prompt, schema, validatedImages), deadline.Token);
             turnId = turn.GetProperty("turn").GetProperty("id").GetString() ?? throw new CodexUnavailableException();
             var text = new StringBuilder();
             string? authoritative = null;

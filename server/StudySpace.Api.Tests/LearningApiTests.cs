@@ -76,7 +76,7 @@ public sealed class LearningApiTests : IDisposable
     public void Dispose() { factory.Dispose(); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
     private sealed class Model : ILearningModel
     {
-        public Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct) => throw new NotSupportedException();
+        public Task<string> Generate(string prompt, JsonElement schema, CancellationToken ct, IReadOnlyList<LearningImage>? images = null) => throw new NotSupportedException();
         public async IAsyncEnumerable<LearningModelDelta> Chat(string prompt, [EnumeratorCancellation] CancellationToken ct)
         { await Task.Yield(); ct.ThrowIfCancellationRequested(); yield return new("Draft answer."); yield return new("Correct authoritative answer.", true); }
     }
