@@ -2,6 +2,7 @@ using System.Net;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.StaticFiles;
 using Microsoft.EntityFrameworkCore;
 using StudySpace.Api.Data;
 using StudySpace.Api.Infrastructure;
@@ -17,6 +18,8 @@ builder.Services.AddSingleton<ProjectConfigurationStore>();
 builder.Services.AddSingleton<MoodleService>();
 builder.Services.AddSingleton<MoodleImageService>();
 builder.Services.AddSingleton<IMoodleImageTransport, MoodleImageTransport>();
+builder.Services.AddSingleton<MoodleFileService>();
+builder.Services.AddSingleton<IMoodleFileTransport, MoodleFileTransport>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IMoodleTransport, MoodleTransport>();
 builder.Services.AddHttpClient("moodle", client =>
@@ -32,6 +35,8 @@ builder.Services.AddRateLimiter(options =>
     { PermitLimit = 90, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
     options.AddPolicy("moodle-images", _ => RateLimitPartition.GetFixedWindowLimiter("single-user-images", _ => new FixedWindowRateLimiterOptions
     { PermitLimit = 120, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+    options.AddPolicy("moodle-files", _ => RateLimitPartition.GetFixedWindowLimiter("single-user-files", _ => new FixedWindowRateLimiterOptions
+    { PermitLimit = 30, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -74,7 +79,9 @@ app.Use(async (context, next) =>
 });
 app.UseRateLimiter();
 app.UseDefaultFiles();
-app.UseStaticFiles();
+var staticTypes = new FileExtensionContentTypeProvider();
+staticTypes.Mappings[".bcmap"] = "application/octet-stream";
+app.UseStaticFiles(new StaticFileOptions { ContentTypeProvider = staticTypes });
 app.MapStudyApi();
 app.MapFallback(async context =>
 {

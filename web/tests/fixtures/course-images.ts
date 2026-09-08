@@ -18,9 +18,11 @@ function chunk(type: string, data: Buffer) {
   checksum.writeUInt32BE(crc32(payload));
   return Buffer.concat([length, payload, checksum]);
 }
-export function syntheticCourseImage(id: number): Buffer {
-  const width = 320,
-    height = 192;
+export function syntheticCourseImage(
+  id: number,
+  width = 320,
+  height = 192,
+): Buffer {
   const palette = [
     [217, 204, 170],
     [105, 148, 158],

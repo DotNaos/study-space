@@ -141,12 +141,12 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
     {
         return (await CourseEntries(credential, ct)).Select(entry => entry.Course).ToArray();
     }
-    private async Task<CourseEntry[]> CourseEntries(MoodleCredential credential, CancellationToken ct)
+    private async Task<CourseEntry[]> CourseEntries(MoodleCredential credential, CancellationToken ct, bool fresh = false)
     {
         await courseReads.WaitAsync(ct);
         try
         {
-            if (courseSnapshot is { } cached && cached.ExpiresAt > clock.GetUtcNow() &&
+            if (!fresh && courseSnapshot is { } cached && cached.ExpiresAt > clock.GetUtcNow() &&
                 cached.Credential.SiteUrl == credential.SiteUrl && cached.Credential.UserId == credential.UserId &&
                 cached.Credential.Token == credential.Token && cached.Credential.LastVerifiedAt == credential.LastVerifiedAt)
                 return cached.Entries;
@@ -181,11 +181,15 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
     public async Task<CourseSection[]> Contents(long courseId, CancellationToken ct)
     {
         var credential = await credentials.Read() ?? throw new ApiFailure("moodle_disconnected", "Connect Moodle first.", 409);
-        if (courseId <= 0 || !(await Courses(credential, ct)).Any(course => course.Id == courseId))
+        var result = await AuthorizedContents(credential, courseId, ct);
+        return MoodleCourseContents.Parse(result, MoodleSite.Parse(credential.SiteUrl), courseId);
+    }
+    internal async Task<System.Text.Json.JsonElement> AuthorizedContents(MoodleCredential credential, long courseId, CancellationToken ct, bool freshEnrollment = false)
+    {
+        if (courseId <= 0 || !(await CourseEntries(credential, ct, freshEnrollment)).Any(entry => entry.Course.Id == courseId))
             throw new ApiFailure("course_unavailable", "This course is not available in your Moodle course list.", 404);
         var site = MoodleSite.Parse(credential.SiteUrl);
-        var result = await transport.Authenticated(site, credential.Token, "core_course_get_contents", new() { ["courseid"] = courseId.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
-        return MoodleCourseContents.Parse(result, site);
+        return await transport.Authenticated(site, credential.Token, "core_course_get_contents", new() { ["courseid"] = courseId.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
     }
     private async Task Validate(MoodleCredential credential, CancellationToken ct)
     {

@@ -5,22 +5,23 @@ namespace StudySpace.Api.Providers.Moodle;
 
 public sealed record CourseSection(long Id, string Name, string Summary, CourseModule[] Modules);
 public sealed record CourseModule(long Id, string Name, string Type, string? Url, string Description, CourseResource[] Resources);
-public sealed record CourseResource(string Type, string Name, string? MimeType, long? Size, long? ModifiedAt, string? Url);
+public sealed record CourseResource(string Type, string Name, string? MimeType, long? Size, long? ModifiedAt, string? Url,
+    string? Id = null, string? PreviewUrl = null, string? DownloadUrl = null, string? PreviewKind = null);
 
 public static class MoodleCourseContents
 {
-    public static CourseSection[] Parse(JsonElement result, Uri site)
+    public static CourseSection[] Parse(JsonElement result, Uri site, long courseId = 0)
     {
         if (result.ValueKind != JsonValueKind.Array) throw Unsupported();
         return result.EnumerateArray().Select(section =>
         {
             RequireObject(section);
             return new CourseSection(MoodleJson.Number(section, "id"), MoodleText.Plain(MoodleJson.Text(section, "name") ?? "Section"),
-                MoodleText.Plain(MoodleJson.Text(section, "summary")), Children(section, "modules").Select(module => Module(module, site)).ToArray());
+                MoodleText.Plain(MoodleJson.Text(section, "summary")), Children(section, "modules").Select(module => Module(module, site, courseId)).ToArray());
         }).ToArray();
     }
 
-    private static CourseModule Module(JsonElement module, Uri site)
+    private static CourseModule Module(JsonElement module, Uri site, long courseId)
     {
         RequireObject(module);
         var id = MoodleJson.Number(module, "id");
@@ -31,9 +32,10 @@ public static class MoodleCourseContents
         var resources = Children(module, "contents").Select(content =>
         {
             RequireObject(content);
-            return new CourseResource(MoodleJson.Text(content, "type") ?? "unknown", MoodleText.Plain(MoodleJson.Text(content, "filename") ?? "Resource"),
+            var resource = new CourseResource(MoodleJson.Text(content, "type") ?? "unknown", MoodleText.Plain(MoodleJson.Text(content, "filename") ?? "Resource"),
                 MoodleJson.Text(content, "mimetype"), OptionalNumber(content, "filesize"), OptionalNumber(content, "timemodified"),
                 ResourceUrl(MoodleJson.Text(content, "fileurl"), site));
+            return MoodleCourseFiles.Describe(resource, content, site, courseId, id);
         }).ToArray();
         return new(id, MoodleText.Plain(MoodleJson.Text(module, "name") ?? "Activity"), type, url, MoodleText.Plain(MoodleJson.Text(module, "description")), resources);
     }

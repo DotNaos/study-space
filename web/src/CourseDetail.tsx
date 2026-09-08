@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
 import { ArrowLeft, CalendarDays } from "lucide-react";
 import { api, message, type Course, type CourseSection } from "./api";
@@ -8,6 +8,13 @@ import { courseSemester, courseSubtitle } from "./course-library";
 import { CourseArtwork } from "./CourseArtwork";
 import { CourseActivities } from "./CourseActivities";
 import { Loading, Notice, linkClass } from "./shared";
+import type { ResourcePreview } from "./resource-preview";
+
+const ResourceViewer = lazy(() =>
+  import("./ResourceViewer").then((module) => ({
+    default: module.ResourceViewer,
+  })),
+);
 
 export function CourseDetail({
   course,
@@ -18,6 +25,7 @@ export function CourseDetail({
 }) {
   const [sections, setSections] = useState<CourseSection[]>();
   const [error, setError] = useState("");
+  const [preview, setPreview] = useState<ResourcePreview>();
   const semester = courseSemester(course);
   const subtitle = courseSubtitle(course);
   const load = useCallback(async () => {
@@ -43,23 +51,23 @@ export function CourseDetail({
       <AppLink
         navigate={navigate}
         href="/courses"
-        className={`${linkClass} mb-7`}
+        className={`${linkClass} mb-4`}
       >
         <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
       </AppLink>
-      <header className="flex flex-col-reverse gap-4 border-b border-border pb-8 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
+      <header className="flex items-start justify-between gap-4 border-b border-border pb-5 sm:items-center sm:gap-6">
         <div className="min-w-0 flex-1">
           {semester && (
-            <p className="mb-3 flex items-center gap-2 text-xs font-medium text-text-muted">
+            <p className="mb-1.5 flex items-center gap-2 text-xs font-medium text-text-muted">
               <CalendarDays size={14} aria-hidden="true" />
               {semester.label}
             </p>
           )}
-          <h1 className="break-words text-2xl font-medium leading-tight tracking-tight sm:text-4xl">
+          <h1 className="break-words text-xl font-medium leading-snug tracking-tight sm:text-2xl">
             {course.name}
           </h1>
           {subtitle && (
-            <p className="mt-3 break-words text-sm leading-6 text-text-muted">
+            <p className="mt-1 break-words text-xs leading-5 text-text-muted">
               {subtitle}
             </p>
           )}
@@ -67,10 +75,10 @@ export function CourseDetail({
         <CourseArtwork
           course={course}
           eager
-          className="h-20 w-28 sm:h-36 sm:w-48"
+          className="mt-1 h-12 w-16 sm:mt-0 sm:h-20 sm:w-28"
         />
       </header>
-      <div className="mt-7">
+      <div className="mt-5">
         {error ? (
           <div className="space-y-4">
             <Notice>{error}</Notice>
@@ -83,7 +91,7 @@ export function CourseDetail({
             In diesem Kurs sind noch keine Inhalte verfügbar.
           </p>
         ) : (
-          <div className="flex flex-col gap-8 xl:flex-row xl:gap-10">
+          <div className="flex flex-col gap-5 xl:flex-row xl:gap-8">
             {sections.length > 1 && (
               <nav
                 aria-label="Kursabschnitte"
@@ -102,7 +110,10 @@ export function CourseDetail({
                         <span className="shrink-0 tabular-nums text-text-muted/60">
                           {String(index + 1).padStart(2, "0")}
                         </span>
-                        <span className="xl:break-words">
+                        <span
+                          title={sectionName(section, index)}
+                          className="max-w-52 truncate xl:line-clamp-2 xl:max-w-none xl:whitespace-normal xl:break-words"
+                        >
                           {sectionName(section, index)}
                         </span>
                       </a>
@@ -111,7 +122,7 @@ export function CourseDetail({
                 </ol>
               </nav>
             )}
-            <div className="min-w-0 flex-1 space-y-9">
+            <div className="min-w-0 flex-1 space-y-6">
               {sections.map((section, index) => {
                 const summary = cleanCourseText(section.summary);
                 return (
@@ -119,7 +130,7 @@ export function CourseDetail({
                     key={section.id}
                     aria-labelledby={`section-${section.id}`}
                   >
-                    <div className="mb-2 flex items-baseline gap-3 border-b border-border pb-3">
+                    <div className="mb-1 flex items-baseline gap-2 border-b border-border pb-2">
                       <span
                         className="text-xs tabular-nums text-text-muted/60"
                         aria-hidden="true"
@@ -128,17 +139,21 @@ export function CourseDetail({
                       </span>
                       <h2
                         id={`section-${section.id}`}
-                        className="scroll-mt-8 break-words text-xl font-medium tracking-tight"
+                        className="scroll-mt-8 break-words text-base font-medium tracking-tight sm:text-lg"
                       >
                         {sectionName(section, index)}
                       </h2>
                     </div>
                     {summary && (
-                      <p className="my-4 whitespace-pre-line break-words text-sm leading-6 text-text-muted">
+                      <p className="my-2 whitespace-pre-line break-words text-sm leading-5 text-text-muted">
                         {summary}
                       </p>
                     )}
-                    <CourseActivities modules={section.modules} />
+                    <CourseActivities
+                      courseId={course.id}
+                      modules={section.modules}
+                      onPreview={setPreview}
+                    />
                   </section>
                 );
               })}
@@ -146,6 +161,15 @@ export function CourseDetail({
           </div>
         )}
       </div>
+      {preview && (
+        <Suspense fallback={<Loading label="Vorschau wird geöffnet …" />}>
+          <ResourceViewer
+            key={preview.path}
+            preview={preview}
+            onClose={() => setPreview(undefined)}
+          />
+        </Suspense>
+      )}
     </div>
   );
 }

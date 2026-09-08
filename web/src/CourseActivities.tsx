@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import {
   ArrowUpRight,
   FileText,
@@ -8,8 +9,11 @@ import {
   BookOpen,
   Video,
   ClipboardList,
+  Download,
+  Expand,
+  Image,
 } from "lucide-react";
-import { safeWebUrl, type CourseModule } from "./api";
+import { safeWebUrl, type CourseModule, type CourseResource } from "./api";
 import {
   cleanCourseText,
   duplicateResourceName,
@@ -17,6 +21,12 @@ import {
   visibleModule,
   visibleResources,
 } from "./course-content";
+import {
+  maxPreviewBytes,
+  resourceAction,
+  type ResourceAction,
+  type ResourcePreview,
+} from "./resource-preview";
 
 function activityIcon(type: string) {
   switch (type) {
@@ -39,15 +49,126 @@ function activityIcon(type: string) {
       return BookOpen;
   }
 }
+const rowClass =
+  "group flex min-h-11 w-full cursor-pointer items-start gap-3 rounded-md px-2 py-2.5 text-left transition-colors hover:bg-bg-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring";
+function RowAction({
+  action,
+  label,
+  children,
+  onPreview,
+}: {
+  action: ResourceAction;
+  label: string;
+  children: ReactNode;
+  onPreview: (preview: ResourcePreview) => void;
+}) {
+  if (action.kind === "preview")
+    return (
+      <button
+        type="button"
+        className={rowClass}
+        aria-label={`${label} – Vorschau öffnen`}
+        onClick={(event) => {
+          event.currentTarget.focus({ preventScroll: true });
+          onPreview(action.preview);
+        }}
+      >
+        {children}
+      </button>
+    );
+  if (action.kind === "download")
+    return (
+      <a
+        href={action.href}
+        download
+        className={rowClass}
+        aria-label={`${label} – herunterladen`}
+      >
+        {children}
+      </a>
+    );
+  if (action.kind === "moodle")
+    return (
+      <a
+        href={action.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className={rowClass}
+        aria-label={`${label} – in Moodle öffnen`}
+      >
+        {children}
+      </a>
+    );
+  return (
+    <div
+      className={rowClass
+        .replace("cursor-pointer", "")
+        .replace("hover:bg-bg-1", "")}
+    >
+      {children}
+    </div>
+  );
+}
+function ActionIcon({ action }: { action: ResourceAction }) {
+  const Icon =
+    action.kind === "preview"
+      ? Expand
+      : action.kind === "download"
+        ? Download
+        : action.kind === "moodle"
+          ? ArrowUpRight
+          : undefined;
+  return Icon ? (
+    <Icon
+      size={15}
+      className="mt-0.5 ml-auto shrink-0 text-text-muted"
+      aria-hidden="true"
+    />
+  ) : null;
+}
+function ResourceMeta({
+  resource,
+  showName,
+  action,
+}: {
+  resource: CourseResource;
+  showName: boolean;
+  action: ResourceAction;
+}) {
+  const extension =
+    resource.name.match(/\.([a-z0-9]{1,6})$/i)?.[1].toUpperCase() || "Datei";
+  const size =
+    resource.size !== null && resource.size > 0
+      ? formatFileSize(resource.size)
+      : undefined;
+  return (
+    <span className="mt-0.5 block break-words text-xs leading-5 text-text-muted">
+      {showName ? cleanCourseText(resource.name) : extension}
+      {size && ` · ${size}`}
+      {action.kind === "download" && " · Download"}
+      {resource.size !== null &&
+        resource.size > maxPreviewBytes &&
+        " · über 32 MB, in Moodle öffnen"}
+    </span>
+  );
+}
 
-export function CourseActivities({ modules }: { modules: CourseModule[] }) {
+export function CourseActivities({
+  courseId,
+  modules,
+  onPreview,
+}: {
+  courseId: number;
+  modules: CourseModule[];
+  onPreview: (preview: ResourcePreview) => void;
+}) {
   const visible = modules.filter(visibleModule);
   if (!visible.length)
     return (
-      <p className="py-3 text-sm text-text-muted">Noch keine Materialien.</p>
+      <p className="py-2 text-sm text-text-muted">Noch keine Materialien.</p>
     );
   return (
-    <ul className="divide-y divide-border/60">
+    <ul className="-mx-2 divide-y divide-border/60">
       {visible.map((module) => {
         const url = safeWebUrl(module.url);
         const name = cleanCourseText(module.name);
@@ -56,93 +177,87 @@ export function CourseActivities({ modules }: { modules: CourseModule[] }) {
         const Icon = activityIcon(module.type);
         if (module.type === "label" && resources.length === 0)
           return (
-            <li key={module.id} className="py-4">
+            <li key={module.id} className="px-2 py-2.5">
               {name && (
                 <p className="break-words text-sm font-medium">{name}</p>
               )}
-              {description && (
-                <p className="mt-1 whitespace-pre-line break-words text-sm leading-6 text-text-muted">
+              {description && description !== name && (
+                <p className="mt-0.5 whitespace-pre-line break-words text-sm leading-5 text-text-muted">
                   {description}
                 </p>
               )}
             </li>
           );
+        const single =
+          module.type === "resource" && resources.length === 1
+            ? resources[0]
+            : undefined;
+        const action: ResourceAction = single
+          ? resourceAction(courseId, module, single)
+          : url
+            ? { kind: "moodle", href: url }
+            : { kind: "none" };
+        const label = name || single?.name || "Aktivität";
         return (
-          <li key={module.id} className="flex gap-3 py-4 sm:gap-4">
-            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-1 text-text-muted">
-              <Icon size={17} strokeWidth={1.7} aria-hidden="true" />
-            </span>
-            <div className="min-w-0 flex-1">
-              {url ? (
-                <a
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="group inline-flex max-w-full items-start gap-2 rounded-sm text-sm font-medium leading-6 underline-offset-4 hover:text-accent hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-                >
-                  <span className="min-w-0 break-words">
-                    {name || "Aktivität öffnen"}
+          <li key={module.id}>
+            <RowAction action={action} label={label} onPreview={onPreview}>
+              <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center text-text-muted">
+                <Icon size={17} strokeWidth={1.7} aria-hidden="true" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block break-words text-sm font-medium leading-5 group-hover:text-accent">
+                  {label}
+                </span>
+                {description && description !== name && (
+                  <span className="mt-0.5 block whitespace-pre-line break-words text-sm leading-5 text-text-muted">
+                    {description}
                   </span>
-                  <ArrowUpRight
-                    size={15}
-                    className="mt-1 shrink-0 text-text-muted"
-                    aria-hidden="true"
+                )}
+                {single && (
+                  <ResourceMeta
+                    resource={single}
+                    showName={!duplicateResourceName(label, single.name)}
+                    action={action}
                   />
-                  <span className="sr-only"> – in Moodle öffnen</span>
-                </a>
-              ) : (
-                <p className="break-words text-sm font-medium leading-6">
-                  {name || "Aktivität"}
-                </p>
-              )}
-              {description && description !== name && (
-                <p className="mt-1 whitespace-pre-line break-words text-sm leading-6 text-text-muted">
-                  {description}
-                </p>
-              )}
-              {resources.length > 0 && (
-                <ul className="mt-2 space-y-1.5">
-                  {resources.map((resource, index) => {
-                    const name = cleanCourseText(resource.name);
-                    const size =
-                      resource.size !== null && resource.size > 0
-                        ? formatFileSize(resource.size)
-                        : undefined;
-                    const duplicate =
-                      resources.length === 1 &&
-                      duplicateResourceName(module.name, name);
-                    const extension = name
-                      .match(/\.([a-z0-9]{1,6})$/i)?.[1]
-                      .toUpperCase();
-                    return (
-                      <li
-                        key={`${resource.name}-${index}`}
-                        className="flex items-start gap-2 text-xs leading-5 text-text-muted"
+                )}
+              </span>
+              <ActionIcon action={action} />
+            </RowAction>
+            {!single && resources.length > 0 && (
+              <ul className="mb-1 ml-8">
+                {resources.map((resource, index) => {
+                  const fileAction = resourceAction(courseId, module, resource);
+                  const FileIcon =
+                    resource.previewKind === "image" ? Image : FileText;
+                  return (
+                    <li key={resource.id || `${resource.name}-${index}`}>
+                      <RowAction
+                        action={fileAction}
+                        label={resource.name}
+                        onPreview={onPreview}
                       >
-                        {!duplicate && (
-                          <FileText
-                            size={13}
-                            className="mt-1 shrink-0"
-                            aria-hidden="true"
-                          />
-                        )}
-                        <span className="min-w-0 break-words">
-                          {duplicate ? extension || "Datei" : name}
-                        </span>
-                        {size && (
-                          <span
-                            className={`${duplicate ? "" : "ml-auto"} shrink-0 tabular-nums`}
-                          >
-                            {duplicate && "· "}
-                            {size}
+                        <FileIcon
+                          size={15}
+                          className="mt-1 shrink-0 text-text-muted"
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1">
+                          <span className="block break-words text-sm leading-5 group-hover:text-accent">
+                            {cleanCourseText(resource.name)}
                           </span>
-                        )}
-                      </li>
-                    );
-                  })}
-                </ul>
-              )}
-            </div>
+                          <ResourceMeta
+                            resource={resource}
+                            showName={false}
+                            action={fileAction}
+                          />
+                        </span>
+                        <ActionIcon action={fileAction} />
+                      </RowAction>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </li>
         );
       })}
