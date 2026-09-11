@@ -50,11 +50,16 @@ pub fn install(
         Some(config) => config.port,
         None => free_port(requested_port)?,
     };
+    let mcp_port = match prior.as_ref().and_then(|config| config.mcp_port) {
+        Some(port) => port,
+        None => free_port_excluding(port.saturating_add(1).max(1024), port)?,
+    };
     let config = Config {
         version: version.to_string(),
         commit: Some(release_metadata.commit),
         public_url,
         port,
+        mcp_port: Some(mcp_port),
         schema_version,
         release_base: std::env::var("STUDY_RELEASE_BASE").unwrap_or_else(|_| {
             "https://github.com/DotNaos/study-space/releases/latest/download".into()
@@ -178,9 +183,10 @@ fn env_content(config: &Config, data: &Path, secrets: &Path) -> Result<String> {
         );
     }
     Ok(format!(
-        "STUDY_PUBLIC_URL='{}'\nSTUDY_HOST_PORT={}\nSTUDY_DATA_DIR='{}'\nSTUDY_SECRETS_DIR='{}'\nSTUDY_HOSTNAME='{}'\n",
+        "STUDY_PUBLIC_URL='{}'\nSTUDY_HOST_PORT={}\nSTUDY_MCP_HOST_PORT={}\nSTUDY_DATA_DIR='{}'\nSTUDY_SECRETS_DIR='{}'\nSTUDY_HOSTNAME='{}'\n",
         config.public_url,
         config.port,
+        config.mcp_port.context("Study MCP port is missing")?,
         data.display(),
         secrets.display(),
         config
@@ -213,6 +219,21 @@ fn free_port(preferred: u16) -> Result<u16> {
     let listener = TcpListener::bind(("127.0.0.1", preferred))
         .or_else(|_| TcpListener::bind(("127.0.0.1", 0)))?;
     Ok(listener.local_addr()?.port())
+}
+
+fn free_port_excluding(preferred: u16, excluded: u16) -> Result<u16> {
+    if preferred != excluded {
+        if let Ok(listener) = TcpListener::bind(("127.0.0.1", preferred)) {
+            return Ok(listener.local_addr()?.port());
+        }
+    }
+    loop {
+        let listener = TcpListener::bind(("127.0.0.1", 0))?;
+        let port = listener.local_addr()?.port();
+        if port != excluded {
+            return Ok(port);
+        }
+    }
 }
 
 fn valid_version(version: &str) -> bool {

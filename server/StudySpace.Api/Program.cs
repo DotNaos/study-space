@@ -10,6 +10,7 @@ using StudySpace.Api.Providers.Moodle;
 using StudySpace.Api.Codex;
 using StudySpace.Api.Learning;
 using StudySpace.Api.Materials;
+using StudySpace.Api.Mcp;
 
 if (args.Contains("--codex-health", StringComparer.Ordinal))
 {
@@ -19,6 +20,11 @@ if (args.Contains("--codex-health", StringComparer.Ordinal))
 if (Environment.GetEnvironmentVariable("STUDY_ROLE") == "codex")
 {
     await CodexBridge.RunAsync(args);
+    return;
+}
+if (Environment.GetEnvironmentVariable("STUDY_ROLE") == "mcp")
+{
+    await StudyMcpBridge.RunAsync(args);
     return;
 }
 

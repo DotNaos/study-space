@@ -15,6 +15,8 @@ pub struct Config {
     pub schema_version: u32,
     pub public_url: String,
     pub port: u16,
+    #[serde(default)]
+    pub mcp_port: Option<u16>,
     pub release_base: String,
 }
 
@@ -82,6 +84,7 @@ impl Installation {
             "STUDY_SCHEMA_VERSION",
             "STUDY_PUBLIC_URL",
             "STUDY_HOST_PORT",
+            "STUDY_MCP_HOST_PORT",
             "STUDY_DATA_DIR",
             "STUDY_SECRETS_DIR",
             "STUDY_HOSTNAME",
@@ -170,9 +173,30 @@ impl Installation {
                 "health/version verification failed for {base}; run study doctor. Installation data is preserved"
             );
         }
+        if let Some(mcp_port) = config.mcp_port {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+            let mut verified = false;
+            while std::time::Instant::now() < deadline {
+                if let Ok(response) = fetch_mcp_initialize(mcp_port) {
+                    verified = response["result"]["serverInfo"]["name"] == "study-space";
+                    if verified {
+                        break;
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_secs(2));
+            }
+            ensure!(
+                verified,
+                "Study MCP verification failed on loopback port {mcp_port}; run study doctor. Installation data is preserved"
+            );
+        }
         println!(
-            "Study Space is ready.\n\nWeb UI: {}\nCLI:    study --help",
-            config.public_url
+            "Study Space is ready.\n\nWeb UI: {}\nStudy MCP: {}\nCLI:    study --help",
+            config.public_url,
+            config
+                .mcp_port
+                .map(|port| format!("http://127.0.0.1:{port}/mcp"))
+                .unwrap_or_else(|| "not included in this release".into())
         );
         Ok(())
     }
@@ -188,10 +212,14 @@ impl Installation {
         println!("Systems machine proxy: running on this machine’s Tailnet address");
         let config = self.config()?;
         println!(
-            "Installation: {}\nVersion: {}\nWeb UI: {}",
+            "Installation: {}\nVersion: {}\nWeb UI: {}\nStudy MCP: {}",
             self.home.display(),
             config.version,
-            config.public_url
+            config.public_url,
+            config
+                .mcp_port
+                .map(|port| format!("http://127.0.0.1:{port}/mcp"))
+                .unwrap_or_else(|| "not included in this release".into())
         );
         self.verify_public()
     }
@@ -333,6 +361,28 @@ fn owns_compose_files(home: &std::path::Path, files: &str) -> bool {
         })
 }
 
+fn fetch_mcp_initialize(port: u16) -> Result<serde_json::Value> {
+    let body = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}"#;
+    let output = Command::new("curl")
+        .args([
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--connect-timeout",
+            "3",
+            "--max-time",
+            "5",
+            "--header",
+            "Content-Type: application/json",
+            "--data",
+            body,
+            &format!("http://127.0.0.1:{port}/mcp"),
+        ])
+        .output()?;
+    ensure!(output.status.success(), "Study MCP unavailable");
+    serde_json::from_slice(&output.stdout).context("Study MCP returned invalid JSON")
+}
+
 fn fetch_json(url: &str) -> Result<serde_json::Value> {
     let output = Command::new("curl")
         .args([
@@ -395,6 +445,7 @@ mod tests {
             schema_version: 1,
             public_url: "https://study.os-pc.vpn.os-home.net".into(),
             port: 18081,
+            mcp_port: Some(18082),
             release_base: "https://example.test".into(),
         };
         let good = serde_json::json!({"app":"study-space","version":"v0.1.0","database":"ready","publicUrl":config.public_url});
