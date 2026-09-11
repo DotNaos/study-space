@@ -240,6 +240,9 @@ public sealed class StudyMcpTools(HttpClient client)
             throw new StudyMcpException("Tool name is required.");
         var name = nameValue.GetString()!;
         var arguments = parameters.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.Object ? args.Clone() : EmptyObject();
+        if (name == "study_source" && arguments.TryGetProperty("block_id", out var blockId) && blockId.ValueKind == JsonValueKind.String &&
+            string.Equals(blockId.GetString(), "original", StringComparison.Ordinal))
+            return await File(arguments, ct);
         if (name == "study_file") return await File(arguments, ct);
         object value = name switch
         {

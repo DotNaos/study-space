@@ -81,6 +81,12 @@ public sealed class StudyMcpTests
         Assert.Equal("study://materials/material-1/revisions/revision-1/original", resource.GetProperty("uri").GetString());
         Assert.Equal("JVBERg==", resource.GetProperty("blob").GetString());
         Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+
+        var compatibility = JsonSerializer.SerializeToElement(await Tools(handler).Call(
+            Parameters("study_source", new { material_id = "material-1", revision = "revision-1", block_id = "original" }), default), Options);
+        var compatibilityResource = compatibility.GetProperty("content").EnumerateArray().Single(item => item.GetProperty("type").GetString() == "resource")
+            .GetProperty("resource");
+        Assert.Equal("JVBERg==", compatibilityResource.GetProperty("blob").GetString());
     }
 
     [Fact]
