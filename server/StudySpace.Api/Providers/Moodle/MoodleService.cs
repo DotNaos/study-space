@@ -254,13 +254,13 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
             return new(tasks, true, warnings.Distinct().Take(32).ToArray());
         }
 
-        var statusesSupported = true;
+        var statusFailures = 0;
         var tasksWithStatus = new List<MoodleTask>();
         foreach (var assignment in assignments.OrderBy(assignment => assignment.DueAt ?? long.MaxValue).ThenBy(assignment => assignment.Title, StringComparer.OrdinalIgnoreCase))
         {
             MoodleSubmissionState? submission = null;
             var taskWarnings = new List<string>();
-            if (!assignment.NoSubmissions && statusesSupported)
+            if (!assignment.NoSubmissions)
             {
                 try
                 {
@@ -273,8 +273,8 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
                 }
                 catch (ApiFailure error) when (error.Code is "moodle_rejected" or "moodle_response")
                 {
-                    statusesSupported = false;
-                    warnings.Add("Moodle submission status is unavailable; task open/due state is still shown from assignment deadlines.");
+                    statusFailures++;
+                    taskWarnings.Add("Submission status is unavailable for this assignment; open/due state is derived from the deadline.");
                 }
             }
 
@@ -307,7 +307,8 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
                 attachments,
                 taskWarnings.Distinct().Take(16).ToArray()));
         }
-        return new(tasksWithStatus.ToArray(), !statusesSupported || warnings.Count > 0, warnings.Distinct().Take(32).ToArray());
+        if (statusFailures > 0) warnings.Add($"Submission status could not be read for {statusFailures} assignment(s); other assignments were still checked.");
+        return new(tasksWithStatus.ToArray(), statusFailures > 0 || warnings.Count > 0, warnings.Distinct().Take(32).ToArray());
     }
     private string TaskStatus(MoodleAssignment assignment, MoodleSubmissionState? submission, long? dueAt)
     {

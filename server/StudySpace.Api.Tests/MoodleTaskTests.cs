@@ -85,6 +85,26 @@ public sealed class MoodleTaskTests : IDisposable
     }
 
     [Fact]
+    public async Task OneSubmissionFailureDoesNotStopFollowingAssignments()
+    {
+        await Connect();
+        transport.IncludeSecondAssignment = true;
+        transport.FailStatusFor = 501;
+
+        var result = await service.Tasks(7, default);
+
+        Assert.True(result.Partial);
+        Assert.Equal(2, result.Tasks.Length);
+        var first = result.Tasks.Single(task => task.AssignmentId == 501);
+        var second = result.Tasks.Single(task => task.AssignmentId == 502);
+        Assert.Null(first.SubmissionStatus);
+        Assert.Contains(first.Warnings, warning => warning.Contains("Submission status is unavailable", StringComparison.OrdinalIgnoreCase));
+        Assert.Equal("draft", second.SubmissionStatus);
+        Assert.Equal(2, transport.Calls.Count(call => call == "mod_assign_get_submission_status"));
+        Assert.Contains(result.Warnings, warning => warning.Contains("1 assignment", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task OtherCourseIsRejectedBeforeAssignmentCalls()
     {
         await Connect();
@@ -110,6 +130,8 @@ public sealed class MoodleTaskTests : IDisposable
         public const string Token = "syntheticMoodleToken00000000000001";
         public List<string> Calls { get; } = [];
         public bool RejectAssignments { get; set; }
+        public bool IncludeSecondAssignment { get; set; }
+        public long? FailStatusFor { get; set; }
         public string SubmissionStatus { get; set; } = "draft";
         public long? ExtensionDueAt { get; set; }
 
@@ -142,30 +164,36 @@ public sealed class MoodleTaskTests : IDisposable
                     new
                     {
                         id = 7,
-                        assignments = new[]
+                        assignments = (IncludeSecondAssignment ? new[]
                         {
-                            new
-                            {
-                                id = 501,
-                                cmid = 99,
-                                name = "Problem set 1",
-                                intro = "<p>Analyse the sequences.</p>",
-                                allowsubmissionsfromdate = 1789034400,
-                                duedate = 1789214400,
-                                cutoffdate = 1789387200,
-                                nosubmissions = 0,
-                                introfiles = new[]
-                                {
-                                    new { filename = "instructions.pdf", mimetype = "application/pdf", filesize = 1234, timemodified = 1789000000, fileurl = Site + "/webservice/pluginfile.php/1/instructions.pdf?token=syntheticSecret" }
-                                },
-                                activityattachments = Array.Empty<object>(),
-                            }
-                        }
+                            Assignment(501, 99, "Problem set 1", 1789214400),
+                            Assignment(502, 100, "Problem set 2", 1789300800),
+                        } : new[]
+                        {
+                            Assignment(501, 99, "Problem set 1", 1789214400),
+                        })
                     }
                 },
                 warnings = Array.Empty<object>(),
             });
         }
+
+        private static object Assignment(long id, long cmid, string name, long due) => new
+        {
+            id,
+            cmid,
+            name,
+            intro = "<p>Analyse the sequences.</p>",
+            allowsubmissionsfromdate = 1789034400,
+            duedate = due,
+            cutoffdate = due + 172800,
+            nosubmissions = 0,
+            introfiles = new[]
+            {
+                new { filename = "instructions.pdf", mimetype = "application/pdf", filesize = 1234, timemodified = 1789000000, fileurl = Site + "/webservice/pluginfile.php/1/instructions.pdf?token=syntheticSecret" }
+            },
+            activityattachments = Array.Empty<object>(),
+        };
 
         private static Task<JsonElement> Contents(Dictionary<string, string>? args)
         {
@@ -198,7 +226,9 @@ public sealed class MoodleTaskTests : IDisposable
 
         private Task<JsonElement> Submission(Dictionary<string, string>? args)
         {
-            Assert.Equal("501", args!["assignid"]);
+            var assignmentId = long.Parse(args!["assignid"], System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Contains(assignmentId, new long[] { 501, 502 });
+            if (FailStatusFor == assignmentId) throw new ApiFailure("moodle_rejected", "No access rights in module context", 422);
             var lastattempt = new Dictionary<string, object?>
             {
                 ["submission"] = new { id = 700, userid = 42, status = SubmissionStatus, timemodified = 1789120800 },
