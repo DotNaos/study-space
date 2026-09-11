@@ -15,7 +15,7 @@ public sealed class StudyMcpTests
     {
         var tools = JsonSerializer.SerializeToElement(StudyMcpTools.ToolDefinitions, Options);
         Assert.Equal(
-            ["study_status", "study_courses", "study_course", "study_learning", "study_materials", "study_source", "study_search"],
+            ["study_status", "study_courses", "study_course", "study_learning", "study_materials", "study_source", "study_file", "study_search"],
             tools.EnumerateArray().Select(tool => tool.GetProperty("name").GetString() ?? "").ToArray());
         foreach (var tool in tools.EnumerateArray())
         {
@@ -65,6 +65,25 @@ public sealed class StudyMcpTests
     }
 
     [Fact]
+    public async Task FileReturnsPdfAsEmbeddedResource()
+    {
+        var handler = new FixtureHandler();
+        var result = JsonSerializer.SerializeToElement(await Tools(handler).Call(
+            Parameters("study_file", new { material_id = "material-1", revision = "revision-1" }), default), Options);
+
+        Assert.False(result.TryGetProperty("structuredContent", out _));
+        var content = result.GetProperty("content").EnumerateArray().ToArray();
+        Assert.Equal(2, content.Length);
+        Assert.Equal("text", content[0].GetProperty("type").GetString());
+        Assert.Equal("resource", content[1].GetProperty("type").GetString());
+        var resource = content[1].GetProperty("resource");
+        Assert.Equal("application/pdf", resource.GetProperty("mimeType").GetString());
+        Assert.Equal("study://materials/material-1/revisions/revision-1/original", resource.GetProperty("uri").GetString());
+        Assert.Equal("JVBERg==", resource.GetProperty("blob").GetString());
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
     public async Task EveryToolUsesOnlyReadRequestsAgainstStudySpace()
     {
         var handler = new FixtureHandler();
@@ -77,6 +96,7 @@ public sealed class StudyMcpTests
             Parameters("study_learning", new { course_id = 7 }),
             Parameters("study_materials", new { course_id = 7 }),
             Parameters("study_source", new { material_id = "material-1", revision = "revision-1", block_id = "block-1" }),
+            Parameters("study_file", new { material_id = "material-1", revision = "revision-1" }),
             Parameters("study_search", new { course_id = 7, query = "matrix" }),
         };
 
@@ -107,6 +127,12 @@ public sealed class StudyMcpTests
             Methods.Add(request.Method);
             if (request.Method != HttpMethod.Get) throw new InvalidOperationException("MCP must not mutate Study Space.");
             var path = request.RequestUri!.AbsolutePath;
+            if (path == "/api/materials/material-1/revisions/revision-1/assets/original")
+            {
+                var content = new ByteArrayContent([0x25, 0x50, 0x44, 0x46]);
+                content.Headers.TryAddWithoutValidation("Content-Type", "application/pdf");
+                return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = content });
+            }
             object body = path switch
             {
                 "/health/ready" => new { status = "ready" },
@@ -141,7 +167,8 @@ public sealed class StudyMcpTests
             null, DateTimeOffset.UnixEpoch);
 
         private static MaterialDocument Document() => new("material-1", "revision-1", "Sheet.pdf", "application/pdf",
-            [new("block-1", "text", "Matrix multiplication and row operations.", 0, 1, null, null)], [],
+            [new("block-1", "text", "Matrix multiplication and row operations.", 0, 1, null, null)],
+            [new("original", "original", "application/pdf", "Sheet.pdf", "/api/materials/material-1/revisions/revision-1/assets/original", "hash", 4)],
             [new("pdftotext", "fixture", 1, "hash")], [], true);
     }
 }
