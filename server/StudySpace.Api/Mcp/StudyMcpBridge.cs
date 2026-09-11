@@ -61,7 +61,7 @@ public static class StudyMcpBridge
                 case "initialize":
                     result = new
                     {
-                        protocolVersion = "2026-07-28",
+                        protocolVersion = ProtocolVersion(root),
                         capabilities = new { tools = new { listChanged = false } },
                         serverInfo = new { name = "study-space", version = Environment.GetEnvironmentVariable("STUDY_VERSION") ?? "development" },
                     };
@@ -100,6 +100,13 @@ public static class StudyMcpBridge
 
     private static IResult RpcError(JsonElement? id, int code, string message) =>
         Results.Json(new { jsonrpc = "2.0", id, error = new { code, message } }, JsonOptions);
+
+    private static string ProtocolVersion(JsonElement root) =>
+        root.TryGetProperty("params", out var parameters) && parameters.ValueKind == JsonValueKind.Object &&
+        parameters.TryGetProperty("protocolVersion", out var version) && version.ValueKind == JsonValueKind.String &&
+        !string.IsNullOrWhiteSpace(version.GetString())
+            ? version.GetString()!
+            : "2025-06-18";
 
     private static object ToolError(string message) => new
     {
