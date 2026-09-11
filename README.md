@@ -48,6 +48,12 @@ Material originals and extracted results live below `data/app/materials`; versio
 
 The first processing profile limits individual files to 32 MiB, generated source images to 128 MiB per document, and generation to 128 bounded source chunks. Each model request includes at most eight source images and 8 MiB of decoded image data; larger inputs are split without omitting pages, or rejected with a clear error. Processing errors preserve previously usable results. Larger or unsupported input remains explicitly incomplete; do not assume the first learning version covers unprocessed material.
 
+## Use Study Space from an assistant
+
+Each installed release includes a dedicated **read-only Study MCP** so an assistant can use the canonical Study Space data without consuming the in-app Codex runtime. `study doctor` prints its loopback-only endpoint. The MCP exposes courses, course structure, prepared-material coverage, extracted source blocks, saved script/exercises, and bounded search. Solutions and saved answer drafts require an explicit tool argument.
+
+The MCP container receives no Moodle/Codex credentials, database credentials, Study Space volumes, Docker socket, or host filesystem access; it can only issue `GET` requests to the app over the private Compose network. Connect the loopback MCP through an authenticated connector such as OpenAI Secure MCP Tunnel rather than publishing it directly. See [Study MCP](docs/study-mcp.md) for the tool and security contract.
+
 ## Manage the installation
 
 ```sh

@@ -47,6 +47,33 @@ services:
     logging:
       driver: json-file
       options: {max-size: 10m, max-file: "3"}
+  mcp:
+    image: ${STUDY_IMAGE:?release.env must select a local application image}
+    pull_policy: never
+    restart: unless-stopped
+    user: "1654:1654"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    tmpfs: [/tmp]
+    ports:
+      - "127.0.0.1:${STUDY_MCP_HOST_PORT:?Study MCP host port is required}:8080"
+    environment:
+      STUDY_ROLE: mcp
+      STUDY_MCP_UPSTREAM_URL: http://app:8080
+    networks: [default]
+    depends_on:
+      app:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, curl, --fail, --silent, --max-time, "5", http://127.0.0.1:8080/health]
+      interval: 10s
+      timeout: 6s
+      retries: 12
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: {max-size: 10m, max-file: "3"}
   codex:
     image: ${STUDY_IMAGE:?release.env must select a local application image}
     pull_policy: never
