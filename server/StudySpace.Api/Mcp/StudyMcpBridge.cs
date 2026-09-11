@@ -134,6 +134,7 @@ public sealed class StudyMcpTools(HttpClient client)
     private const int MaxItems = 50;
     private const int DefaultChars = 12_000;
     private const int MaxChars = 30_000;
+    private const int MaxPdfBytes = 1024 * 1024;
 
     public static readonly object[] ToolDefinitions =
     [
@@ -203,6 +204,16 @@ public sealed class StudyMcpTools(HttpClient client)
             },
             required = new[] { "material_id", "revision" }
         }),
+        Tool("study_file", "Return one preserved original PDF as a bounded MCP embedded resource so ChatGPT can consume the actual document instead of only extracted text. This compatibility probe is PDF-only and limited to 1 MiB.", new
+        {
+            type = "object", additionalProperties = false,
+            properties = new
+            {
+                material_id = String(1, 512),
+                revision = String(1, 256),
+            },
+            required = new[] { "material_id", "revision" }
+        }),
         Tool("study_search", "Search the active saved script, exercises and prepared source text for a course. Use this first for broad study questions, then open exact learning/source items returned by the search.", new
         {
             type = "object", additionalProperties = false,
@@ -229,6 +240,7 @@ public sealed class StudyMcpTools(HttpClient client)
             throw new StudyMcpException("Tool name is required.");
         var name = nameValue.GetString()!;
         var arguments = parameters.TryGetProperty("arguments", out var args) && args.ValueKind == JsonValueKind.Object ? args.Clone() : EmptyObject();
+        if (name == "study_file") return await File(arguments, ct);
         object value = name switch
         {
             "study_status" => await Status(ct),
@@ -450,6 +462,61 @@ public sealed class StudyMcpTools(HttpClient client)
             offset,
             blocks = output,
             truncated = selected.Any(block => block.Text.Length > 6_000) || selected.Sum(block => block.Text.Length) > maxChars,
+        };
+    }
+
+    private async Task<object> File(JsonElement args, CancellationToken ct)
+    {
+        var materialId = RequiredString(args, "material_id", 512);
+        var revision = RequiredString(args, "revision", 256);
+        var materialPath = $"/api/materials/{Uri.EscapeDataString(materialId)}/revisions/{Uri.EscapeDataString(revision)}";
+        var document = await Get<MaterialDocument>(materialPath, ct);
+        var original = document.Assets.SingleOrDefault(asset => asset.Id == "original")
+            ?? throw new StudyMcpException("The preserved original file is not available for this material revision.");
+        if (!string.Equals(original.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase) ||
+            !string.Equals(document.MimeType, "application/pdf", StringComparison.OrdinalIgnoreCase))
+            throw new StudyMcpException("study_file currently supports preserved PDF originals only.");
+        if (original.ByteLength > MaxPdfBytes)
+            throw new StudyMcpException($"The original PDF is larger than the {MaxPdfBytes}-byte compatibility-probe limit.");
+
+        using var response = await client.GetAsync(materialPath + "/assets/original", HttpCompletionOption.ResponseHeadersRead, ct);
+        if (!response.IsSuccessStatusCode) throw new StudyMcpException(await FailureMessage(response, ct));
+        if (response.Content.Headers.ContentLength is > MaxPdfBytes)
+            throw new StudyMcpException($"The original PDF is larger than the {MaxPdfBytes}-byte compatibility-probe limit.");
+        var responseMime = response.Content.Headers.ContentType?.MediaType;
+        if (!string.Equals(responseMime, "application/pdf", StringComparison.OrdinalIgnoreCase))
+            throw new StudyMcpException("The preserved original did not return application/pdf.");
+
+        await using var stream = await response.Content.ReadAsStreamAsync(ct);
+        using var buffer = new MemoryStream(Math.Min(MaxPdfBytes, checked((int)Math.Max(0, original.ByteLength))));
+        var chunk = new byte[64 * 1024];
+        while (true)
+        {
+            var read = await stream.ReadAsync(chunk, ct);
+            if (read == 0) break;
+            if (buffer.Length + read > MaxPdfBytes)
+                throw new StudyMcpException($"The original PDF is larger than the {MaxPdfBytes}-byte compatibility-probe limit.");
+            await buffer.WriteAsync(chunk.AsMemory(0, read), ct);
+        }
+
+        var bytes = buffer.ToArray();
+        var uri = $"study://materials/{Uri.EscapeDataString(materialId)}/revisions/{Uri.EscapeDataString(revision)}/original";
+        return new
+        {
+            content = new object[]
+            {
+                new { type = "text", text = $"Original PDF: {document.Name} ({bytes.Length} bytes)." },
+                new
+                {
+                    type = "resource",
+                    resource = new
+                    {
+                        uri,
+                        mimeType = "application/pdf",
+                        blob = bytes,
+                    },
+                },
+            },
         };
     }
 
