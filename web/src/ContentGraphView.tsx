@@ -373,7 +373,7 @@ export function ContentGraphView({
         <div
           className="study-trace-canvas"
           ref={canvas}
-          onKeyDown={(event) => {
+          onKeyDownCapture={(event) => {
             if (event.key === "Escape") closeDetails();
             if (event.key !== "Enter" && event.key !== " ") return;
             const node = (event.target as HTMLElement).closest<HTMLElement>(
@@ -381,6 +381,7 @@ export function ContentGraphView({
             );
             if (node?.dataset.id) {
               event.preventDefault();
+              event.stopPropagation();
               setSelectedId(node.dataset.id);
             }
           }}
