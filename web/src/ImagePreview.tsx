@@ -102,12 +102,12 @@ export function ImagePreview({
                   32 * 1024 * 1024
                 )
                   onError(
-                    "Das Bild ist für die Vorschau zu groß. Bitte lade es herunter.",
+                    "Das Bild ist für die Vorschau zu groß. Bitte erneut versuchen.",
                   );
               }}
               onError={() =>
                 onError(
-                  "Dieses Bild konnte nicht angezeigt werden. Bitte lade es herunter.",
+                  "Dieses Bild konnte nicht angezeigt werden. Bitte erneut versuchen.",
                 )
               }
             />

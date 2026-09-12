@@ -13,3 +13,5 @@ node components/ui/scripts/pack-native-preview.mjs /path/to/study-space/mobile/v
 ```
 
 Do not edit the archive or copy its components into Study Space. Make changes in DotNaos UI, run its native tests, and package a new source-pinned version.
+
+Document viewer: the source-pinned archive includes `@dotnaos/ui/native/document`; its optional WebView peer is installed explicitly in mobile/package.json.

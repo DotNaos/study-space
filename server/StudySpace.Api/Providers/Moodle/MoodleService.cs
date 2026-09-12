@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using StudySpace.Api.Infrastructure;
 namespace StudySpace.Api.Providers.Moodle;
 
-public sealed class MoodleService(IMoodleTransport transport, CredentialStore credentials, TimeProvider clock)
+public sealed partial class MoodleService(IMoodleTransport transport, CredentialStore credentials, TimeProvider clock)
 {
     private readonly ConcurrentDictionary<string, PendingLogin> logins = new();
     private readonly SemaphoreSlim changes = new(1, 1);

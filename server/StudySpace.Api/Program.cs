@@ -77,7 +77,9 @@ app.Use(async (context, next) =>
     context.Response.Headers.CacheControl = context.Request.Path.StartsWithSegments("/api") ? "no-store" : "no-cache";
     context.Response.Headers["Referrer-Policy"] = "no-referrer";
     context.Response.Headers["X-Content-Type-Options"] = "nosniff";
-    context.Response.Headers["X-Frame-Options"] = "DENY";
+    context.Response.Headers["X-Frame-Options"] = context.Request.Path == "/reader.html" ? "SAMEORIGIN" : "DENY";
+    if (context.Request.Path == "/reader.html")
+        context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' blob: data:; font-src 'self' data:; worker-src 'self' blob:; frame-ancestors 'self'; base-uri 'none'; form-action 'none'; object-src 'none'";
     try
     {
         if (context.Request.Path.StartsWithSegments("/api") && !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))

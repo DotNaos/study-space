@@ -46,6 +46,7 @@ public static class ApiEndpoints
             var image = await service.Get(id, ct);
             return Results.File(image.Bytes, image.ContentType);
         }).RequireRateLimiting("moodle-images");
+        moodle.MapGet("/courses/{courseId:long}/modules/{moduleId:long}", (long courseId, long moduleId, MoodleService service, CancellationToken ct) => service.Activity(courseId, moduleId, ct));
         moodle.MapGet("/courses/{id:long}/contents", (long id, MoodleService service, CancellationToken ct) => service.Contents(id, ct));
         moodle.MapGet("/courses/{courseId:long}/modules/{moduleId:long}/resources/{resourceId}/preview",
             (long courseId, long moduleId, string resourceId, MoodleFileService service, HttpContext context, CancellationToken ct) =>

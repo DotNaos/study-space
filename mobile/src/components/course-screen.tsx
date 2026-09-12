@@ -9,9 +9,7 @@ import {
   useNativeTheme,
   type IconName,
 } from "@dotnaos/ui/native";
-import * as Linking from "expo-linking";
 import { Stack as RouterStack, useLocalSearchParams, useRouter } from "expo-router";
-import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, SectionList, View } from "react-native";
 
@@ -19,7 +17,6 @@ import { CourseArtwork } from "@/components/course-artwork";
 import {
   api,
   message,
-  studyUrl,
   type Course,
   type CourseModule,
   type CourseResource,
@@ -32,11 +29,8 @@ import {
   visibleModule,
   visibleResources,
 } from "@/lib/course-library";
+import { resourceParams } from "@/lib/activity";
 import { rootCourseSections, subsectionFor } from "@/lib/course-sections";
-
-function sameServerPath(value?: string | null): string | undefined {
-  return value?.startsWith("/api/") && !value.includes("\\") ? value : undefined;
-}
 
 function shortCourseTitle(course?: Course): string {
   if (!course) return "Kurs";
@@ -130,19 +124,14 @@ export default function CourseScreen() {
     [sections, sectionId],
   );
 
-  const openPath = useCallback(async (path: string) => {
-    await WebBrowser.openBrowserAsync(studyUrl(path));
-  }, []);
-
-  const openModule = useCallback(async (module: CourseModule) => {
-    const resource = visibleResources(module)[0];
-    const internal = sameServerPath(resource?.previewUrl ?? resource?.downloadUrl);
-    if (internal) {
-      await openPath(internal);
-      return;
-    }
-    if (module.url && /^https?:\/\//i.test(module.url)) await Linking.openURL(module.url);
-  }, [openPath]);
+  const openModule = useCallback((module: CourseModule) => {
+    router.push({ pathname: "/course/[courseId]/activity/[moduleId]", params: { courseId: String(courseId), moduleId: String(module.id) } });
+  }, [courseId, router]);
+  const openResource = useCallback((module: CourseModule, resource: CourseResource) => {
+    const target = resourceParams(courseId, module.id, resource);
+    if (target) router.push({ pathname: "/course/[courseId]/module/[moduleId]/resource/[resourceId]", params: target });
+    else openModule(module);
+  }, [courseId, openModule, router]);
 
   if (!sections && !error) {
     return (
@@ -226,11 +215,11 @@ export default function CourseScreen() {
           }
 
           const resources = visibleResources(module);
-          const canOpenModule = Boolean(module.url && /^https?:\/\//i.test(module.url));
+          const canOpenModule = true;
 
           if (resources.length === 1) {
             const resource = resources[0];
-            const path = sameServerPath(resource.previewUrl ?? resource.downloadUrl);
+            const path = resourceParams(courseId, module.id, resource);
             const size = formatFileSize(resource.size);
             const subtitle = [
               duplicateResourceName(module.name, resource.name) ? undefined : resource.name,
@@ -246,7 +235,7 @@ export default function CourseScreen() {
                 leading={<Icon.File filename={resource.name} mimeType={resource.mimeType} />}
                 trailing={canOpen ? <Icon name="chevron-right" color="muted" size={18} /> : undefined}
                 disabled={!canOpen}
-                onPress={() => path ? void openPath(path) : void openModule(module)}
+                onPress={() => openResource(module, resource)}
 
               />
             );
@@ -258,7 +247,7 @@ export default function CourseScreen() {
                 <UIStack gap={3}>
                   <Text selectable size="l" text={module.name || moduleTypeLabel(module.type)} style={{ color: colors.text, fontWeight: "600", lineHeight: 22 }} />
                   {resources.map((resource) => {
-                    const path = sameServerPath(resource.previewUrl ?? resource.downloadUrl);
+                    const path = resourceParams(courseId, module.id, resource);
                     const size = formatFileSize(resource.size);
                     return (
                       <ListItem
@@ -269,7 +258,7 @@ export default function CourseScreen() {
                         leading={<Icon.File filename={resource.name} mimeType={resource.mimeType} />}
                         trailing={path ? <Icon name="chevron-right" color="muted" size={18} /> : undefined}
                         disabled={!path}
-                        onPress={() => path && void openPath(path)}
+                        onPress={() => openResource(module, resource)}
                       />
                     );
                   })}

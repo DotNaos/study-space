@@ -59,24 +59,36 @@ export function studyUrl(path: string): string {
   return `${STUDY_BASE_URL}${path}`;
 }
 
-export async function api<T>(path: string): Promise<T> {
-  const response = await fetch(studyUrl(path), {
-    headers: { Accept: "application/json" },
-  });
-
-  if (!response.ok) {
-    const problem = await response.json().catch(() => null);
-    throw new ApiError(
-      response.status,
-      problem?.code,
-      problem?.detail ?? problem?.title ?? `Die Anfrage ist fehlgeschlagen (${response.status}).`,
-    );
+export async function api<T>(path: string, signal?: AbortSignal): Promise<T> {
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  if (signal?.aborted) abort();
+  signal?.addEventListener("abort", abort, { once: true });
+  const timeout = setTimeout(abort, 60000);
+  try {
+    const response = await fetch(studyUrl(path), {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      const problem = await response.json().catch(() => null);
+      throw new ApiError(
+        response.status,
+        problem?.code,
+        problem?.detail ?? problem?.title ?? `Die Anfrage ist fehlgeschlagen (${response.status}).`,
+      );
+    }
+    return await response.json() as T;
+  } finally {
+    clearTimeout(timeout);
+    signal?.removeEventListener("abort", abort);
   }
-
-  return response.json() as Promise<T>;
 }
 
 export function message(error: unknown): string {
+  if (error instanceof Error && error.name === "AbortError") {
+    return "Die Anfrage dauert zu lange. Bitte erneut versuchen.";
+  }
   if (error instanceof TypeError) {
     return "Study Space ist nicht erreichbar. Prüfe Tailscale und den Study-Space-Host.";
   }

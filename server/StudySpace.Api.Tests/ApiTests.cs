@@ -46,6 +46,23 @@ public sealed class ApiTests : IDisposable
         Assert.Contains("login_unknown", await browserReturn.Content.ReadAsStringAsync());
         Assert.DoesNotContain("synthetic-invalid-return", await browserReturn.Content.ReadAsStringAsync());
     }
+    [Fact] public async Task ActivityDetailIsReadOnlyAndOnlyTheOwnedReaderIsEmbeddable()
+    {
+        await using var app = Factory(); using var client = app.CreateClient();
+        var detail = await client.GetAsync("/api/providers/moodle/courses/7/modules/99");
+        Assert.Equal(HttpStatusCode.Conflict, detail.StatusCode);
+        Assert.Contains("moodle_disconnected", await detail.Content.ReadAsStringAsync());
+        Assert.Equal("application/problem+json", detail.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("DENY", Assert.Single(detail.Headers.GetValues("X-Frame-Options")));
+        var write = await client.PostAsync("/api/providers/moodle/courses/7/modules/99", null);
+        Assert.False(write.IsSuccessStatusCode);
+        var reader = await client.GetAsync("/reader.html");
+        Assert.Equal("SAMEORIGIN", Assert.Single(reader.Headers.GetValues("X-Frame-Options")));
+        var policy = Assert.Single(reader.Headers.GetValues("Content-Security-Policy"));
+        Assert.Contains("frame-ancestors 'self'", policy);
+        Assert.Contains("connect-src 'self'", policy);
+        Assert.Contains("object-src 'none'", policy);
+    }
     [Fact] public async Task ProtectedCredentialsSurviveHostRestartWithEncryptedKeyRing()
     {
         const string token = "syntheticRestartCredential12345678";
