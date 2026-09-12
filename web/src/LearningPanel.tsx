@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
-import { ChevronDown, Sparkles } from "lucide-react";
+import { Button, Checkbox, Select } from "@dotnaos/ui-base";
+import { ChevronDown } from "lucide-react";
 import { api, message } from "./api";
 import {
   learningPath,
@@ -179,19 +179,12 @@ export function LearningPanel({
           ) : (
             <>
               {!coverage?.complete && !!coverage?.ready && (
-                <label className="flex items-start gap-2 text-sm leading-6">
-                  <input
-                    type="checkbox"
-                    checked={allowPartial}
-                    onChange={(event) => setAllowPartial(event.target.checked)}
-                    className="mt-1 size-4 shrink-0 accent-accent"
-                  />
-                  <span>
-                    Lernbereich aus den {coverage.ready} erfassten Materialien
-                    erstellen. Fehlende Inhalte bleiben ausdrücklich
-                    gekennzeichnet.
-                  </span>
-                </label>
+                <Checkbox
+                  checked={allowPartial}
+                  onCheckedChange={setAllowPartial}
+                  label={`Lernbereich aus den ${coverage.ready} erfassten Materialien erstellen`}
+                  description="Fehlende Inhalte bleiben ausdrücklich gekennzeichnet."
+                />
               )}
               <p className="max-w-2xl text-xs leading-5 text-text-muted">
                 Beim Erstellen werden die erfassten Texte und Quellenbilder über dein
@@ -268,24 +261,21 @@ export function LearningPanel({
               </p>
             </div>
             {!!state?.versions.length && (
-              <label className="text-xs text-text-muted">
-                Version
-                <select
-                  aria-label="Version des Lernbereichs"
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <span>Version</span>
+                <Select
+                  accessibilityLabel="Version des Lernbereichs"
                   value={version.id}
-                  onChange={(event) => void selectVersion(event.target.value)}
+                  onValueChange={(value) => void selectVersion(value)}
                   disabled={busy}
-                  className="ml-2 max-w-52 rounded-md border border-border bg-bg-0 px-2 py-1.5 text-xs text-text"
-                >
-                  {state.versions.map((item, index) => (
-                    <option key={item.id} value={item.id}>
-                      {new Date(item.createdAt).toLocaleDateString("de-CH")} ·
-                      Version {index + 1}
-                      {item.id === state.activeVersionId ? " · aktiv" : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  size="sm"
+                  fullWidth={false}
+                  options={state.versions.map((item, index) => ({
+                    value: item.id,
+                    label: `${new Date(item.createdAt).toLocaleDateString("de-CH")} · Version ${index + 1}${item.id === state.activeVersionId ? " · aktiv" : ""}`,
+                  }))}
+                />
+              </div>
             )}
           </div>
           {previewVersion && (
@@ -341,16 +331,16 @@ export function LearningPanel({
             onSource={onSource}
           />
           <section className="mt-10 border-t border-border pt-4">
-            <button
-              type="button"
-              aria-expanded={chatOpen}
-              onClick={() => setChatOpen((open) => !open)}
-              className="flex items-center gap-2 rounded-md py-2 text-sm font-medium"
-            >
-              <Sparkles size={16} />
-              Fragen zu diesem Lernbereich
-              <ChevronDown size={15} className={chatOpen ? "rotate-180" : ""} />
-            </button>
+            <Button
+              size="sm"
+              variant="ghost"
+              icon="sparkles"
+              iconAfter={chatOpen ? "chevron-up" : "chevron-down"}
+              label="Fragen zu diesem Lernbereich"
+              pressed={chatOpen}
+              expanded={chatOpen}
+              onPress={() => setChatOpen((open) => !open)}
+            />
             {chatOpen && (
               <Suspense fallback={<Loading label="Fragen werden geladen …" />}>
                 <LearningChat

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
-import { BookOpen, Link2, Settings2, Circle } from "lucide-react";
+import { Button, Icon, type IconName } from "@dotnaos/ui-base";
 import {
   api,
   message,
@@ -15,6 +14,16 @@ import { AppLink, useRoute } from "./navigation";
 import { ThemeToggle } from "./ThemeToggle";
 import { SettingsView } from "./SettingsView";
 import { Loading, Notice } from "./shared";
+
+const navigationItems: {
+  id: "courses" | "sources" | "settings";
+  label: string;
+  icon: IconName;
+}[] = [
+  { id: "courses", label: "Kurse", icon: "list" },
+  { id: "sources", label: "Quellen", icon: "paperclip" },
+  { id: "settings", label: "Einstellungen", icon: "settings" },
+];
 
 export function App() {
   const { route, navigate } = useRoute();
@@ -116,13 +125,7 @@ export function App() {
           aria-label="Hauptnavigation"
           className="flex items-center gap-1 md:mt-8 md:flex-col md:items-stretch"
         >
-          {(
-            [
-              { id: "courses", label: "Kurse", icon: BookOpen },
-              { id: "sources", label: "Quellen", icon: Link2 },
-              { id: "settings", label: "Einstellungen", icon: Settings2 },
-            ] as const
-          ).map((item) => (
+          {navigationItems.map((item) => (
             <AppLink
               key={item.id}
               navigate={navigate}
@@ -132,7 +135,11 @@ export function App() {
               title={item.label}
               className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring md:justify-start ${route.page === item.id ? "bg-bg-1 font-medium" : "text-text-muted hover:bg-bg-1 hover:text-text"}`}
             >
-              <item.icon size={17} aria-hidden="true" />
+              <Icon
+                name={item.icon}
+                size="s"
+                color={route.page === item.id ? "text" : "muted"}
+              />
               <span className={route.page === item.id ? "hidden min-[360px]:inline md:inline" : "hidden md:inline"}>{item.label}</span>
             </AppLink>
           ))}
@@ -140,14 +147,10 @@ export function App() {
         <div className="shrink-0 md:mt-3 md:self-start md:px-1"><ThemeToggle /></div>
         <div className="mt-auto hidden pt-8 md:block">
           <div className="flex items-center gap-2 text-xs text-text-muted">
-            <Circle
-              size={7}
-              className={
-                status?.database === "ready"
-                  ? "fill-success text-success"
-                  : "fill-warning text-warning"
-              }
-              aria-hidden="true"
+            <Icon
+              name={status?.database === "ready" ? "check-circle" : "alert-circle"}
+              size="s"
+              color={status?.database === "ready" ? "success" : "warning"}
             />
             <span>
               {status?.database === "ready"

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Moon, Sun } from "lucide-react";
+import { Button } from "@dotnaos/ui-base";
 const themeKey = "study-space:theme";
 
 export function ThemeToggle() {
@@ -29,12 +29,14 @@ export function ThemeToggle() {
   const label =
     theme === "dark" ? "Hellen Modus aktivieren" : "Dunklen Modus aktivieren";
   return (
-    <button
-      type="button"
-      aria-label={label}
+    <Button
+      variant="icon"
+      size="sm"
+      icon="palette"
+      accessibilityLabel={label}
       title={label}
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-      onClick={() => {
+      pressed={theme === "dark"}
+      onPress={() => {
         const next = theme === "dark" ? "light" : "dark";
         try {
           localStorage.setItem(themeKey, next);
@@ -43,12 +45,6 @@ export function ThemeToggle() {
         }
         setTheme(next);
       }}
-    >
-      {theme === "dark" ? (
-        <Sun size={17} aria-hidden="true" />
-      ) : (
-        <Moon size={17} aria-hidden="true" />
-      )}
-    </button>
+    />
   );
 }

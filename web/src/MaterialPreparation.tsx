@@ -1,11 +1,5 @@
-import { Icon } from "@dotnaos/ui-base";
-import { Button } from "@dotnaos/ui-base";
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  Loader2,
-} from "lucide-react";
+import { Button, Icon, Spinner } from "@dotnaos/ui-base";
+import { ChevronDown } from "lucide-react";
 import {
   materialDocumentPath,
   type MaterialEntry,
@@ -98,7 +92,7 @@ export function MaterialPreparation({
       {running && snapshot?.job && (
         <div role="status" className="space-y-2">
           <div className="flex items-center gap-2 text-xs text-text-muted">
-            <Loader2 size={14} className="motion-safe:animate-spin" />
+            <Spinner size="s" />
             {snapshot.job.total > 0
               ? `${snapshot.job.completed} von ${snapshot.job.total} Materialien verarbeitet`
               : "Materialien werden gesammelt …"}
@@ -151,11 +145,11 @@ export function MaterialPreparation({
                 <>
                   <span className="mt-1 shrink-0 text-text-muted">
                     {entry.status === "ready" && !entry.warnings.length ? (
-                      <Check size={15} className="text-success" />
+                      <Icon name="check" size="s" color="success" />
                     ) : ["failed", "unsupported", "cancelled"].includes(
                         entry.status,
                       ) || entry.warnings.length ? (
-                      <AlertCircle size={15} className="text-warning" />
+                      <Icon name="alert-circle" size="s" color="warning" />
                     ) : (
                       <Icon.File filename={entry.name} size={18} />
                     )}

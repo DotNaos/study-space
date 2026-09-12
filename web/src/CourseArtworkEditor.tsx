@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
-import { Copy, ExternalLink, ImagePlus, RotateCcw, Sparkles } from "lucide-react";
+import { Button, Form, Icon, Textarea } from "@dotnaos/ui-base";
 import { api, message, type Course } from "./api";
 import { CourseArtwork } from "./CourseArtwork";
 import { DialogShell } from "./DialogShell";
@@ -61,33 +60,59 @@ export function CourseArtworkEditor({ course, onChanged, onClose }: {
           aria-label="Kursbild auswählen" disabled={busy}
           onChange={(event) => { choose(event.target.files?.[0]); event.target.value = ""; }} />
         <div className="flex flex-wrap items-center gap-2">
-          <ImagePlus size={18} aria-hidden="true" />
-          <Button label="Bild auswählen" disabled={busy} onPress={() => input.current?.click()} />
+          <Button icon="image" label="Bild auswählen" disabled={busy} onPress={() => input.current?.click()} />
           {selected && <Button label={busy ? "Speichern …" : "Übernehmen"} variant="primary" disabled={busy} onPress={() => void save()} />}
-          {course.hasCustomImage && !selected && <button type="button" disabled={busy} onClick={() => void save(true)}
-            className="ml-auto flex size-11 items-center justify-center rounded-md text-text-muted hover:bg-bg-1 disabled:opacity-50"
-            aria-label="Standardbild wiederherstellen" title="Standardbild wiederherstellen"><RotateCcw size={18} /></button>}
+          {course.hasCustomImage && !selected && (
+            <div className="ml-auto">
+              <Button
+                variant="icon"
+                icon="rotate-counter-clockwise"
+                accessibilityLabel="Standardbild wiederherstellen"
+                title="Standardbild wiederherstellen"
+                disabled={busy}
+                onPress={() => void save(true)}
+              />
+            </div>
+          )}
         </div>
         <p className="text-xs text-text-muted">PNG, JPEG oder WebP · bis 4 MiB</p>
         {error && <Notice>{error}</Notice>}
         {status && <p role="status" className="text-sm text-text-muted">{status}</p>}
         <div className="border-t border-border/60 pt-3">
-          <button type="button" aria-expanded={generate} onClick={() => setGenerate(!generate)}
-            className="flex min-h-11 items-center gap-2 rounded-md text-sm hover:text-accent">
-            <Sparkles size={17} aria-hidden="true" /> Mit ChatGPT generieren
-          </button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="sparkles"
+            iconAfter={generate ? "chevron-up" : "chevron-down"}
+            label="Mit ChatGPT generieren"
+            pressed={generate}
+            expanded={generate}
+            onPress={() => setGenerate(!generate)}
+          />
           {generate && <div className="mt-2 space-y-3">
-            <label className="block text-xs text-text-muted" htmlFor="artwork-prompt">Bildbeschreibung</label>
-            <textarea id="artwork-prompt" value={prompt} maxLength={2500} onChange={(event) => setPrompt(event.target.value)} rows={7}
-              className="w-full resize-y rounded-md border border-border bg-bg-1 p-3 text-base leading-6 outline-focus-ring sm:text-sm" />
+            <Form.Field label="Bildbeschreibung">
+              <Textarea
+                id="artwork-prompt"
+                value={prompt}
+                rows={7}
+                fullWidth
+                onValueChange={(next) => setPrompt(next.slice(0, 2500))}
+              />
+            </Form.Field>
             <div className="flex flex-wrap items-center gap-4">
               <a href={artworkGenerationUrl(prompt)} target="_blank" rel="noopener noreferrer" className={`${linkClass} min-h-11`}>
-                <ExternalLink size={16} aria-hidden="true" /> In ChatGPT öffnen
+                <Icon name="external-link" size="s" color="accent" /> In ChatGPT öffnen
               </a>
-              <button type="button" className={`${linkClass} min-h-11`} onClick={() => {
-                if (!navigator.clipboard) { setError("Bitte die Bildbeschreibung markieren und kopieren."); return; }
-                void navigator.clipboard.writeText(prompt).then(() => setStatus("Bildbeschreibung kopiert.")).catch(() => setError("Bitte die Bildbeschreibung markieren und kopieren."));
-              }}><Copy size={16} aria-hidden="true" /> Prompt kopieren</button>
+              <Button
+                variant="ghost"
+                size="sm"
+                icon="copy"
+                label="Prompt kopieren"
+                onPress={() => {
+                  if (!navigator.clipboard) { setError("Bitte die Bildbeschreibung markieren und kopieren."); return; }
+                  void navigator.clipboard.writeText(prompt).then(() => setStatus("Bildbeschreibung kopiert.")).catch(() => setError("Bitte die Bildbeschreibung markieren und kopieren."));
+                }}
+              />
             </div>
             <p className="text-xs leading-5 text-text-muted">Die Bildgenerierung läuft in ChatGPT, nicht über Codex oder einen zusätzlichen API-Key. Das fertige Bild anschließend hier auswählen und übernehmen. Falls der Prompt nicht übernommen wird, kannst du ihn kopieren.</p>
           </div>}

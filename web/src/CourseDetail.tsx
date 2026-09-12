@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
-import { ArrowLeft, CalendarDays, BookOpen, Files, ImagePlus } from "lucide-react";
+import { ArrowLeft, CalendarDays, ImagePlus } from "lucide-react";
 import { api, message, type Course, type CourseSection } from "./api";
 import { AppLink, type Navigate } from "./navigation";
 import { cleanCourseText } from "./course-content";
@@ -133,28 +133,28 @@ export function CourseDetail({
         aria-label="Kursansicht"
         className="mt-4 flex items-center gap-1 border-b border-border pb-3"
       >
-        <button
-          type="button"
-          aria-pressed={tab === "learning"}
-          onClick={() => {
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="list"
+          label="Lernen"
+          pressed={tab === "learning"}
+          onPress={() => {
             setTab("learning");
             setTabChosen(true);
           }}
-          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${tab === "learning" ? "bg-bg-1 font-medium" : "text-text-muted hover:text-text"}`}
-        >
-          <BookOpen size={16} /> Lernen
-        </button>
-        <button
-          type="button"
-          aria-pressed={tab === "materials"}
-          onClick={() => {
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="folder-open"
+          label="Materialien"
+          pressed={tab === "materials"}
+          onPress={() => {
             setTab("materials");
             setTabChosen(true);
           }}
-          className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${tab === "materials" ? "bg-bg-1 font-medium" : "text-text-muted hover:text-text"}`}
-        >
-          <Files size={16} /> Materialien
-        </button>
+        />
       </div>
       {!tabChosen && learning.loading ? (
         <div className="py-6">
