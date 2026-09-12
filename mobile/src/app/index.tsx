@@ -1,21 +1,22 @@
-import { Link } from "expo-router";
+import { Button, Card, Stack, Text, designTokens } from "@dotnaos/ui/native";
+import { Image } from "expo-image";
+import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  SectionList,
-  Text,
-  TextInput,
-  View,
-} from "react-native";
+import { ActivityIndicator, RefreshControl, SectionList, TextInput, View } from "react-native";
 
 import { CourseArtwork } from "@/components/course-artwork";
+import { StudyListItem } from "@/components/study-list-item";
 import { api, message, type Course } from "@/lib/api";
 import { courseSubtitle, groupCourses } from "@/lib/course-library";
 import { useStudyColors } from "@/lib/theme";
 
+function Chevron() {
+  const colors = useStudyColors();
+  return <Image source="sf:chevron.right" style={{ width: 12, height: 18 }} tintColor={colors.textMuted} />;
+}
+
 export default function CoursesScreen() {
+  const router = useRouter();
   const colors = useStudyColors();
   const [courses, setCourses] = useState<Course[]>();
   const [query, setQuery] = useState("");
@@ -46,7 +47,7 @@ export default function CoursesScreen() {
   if (!courses && !error) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
-        <ActivityIndicator />
+        <ActivityIndicator color={colors.textMuted} />
       </View>
     );
   }
@@ -57,105 +58,78 @@ export default function CoursesScreen() {
       keyExtractor={(course) => String(course.id)}
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+      stickySectionHeadersEnabled={false}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.textMuted} />}
       style={{ flex: 1, backgroundColor: colors.background }}
-      contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 32 }}
+      contentContainerStyle={{ paddingHorizontal: designTokens.spacing[4], paddingBottom: designTokens.spacing[5] }}
       ListHeaderComponent={
-        <View style={{ paddingVertical: 12, gap: 12 }}>
+        <Stack gap={3} style={{ paddingTop: designTokens.spacing[2], paddingBottom: designTokens.spacing[3] }}>
           <TextInput
             value={query}
             onChangeText={setQuery}
             placeholder="Kurse durchsuchen"
-            placeholderTextColor={colors.muted}
+            placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
             autoCorrect={false}
             clearButtonMode="while-editing"
+            accessibilityLabel="Kurse durchsuchen"
             style={{
-              minHeight: 42,
-              borderRadius: 12,
+              minHeight: 44,
+              borderRadius: designTokens.radii[3],
               borderCurve: "continuous",
-              backgroundColor: colors.surfaceSecondary,
+              borderColor: colors.border,
+              borderWidth: 1,
+              backgroundColor: colors.surfaceMuted,
               color: colors.text,
-              paddingHorizontal: 14,
-              fontSize: 16,
+              fontSize: designTokens.typography.textL,
+              paddingHorizontal: designTokens.spacing[3],
+              paddingVertical: designTokens.spacing[2],
             }}
           />
           {error ? (
-            <View style={{ gap: 10, padding: 14, borderRadius: 14, borderCurve: "continuous", backgroundColor: colors.surface }}>
-              <Text selectable style={{ color: colors.text, fontSize: 15, lineHeight: 21 }}>
-                {error}
-              </Text>
-              <Pressable onPress={() => void load()} hitSlop={8}>
-                <Text selectable style={{ color: colors.text, fontWeight: "600" }}>
-                  Erneut versuchen
-                </Text>
-              </Pressable>
-            </View>
+            <Card style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+              <Stack gap={3}>
+                <Text selectable text={error} style={{ color: colors.text, lineHeight: 20 }} />
+                <Button label="Erneut versuchen" variant="primary" onPress={() => void load()} />
+              </Stack>
+            </Card>
           ) : null}
-        </View>
+        </Stack>
       }
       ListEmptyComponent={
         courses && !error ? (
-          <Text selectable style={{ color: colors.muted, paddingVertical: 28, textAlign: "center" }}>
-            {query ? "Keine passenden Kurse gefunden." : "Keine Kurse verfügbar."}
-          </Text>
+          <Text
+            selectable
+            text={query ? "Keine passenden Kurse gefunden." : "Keine Kurse verfügbar."}
+            style={{ color: colors.textMuted, paddingVertical: designTokens.spacing[5], textAlign: "center" }}
+          />
         ) : null
       }
       renderSectionHeader={({ section }) => (
         <Text
           selectable
+          size="s"
+          text={section.semester.label}
           style={{
-            color: colors.muted,
-            fontSize: 13,
-            fontWeight: "600",
+            color: colors.textMuted,
+            fontWeight: "700",
+            letterSpacing: 0.8,
             textTransform: "uppercase",
-            letterSpacing: 0.5,
-            paddingTop: 18,
-            paddingBottom: 8,
+            paddingTop: designTokens.spacing[4],
+            paddingBottom: designTokens.spacing[2],
           }}
-        >
-          {section.semester.label}
-        </Text>
+        />
       )}
-      renderItem={({ item: course }) => {
-        const subtitle = courseSubtitle(course);
-        return (
-          <Link
-            href={{ pathname: "/course/[courseId]", params: { courseId: String(course.id) } }}
-            asChild
-          >
-            <Pressable
-              style={({ pressed }) => ({
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 13,
-                paddingVertical: 11,
-                paddingHorizontal: 12,
-                borderRadius: 16,
-                borderCurve: "continuous",
-                backgroundColor: colors.surface,
-                opacity: pressed ? 0.65 : 1,
-                marginBottom: 8,
-              })}
-            >
-              <CourseArtwork course={course} />
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text selectable numberOfLines={2} style={{ color: colors.text, fontSize: 16, fontWeight: "600", lineHeight: 21 }}>
-                  {course.name}
-                </Text>
-                {subtitle ? (
-                  <Text selectable numberOfLines={1} style={{ color: colors.muted, fontSize: 13 }}>
-                    {subtitle}
-                  </Text>
-                ) : null}
-              </View>
-              <Text selectable style={{ color: colors.muted, fontSize: 24 }}>
-                ›
-              </Text>
-            </Pressable>
-          </Link>
-        );
-      }}
+      renderItem={({ item: course }) => (
+        <StudyListItem
+          title={course.name}
+          subtitle={courseSubtitle(course)}
+          leading={<CourseArtwork course={course} size={58} />}
+          trailing={<Chevron />}
+          onPress={() => router.push({ pathname: "/course/[courseId]", params: { courseId: String(course.id) } })}
+          style={{ marginBottom: designTokens.spacing[2] }}
+        />
+      )}
     />
   );
 }

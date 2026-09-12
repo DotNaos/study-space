@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { NativeContainer, Text } from "@dotnaos/ui/native";
 import { Image } from "expo-image";
-import { Text, View } from "react-native";
+import { useState } from "react";
 
 import type { Course } from "@/lib/api";
-import { courseImagePath } from "@/lib/course-library";
 import { studyUrl } from "@/lib/api";
+import { courseImagePath } from "@/lib/course-library";
 import { useStudyColors } from "@/lib/theme";
 
 export function CourseArtwork({ course, size = 56 }: { course: Course; size?: number }) {
@@ -14,21 +14,23 @@ export function CourseArtwork({ course, size = 56 }: { course: Course; size?: nu
   const [failed, setFailed] = useState(false);
 
   return (
-    <View
+    <NativeContainer
+      surface="sunken"
+      radius={3}
       style={{
         width: size,
         height: size,
-        borderRadius: 12,
-        borderCurve: "continuous",
         overflow: "hidden",
-        backgroundColor: colors.surfaceSecondary,
         alignItems: "center",
         justifyContent: "center",
+        backgroundColor: colors.surfaceMuted,
       }}
     >
-      <Text selectable style={{ color: colors.muted, fontSize: size * 0.34, fontWeight: "600" }}>
-        {course.name.trim().slice(0, 1).toLocaleUpperCase("de") || "K"}
-      </Text>
+      <Text
+        selectable
+        text={course.name.trim().slice(0, 1).toLocaleUpperCase("de") || "K"}
+        style={{ color: colors.textMuted, fontSize: size * 0.34, fontWeight: "600" }}
+      />
       {source && !failed ? (
         <Image
           source={{ uri: source }}
@@ -37,6 +39,10 @@ export function CourseArtwork({ course, size = 56 }: { course: Course; size?: nu
           onError={() => setFailed(true)}
         />
       ) : null}
-    </View>
+      <NativeContainer
+        pointerEvents="none"
+        style={{ position: "absolute", inset: 0, borderRadius: 12, borderCurve: "continuous", borderWidth: 1, borderColor: colors.border }}
+      />
+    </NativeContainer>
   );
 }

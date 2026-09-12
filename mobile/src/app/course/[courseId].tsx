@@ -1,29 +1,108 @@
+import {
+  Button,
+  Card,
+  NativeContainer,
+  Stack as UIStack,
+  Text,
+  designTokens,
+} from "@dotnaos/ui/native";
+import { Image } from "expo-image";
 import * as Linking from "expo-linking";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack as RouterStack, useLocalSearchParams } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  SectionList,
-  Text,
-  View,
-} from "react-native";
+import { ActivityIndicator, RefreshControl, SectionList, View } from "react-native";
 
+import { CourseArtwork } from "@/components/course-artwork";
+import { StudyListItem } from "@/components/study-list-item";
 import {
   api,
   message,
   studyUrl,
   type Course,
   type CourseModule,
+  type CourseResource,
   type CourseSection,
 } from "@/lib/api";
-import { formatFileSize, visibleModule, visibleResources } from "@/lib/course-library";
+import {
+  cleanCourseText,
+  duplicateResourceName,
+  formatFileSize,
+  visibleModule,
+  visibleResources,
+} from "@/lib/course-library";
 import { useStudyColors } from "@/lib/theme";
 
 function sameServerPath(value?: string | null): string | undefined {
   return value?.startsWith("/") ? value : undefined;
+}
+
+function shortCourseTitle(course?: Course): string {
+  if (!course) return "Kurs";
+  return course.shortName.trim().replace(/^\(([^)]+)\)/, "$1") || "Kurs";
+}
+
+function labelTitle(module: CourseModule): string {
+  const name = cleanCourseText(module.name);
+  if (/^lernziele/i.test(name)) return "Lernziele";
+  return name || "Hinweis";
+}
+
+function moduleTypeLabel(type: string): string {
+  const labels: Record<string, string> = {
+    assign: "Aufgabe",
+    book: "Buch",
+    forum: "Forum",
+    page: "Seite",
+    quiz: "Quiz",
+    resource: "Datei",
+    url: "Link",
+  };
+  return labels[type] ?? type;
+}
+
+function symbolFor(module: CourseModule, resource?: CourseResource): string {
+  if (resource?.previewKind === "pdf" || resource?.mimeType === "application/pdf") return "doc.richtext";
+  if (resource?.previewKind === "image" || resource?.mimeType?.startsWith("image/")) return "photo";
+  if (module.type === "assign") return "checklist";
+  if (module.type === "forum") return "bubble.left.and.bubble.right";
+  if (module.type === "url") return "link";
+  if (module.type === "quiz") return "questionmark.circle";
+  return "doc";
+}
+
+function IconTile({ symbol }: { symbol: string }) {
+  const colors = useStudyColors();
+  return (
+    <NativeContainer
+      surface="sunken"
+      radius={3}
+      style={{ width: 42, height: 42, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted }}
+    >
+      <Image source={`sf:${symbol}`} style={{ width: 20, height: 20 }} tintColor={colors.textMuted} />
+    </NativeContainer>
+  );
+}
+
+function Chevron() {
+  const colors = useStudyColors();
+  return <Image source="sf:chevron.right" style={{ width: 11, height: 17 }} tintColor={colors.textMuted} />;
+}
+
+function LabelBlock({ module }: { module: CourseModule }) {
+  const colors = useStudyColors();
+  const title = labelTitle(module);
+  const description = cleanCourseText(module.description);
+  const duplicateDescription = description.toLocaleLowerCase("de") === title.toLocaleLowerCase("de");
+
+  return (
+    <UIStack gap={1} style={{ paddingHorizontal: designTokens.spacing[1], paddingVertical: designTokens.spacing[2] }}>
+      <Text selectable size="l" text={title} style={{ color: colors.text, fontWeight: "700", lineHeight: 22 }} />
+      {description && !duplicateDescription ? (
+        <Text selectable text={description} style={{ color: colors.textMuted, lineHeight: 20 }} />
+      ) : null}
+    </UIStack>
+  );
 }
 
 export default function CourseScreen() {
@@ -71,143 +150,148 @@ export default function CourseScreen() {
     [sections],
   );
 
+  const openPath = useCallback(async (path: string) => {
+    await WebBrowser.openBrowserAsync(studyUrl(path));
+  }, []);
+
   const openModule = useCallback(async (module: CourseModule) => {
     const resource = visibleResources(module)[0];
     const internal = sameServerPath(resource?.previewUrl ?? resource?.downloadUrl);
     if (internal) {
-      await WebBrowser.openBrowserAsync(studyUrl(internal));
+      await openPath(internal);
       return;
     }
     if (module.url && /^https?:\/\//i.test(module.url)) await Linking.openURL(module.url);
-  }, []);
+  }, [openPath]);
 
   if (!sections && !error) {
     return (
       <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.background }}>
-        <Stack.Screen options={{ title: course?.name ?? "Kurs" }} />
-        <ActivityIndicator />
+        <RouterStack.Screen options={{ title: shortCourseTitle(course) }} />
+        <ActivityIndicator color={colors.textMuted} />
       </View>
     );
   }
 
   return (
     <>
-      <Stack.Screen options={{ title: course?.name ?? `Kurs ${courseId}` }} />
+      <RouterStack.Screen options={{ title: shortCourseTitle(course) }} />
       <SectionList
         sections={visibleSections}
         keyExtractor={(module) => String(module.id)}
         contentInsetAdjustmentBehavior="automatic"
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}
+        stickySectionHeadersEnabled={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.textMuted} />}
         style={{ flex: 1, backgroundColor: colors.background }}
-        contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 36 }}
+        contentContainerStyle={{ paddingHorizontal: designTokens.spacing[4], paddingBottom: designTokens.spacing[5] }}
         ListHeaderComponent={
-          error ? (
-            <View style={{ gap: 10, paddingVertical: 18 }}>
-              <Text selectable style={{ color: colors.text, fontSize: 15, lineHeight: 21 }}>
-                {error}
-              </Text>
-              <Pressable onPress={() => void load()} hitSlop={8}>
-                <Text selectable style={{ color: colors.text, fontWeight: "600" }}>
-                  Erneut versuchen
-                </Text>
-              </Pressable>
-            </View>
-          ) : null
+          <UIStack gap={3} style={{ paddingTop: designTokens.spacing[2], paddingBottom: designTokens.spacing[3] }}>
+            {course ? (
+              <Card style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+                <UIStack direction="horizontal" align="center" gap={3}>
+                  <CourseArtwork course={course} size={68} />
+                  <UIStack gap={1} style={{ flex: 1 }}>
+                    <Text selectable text={course.name} style={{ color: colors.text, fontSize: 18, fontWeight: "700", lineHeight: 24 }} />
+                    {course.shortName ? <Text selectable size="s" text={course.shortName} style={{ color: colors.textMuted }} /> : null}
+                  </UIStack>
+                </UIStack>
+              </Card>
+            ) : null}
+            {error ? (
+              <Card style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+                <UIStack gap={3}>
+                  <Text selectable text={error} style={{ color: colors.text, lineHeight: 20 }} />
+                  <Button label="Erneut versuchen" variant="secondary" onPress={() => void load()} />
+                </UIStack>
+              </Card>
+            ) : null}
+          </UIStack>
         }
         ListEmptyComponent={
           sections && !error ? (
-            <Text selectable style={{ color: colors.muted, paddingVertical: 28, textAlign: "center" }}>
-              Dieser Kurs enthält noch keine sichtbaren Inhalte.
-            </Text>
+            <Text
+              selectable
+              text="Dieser Kurs enthält noch keine sichtbaren Inhalte."
+              style={{ color: colors.textMuted, paddingVertical: designTokens.spacing[5], textAlign: "center" }}
+            />
           ) : null
         }
-        renderSectionHeader={({ section }) => (
-          <Text
-            selectable
-            style={{
-              color: colors.muted,
-              fontSize: 13,
-              fontWeight: "600",
-              textTransform: "uppercase",
-              letterSpacing: 0.5,
-              paddingTop: 22,
-              paddingBottom: 8,
-            }}
-          >
-            {section.name || "Abschnitt"}
-          </Text>
-        )}
-        renderItem={({ item: module }) => {
-          const resources = visibleResources(module);
-          const canOpen = resources.some((resource) => sameServerPath(resource.previewUrl ?? resource.downloadUrl)) ||
-            Boolean(module.url && /^https?:\/\//i.test(module.url));
-
+        renderSectionHeader={({ section }) => {
+          const summary = cleanCourseText(section.summary);
           return (
-            <View
-              style={{
-                gap: 10,
-                padding: 14,
-                borderRadius: 16,
-                borderCurve: "continuous",
-                backgroundColor: colors.surface,
-                marginBottom: 8,
-              }}
-            >
-              <Text selectable style={{ color: colors.text, fontSize: 16, fontWeight: "600", lineHeight: 21 }}>
-                {module.name || module.type}
-              </Text>
-              {resources.map((resource) => {
-                const size = formatFileSize(resource.size);
-                const path = sameServerPath(resource.previewUrl ?? resource.downloadUrl);
-                return (
-                  <Pressable
-                    key={resource.id ?? resource.name}
-                    disabled={!path}
-                    onPress={() => path && void WebBrowser.openBrowserAsync(studyUrl(path))}
-                    style={({ pressed }) => ({
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 10,
-                      paddingVertical: 10,
-                      paddingHorizontal: 12,
-                      borderRadius: 12,
-                      borderCurve: "continuous",
-                      backgroundColor: colors.surfaceSecondary,
-                      opacity: pressed ? 0.65 : path ? 1 : 0.55,
-                    })}
-                  >
-                    <View style={{ flex: 1, gap: 2 }}>
-                      <Text selectable numberOfLines={2} style={{ color: colors.text, fontSize: 14, fontWeight: "500" }}>
-                        {resource.name}
-                      </Text>
-                      {size ? (
-                        <Text selectable style={{ color: colors.muted, fontSize: 12 }}>
-                          {size}
-                        </Text>
-                      ) : null}
-                    </View>
-                    {path ? <Text selectable style={{ color: colors.muted, fontSize: 20 }}>›</Text> : null}
-                  </Pressable>
-                );
-              })}
-              {resources.length === 0 && canOpen ? (
-                <Pressable
-                  onPress={() => void openModule(module)}
-                  style={({ pressed }) => ({
-                    alignSelf: "flex-start",
-                    paddingVertical: 8,
-                    paddingHorizontal: 12,
-                    borderRadius: 999,
-                    backgroundColor: colors.accent,
-                    opacity: pressed ? 0.7 : 1,
+            <UIStack gap={1} style={{ paddingTop: designTokens.spacing[5], paddingBottom: designTokens.spacing[2] }}>
+              <Text selectable text={section.name || "Abschnitt"} style={{ color: colors.text, fontSize: 19, fontWeight: "700", lineHeight: 25 }} />
+              {summary ? <Text selectable text={summary} style={{ color: colors.textMuted, lineHeight: 20 }} /> : null}
+            </UIStack>
+          );
+        }}
+        renderItem={({ item: module }) => {
+          if (module.type === "label") {
+            return <LabelBlock module={module} />;
+          }
+
+          const resources = visibleResources(module);
+          const canOpenModule = Boolean(module.url && /^https?:\/\//i.test(module.url));
+
+          if (resources.length === 1) {
+            const resource = resources[0];
+            const path = sameServerPath(resource.previewUrl ?? resource.downloadUrl);
+            const size = formatFileSize(resource.size);
+            const subtitle = [
+              duplicateResourceName(module.name, resource.name) ? undefined : resource.name,
+              size,
+            ].filter(Boolean).join(" · ") || moduleTypeLabel(module.type);
+            const canOpen = Boolean(path || canOpenModule);
+
+            return (
+              <StudyListItem
+                title={module.name || resource.name}
+                subtitle={subtitle}
+                leading={<IconTile symbol={symbolFor(module, resource)} />}
+                trailing={canOpen ? <Chevron /> : undefined}
+                disabled={!canOpen}
+                onPress={() => path ? void openPath(path) : void openModule(module)}
+                style={{ marginBottom: designTokens.spacing[2] }}
+              />
+            );
+          }
+
+          if (resources.length > 1) {
+            return (
+              <Card style={{ backgroundColor: colors.surface, borderColor: colors.border, marginBottom: designTokens.spacing[2] }}>
+                <UIStack gap={3}>
+                  <Text selectable size="l" text={module.name || moduleTypeLabel(module.type)} style={{ color: colors.text, fontWeight: "700", lineHeight: 22 }} />
+                  {resources.map((resource) => {
+                    const path = sameServerPath(resource.previewUrl ?? resource.downloadUrl);
+                    const size = formatFileSize(resource.size);
+                    return (
+                      <StudyListItem
+                        key={resource.id ?? resource.name}
+                        title={resource.name}
+                        subtitle={size}
+                        leading={<IconTile symbol={symbolFor(module, resource)} />}
+                        trailing={path ? <Chevron /> : undefined}
+                        disabled={!path}
+                        onPress={() => path && void openPath(path)}
+                      />
+                    );
                   })}
-                >
-                  <Text selectable style={{ color: colors.accentText, fontSize: 13, fontWeight: "600" }}>
-                    Öffnen
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
+                </UIStack>
+              </Card>
+            );
+          }
+
+          const description = cleanCourseText(module.description);
+          return (
+            <StudyListItem
+              title={module.name || moduleTypeLabel(module.type)}
+              subtitle={description || moduleTypeLabel(module.type)}
+              leading={<IconTile symbol={symbolFor(module)} />}
+              trailing={canOpenModule ? <Chevron /> : undefined}
+              disabled={!canOpenModule}
+              onPress={() => void openModule(module)}
+              style={{ marginBottom: designTokens.spacing[2] }}
+            />
           );
         }}
       />

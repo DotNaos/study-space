@@ -78,6 +78,24 @@ export function courseImagePath(course: Pick<Course, "id" | "imageUrl">): string
   return course.imageUrl === expected ? expected : undefined;
 }
 
+
+export function cleanCourseText(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .filter((line) => !/^[\s_\-=–—·.…]{3,}$/.test(line))
+    .join("\n")
+    .trim();
+}
+
+export function duplicateResourceName(moduleName: string, fileName: string): boolean {
+  const normalize = (value: string) =>
+    value
+      .replace(/\.[a-z0-9]{1,6}$/i, "")
+      .toLocaleLowerCase("de")
+      .replace(/[^\p{L}\p{N}]/gu, "");
+  return normalize(moduleName) === normalize(fileName);
+}
+
 export function visibleResources(module: CourseModule): CourseResource[] {
   return module.resources.filter((resource) => {
     if (resource.type !== "file" || !resource.name.trim()) return false;
