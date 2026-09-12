@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
 import { ChevronDown } from "lucide-react";
 import { api, message } from "./api";
@@ -6,6 +6,7 @@ import {
   learningPath,
   type LearningState,
   type LearningVersion,
+  type LearningTarget,
 } from "./learning-api";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { SourceChips, type SourceSelection } from "./SourceViewer";
@@ -22,8 +23,10 @@ export function LearningArtifact({
   onDraft,
   onPosition,
   onSource,
+  initialTarget,
 }: {
   courseId: number;
+  initialTarget?: LearningTarget;
   version: LearningVersion;
   drafts: Record<string, string>;
   readingSectionId: string | null;
@@ -31,9 +34,24 @@ export function LearningArtifact({
   onPosition: (id: string) => void;
   onSource: (source: SourceSelection) => void;
 }) {
-  const [view, setView] = useState<"script" | "exercises">("script");
+  const [view, setView] = useState<"script" | "exercises">(initialTarget?.kind === "exercise" ? "exercises" : "script");
   const [error, setError] = useState("");
   const { contentRef, currentSectionId } = useCurrentChapter(version.sections, view === "script");
+  useEffect(() => {
+    if (initialTarget) setView(initialTarget.kind === "chapter" ? "script" : "exercises");
+  }, [initialTarget]);
+  useEffect(() => {
+    if (!initialTarget) return;
+    const wanted = initialTarget.kind === "chapter" ? "script" : "exercises";
+    if (view !== wanted) return;
+    const frame = requestAnimationFrame(() => {
+      const id = initialTarget.kind === "chapter" ? `learning-heading-${initialTarget.id}` : `exercise-heading-${initialTarget.id}`;
+      const target = document.getElementById(id);
+      target?.focus({ preventScroll: true });
+      target?.scrollIntoView({ block: "start", behavior: "instant" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [initialTarget, version.id, view]);
   async function goToSection(id: string) {
     document
       .getElementById(`learning-heading-${id}`)
@@ -134,9 +152,9 @@ export function LearningArtifact({
       ) : (
         <ol className="divide-y divide-border">
           {version.exercises.map((exercise, index) => (
-            <li key={exercise.id} className="py-6">
+            <li key={exercise.id} id={`learning-exercise-${exercise.id}`} className="py-6">
               <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-                <h3 className="text-base font-medium">
+                <h3 tabIndex={-1} id={`exercise-heading-${exercise.id}`} className="scroll-mt-24 text-base font-medium">
                   <span className="mr-2 text-sm text-text-muted/60">
                     {index + 1}
                   </span>

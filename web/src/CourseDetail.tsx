@@ -9,10 +9,11 @@ import { CourseArtwork } from "./CourseArtwork";
 import { CourseActivities } from "./CourseActivities";
 import { Loading, Notice, linkClass } from "./shared";
 import type { ResourcePreview } from "./resource-preview";
-import { useLearningCourse } from "./learning-api";
+import { useLearningCourse, type LearningTarget } from "./learning-api";
 import { useMaterialSnapshot } from "./material-api";
 import { MaterialPreparation } from "./MaterialPreparation";
 import type { SourceSelection } from "./SourceViewer";
+const ContentGraphView = lazy(() => import("./ContentGraphView").then((module) => ({ default: module.ContentGraphView })));
 const CourseArtworkEditor = lazy(() => import("./CourseArtworkEditor").then((module) => ({ default: module.CourseArtworkEditor })));
 const LearningPanel = lazy(() =>
   import("./LearningPanel").then((module) => ({
@@ -45,11 +46,12 @@ export function CourseDetail({
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<ResourcePreview>();
   const [source, setSource] = useState<SourceSelection>();
-  const [tab, setTab] = useState<"materials" | "learning">("materials");
+  const [learningTarget, setLearningTarget] = useState<LearningTarget>();
+  const [tab, setTab] = useState<"materials" | "learning" | "graph">(() => typeof window !== "undefined" && window.location.hash.startsWith("#graph") ? "graph" : "materials");
   const [tabChosen, setTabChosen] = useState(
     () =>
       typeof window !== "undefined" &&
-      window.location.hash.startsWith("#section-"),
+      (window.location.hash.startsWith("#section-") || window.location.hash.startsWith("#graph")),
   );
   const learning = useLearningCourse(course.id);
   const materials = useMaterialSnapshot(course.id);
@@ -57,6 +59,18 @@ export function CourseDetail({
     if (!tabChosen && !learning.loading)
       setTab(learning.state?.activeVersion || learning.state?.job ? "learning" : "materials");
   }, [learning.loading, learning.state?.activeVersionId, learning.state?.job?.id, tabChosen]);
+  useEffect(() => {
+    const followGraph = () => {
+      if (window.location.hash.startsWith("#graph")) { setTab("graph"); setTabChosen(true); }
+    };
+    window.addEventListener("hashchange", followGraph);
+    return () => window.removeEventListener("hashchange", followGraph);
+  }, []);
+  function chooseTab(next: "materials" | "learning" | "graph") {
+    setTab(next); setTabChosen(true); setLearningTarget(undefined);
+    if (next === "graph" || window.location.hash.startsWith("#graph"))
+      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${next === "graph" ? "#graph" : ""}`);
+  }
   const semester = courseSemester(course);
   const subtitle = courseSubtitle(course);
   const load = useCallback(async () => {
@@ -140,8 +154,7 @@ export function CourseDetail({
           label="Lernen"
           pressed={tab === "learning"}
           onPress={() => {
-            setTab("learning");
-            setTabChosen(true);
+            chooseTab("learning");
           }}
         />
         <Button
@@ -151,15 +164,21 @@ export function CourseDetail({
           label="Materialien"
           pressed={tab === "materials"}
           onPress={() => {
-            setTab("materials");
-            setTabChosen(true);
+            chooseTab("materials");
           }}
         />
+        <Button size="sm" variant="ghost" icon="git-branch" label="Graph" pressed={tab === "graph"} onPress={() => chooseTab("graph")} />
       </div>
       {!tabChosen && learning.loading ? (
         <div className="py-6">
           <Loading label="Kurs wird geöffnet …" />
         </div>
+      ) : tab === "graph" ? (
+        <Suspense fallback={<div className="py-6"><Loading label="Graph wird geöffnet …" /></div>}>
+          <ContentGraphView learning={learning} materials={materials} sections={sections} onSource={setSource}
+            onOpenLearning={(target) => { chooseTab("learning"); setLearningTarget(target); }}
+            onOpenActivity={(moduleId) => navigate(`/courses/${course.id}/activities/${moduleId}`)} />
+        </Suspense>
       ) : tab === "learning" ? (
         <Suspense
           fallback={
@@ -170,6 +189,7 @@ export function CourseDetail({
         >
           <LearningPanel
             courseId={course.id}
+            initialTarget={learningTarget}
             learning={learning}
             materials={materials}
             moodleConnected={moodleConnected}
