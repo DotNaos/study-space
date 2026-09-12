@@ -4,7 +4,12 @@ import type { LearningVersion, SourceRef } from "./learning-api";
 import type { MaterialEntry, MaterialSnapshot } from "./material-api";
 
 export type ContentKind =
-  "section" | "activity" | "resource" | "material" | "chapter" | "exercise";
+  | "section"
+  | "activity"
+  | "resource"
+  | "material"
+  | "chapter"
+  | "exercise";
 export type TraceNode = {
   id: string;
   kind: ContentKind;
@@ -273,32 +278,6 @@ export function findGraphNodes(
           .includes(term),
       ),
   );
-}
-
-/** A deterministic whole-course layout. Every node gets a position; no paging,
- * focus filtering or fabricated learning relations. Search only moves the camera. */
-export function layoutContentGraph(graph: ContentGraph) {
-  const positions = new Map<string, { x: number; y: number }>();
-  const lanes: ContentKind[][] = [
-    ["section"],
-    ["activity"],
-    ["resource", "material"],
-    ["chapter"],
-    ["exercise"],
-  ];
-  const rows = Math.max(8, Math.ceil(Math.sqrt(graph.nodes.length) * 1.4));
-  let x = 0;
-  for (const kinds of lanes) {
-    const nodes = graph.nodes.filter((node) => kinds.includes(node.kind));
-    for (const [index, node] of nodes.entries()) {
-      positions.set(node.id, {
-        x: x + Math.floor(index / rows) * 284,
-        y: (index % rows) * 84,
-      });
-    }
-    if (nodes.length) x += Math.ceil(nodes.length / rows) * 284 + 92;
-  }
-  return positions;
 }
 
 function activityLabel(module: CourseModule): string {

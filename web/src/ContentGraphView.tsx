@@ -1,15 +1,6 @@
-import { memo, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Icon, Input } from "@dotnaos/ui-base";
-import {
-  Handle,
-  Panel,
-  Position,
-  ReactFlow,
-  useReactFlow,
-  useStore,
-  type Node,
-  type NodeProps,
-} from "@xyflow/react";
+import { Panel, ReactFlow, useReactFlow, useStore } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./content-graph.css";
 import type { CourseSection } from "./api";
@@ -22,53 +13,13 @@ import {
   buildContentGraph,
   findGraphNodes,
   graphFocusFromHash,
-  layoutContentGraph,
   sourceLocations,
   kindLabel,
   type ContentGraph,
-  type TraceNode,
 } from "./content-graph";
 
-type FlowNode = Node<{ item: TraceNode }, "content">;
-const ContentNode = memo(function ContentNode({
-  data,
-  selected,
-}: NodeProps<FlowNode>) {
-  const item = data.item;
-  return (
-    <div className={`study-trace-node${selected ? " is-selected" : ""}`}>
-      <Handle type="target" position={Position.Left} isConnectable={false} />
-      <Icon
-        name={
-          item.kind === "section"
-            ? "folder-open"
-            : item.kind === "activity"
-              ? "app-window"
-              : item.kind === "chapter"
-                ? "list"
-                : item.kind === "exercise"
-                  ? "pencil-line"
-                  : "file-text"
-        }
-        size="m"
-      />
-      <div className="study-trace-node-label">
-        <span>{item.title}</span>
-        <small>
-          {item.kind === "material" ? "Materialstand" : item.subtitle}
-        </small>
-      </div>
-      {item.notice && (
-        <span className="study-trace-warning" title={item.notice}>
-          <Icon name="alert-triangle" size="s" />
-          <span className="sr-only">{item.notice}</span>
-        </span>
-      )}
-      <Handle type="source" position={Position.Right} isConnectable={false} />
-    </div>
-  );
-});
-const nodeTypes = { content: ContentNode };
+import { groupContentGraph } from "./content-graph-layout";
+import { contentGraphNodeTypes, type FlowNode } from "./ContentGraphNodes";
 
 function ViewControls({
   viewKey,
@@ -216,7 +167,7 @@ export function ContentGraphView({
     () => buildContentGraph(materials.snapshot, version, sections),
     [materials.snapshot, version, sections],
   );
-  const positions = useMemo(() => layoutContentGraph(graph), [graph]);
+  const grouped = useMemo(() => groupContentGraph(graph), [graph]);
   const [requestedId, setRequestedId] = useState(() =>
     typeof window === "undefined"
       ? undefined
@@ -250,38 +201,7 @@ export function ContentGraphView({
     return () => window.removeEventListener("hashchange", changed);
   }, []);
   const selected = graph.nodes.find((node) => node.id === requestedId);
-  const flowNodes: FlowNode[] = useMemo(
-    () =>
-      graph.nodes.map((node) => ({
-        id: node.id,
-        type: "content",
-        initialWidth: 252,
-        initialHeight: 64,
-        data: { item: node },
-        position: positions.get(node.id)!,
-        selected: node.id === requestedId,
-        ariaLabel: `${kindLabel[node.kind]}: ${node.title}${node.notice ? `. ${node.notice}` : ""}. Details mit Enter öffnen.`,
-      })),
-    [graph, positions, requestedId],
-  );
-  const flowEdges = useMemo(
-    () =>
-      graph.edges.map((edge) => ({
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        type: "default",
-        focusable: false,
-        className: `${edge.kind === "contains" ? "study-trace-structure-edge" : "study-trace-provenance-edge"}${edge.source === requestedId || edge.target === requestedId ? " study-trace-active-edge" : ""}`,
-      })),
-    [graph, requestedId],
-  );
-  const viewKey = useMemo(
-    () => graph.nodes.map((node) => node.id).join(","),
-    [graph],
-  );
-  const noticeCount = graph.nodes.filter((node) => node.notice).length;
-  function choose(id?: string) {
+  const choose = useCallback((id?: string) => {
     setRequestedId(id);
     setExplorer(undefined);
     window.history.replaceState(
@@ -289,13 +209,76 @@ export function ContentGraphView({
       "",
       `${window.location.pathname}${window.location.search}#graph${id ? `/${encodeURIComponent(id)}` : ""}`,
     );
-  }
+  }, []);
+  const relatedIds = useMemo(
+    () =>
+      new Set(
+        graph.edges
+          .filter(
+            (edge) =>
+              edge.source === requestedId || edge.target === requestedId,
+          )
+          .flatMap((edge) => [edge.source, edge.target]),
+      ),
+    [graph, requestedId],
+  );
+  const flowNodes: FlowNode[] = useMemo(
+    () => [
+      ...grouped.clusters.map((cluster) => ({
+        id: cluster.id,
+        type: "cluster" as const,
+        data: { title: cluster.title },
+        position: cluster.position,
+        style: { width: cluster.width, height: cluster.height },
+        selectable: false,
+        focusable: false,
+        zIndex: -1,
+      })),
+      ...grouped.boxes.map((box) => ({
+        id: box.id,
+        type: "contentGroup" as const,
+        parentId: box.clusterId,
+        data: { box, selectedId: requestedId, relatedIds, onChoose: choose },
+        position: box.position,
+        style: { width: box.width, height: box.height },
+        initialWidth: box.width,
+        initialHeight: box.height,
+        selectable: false,
+        focusable: false,
+        ariaLabel: `${box.title}, ${box.rows.length} Einträge`,
+      })),
+    ],
+    [grouped, requestedId, relatedIds, choose],
+  );
+  const flowEdges = useMemo(
+    () =>
+      grouped.bundles.map((bundle) => ({
+        id: bundle.id,
+        source: bundle.source,
+        target: bundle.target,
+        type: "default",
+        focusable: false,
+        selectable: false,
+        className: `${bundle.kind === "contains" ? "study-trace-structure-edge" : "study-trace-provenance-edge"}${bundle.relations.some((edge) => edge.source === requestedId || edge.target === requestedId) ? " study-trace-active-edge" : ""}`,
+      })),
+    [grouped, requestedId],
+  );
+  const viewKey = useMemo(
+    () =>
+      grouped.boxes
+        .map((box) => `${box.id}:${box.height}:${box.position.y}`)
+        .join(","),
+    [grouped],
+  );
+  const noticeCount = graph.nodes.filter((node) => node.notice).length;
   function closeDetails() {
     const element = Array.from(
-      canvas.current?.querySelectorAll<HTMLElement>(".react-flow__node") || [],
-    ).find((node) => node.dataset.id === requestedId);
+      canvas.current?.querySelectorAll<HTMLElement>("[data-trace-id]") || [],
+    ).find((node) => node.dataset.traceId === requestedId);
     choose();
-    element?.focus({ preventScroll: true });
+    element
+      ?.querySelector<HTMLButtonElement>("button")
+      ?.focus({ preventScroll: true });
   }
   const loading =
     sectionsLoading ||
@@ -396,20 +379,22 @@ export function ContentGraphView({
               onKeyDownCapture={(event) => {
                 if (event.key === "Escape") closeDetails();
                 if (event.key !== "Enter" && event.key !== " ") return;
-                const node = (event.target as HTMLElement).closest<HTMLElement>(
-                  ".react-flow__node",
+                const row = (event.target as HTMLElement).closest<HTMLElement>(
+                  "[data-trace-id]",
                 );
-                if (node?.dataset.id) {
+                if (row?.dataset.traceId) {
+                  // React Flow consumes these keys at the node boundary. Keep
+                  // the list buttons operable without selecting a whole group.
                   event.preventDefault();
                   event.stopPropagation();
-                  choose(node.dataset.id);
+                  if (!event.repeat) choose(row.dataset.traceId);
                 }
               }}
             >
               <ReactFlow<FlowNode>
                 nodes={flowNodes}
                 edges={flowEdges}
-                nodeTypes={nodeTypes}
+                nodeTypes={contentGraphNodeTypes}
                 colorMode={colorMode}
                 nodesDraggable={false}
                 nodesConnectable={false}
@@ -421,7 +406,7 @@ export function ContentGraphView({
                 zoomOnDoubleClick={false}
                 minZoom={0.025}
                 maxZoom={1.5}
-                onNodeClick={(_, node) => choose(node.id)}
+                nodesFocusable={false}
                 onPaneClick={() => choose()}
                 ariaLabelConfig={{
                   "node.a11yDescription.default":
@@ -436,7 +421,9 @@ export function ContentGraphView({
                 </Panel>
                 <ViewControls
                   viewKey={viewKey}
-                  focusId={selected?.id}
+                  focusId={
+                    selected ? grouped.itemToBox.get(selected.id) : undefined
+                  }
                   onOverview={() => choose()}
                 />
               </ReactFlow>
@@ -541,6 +528,29 @@ export function ContentGraphView({
                       />
                     )}
                 </div>
+                {relatedIds.size > 1 && (
+                  <div className="mt-5 border-t border-border pt-3">
+                    <p className="mb-2 text-xs text-text-muted">
+                      Verknüpfte Inhalte
+                    </p>
+                    <div className="study-trace-source-list">
+                      {graph.nodes
+                        .filter(
+                          (item) =>
+                            item.id !== selected.id && relatedIds.has(item.id),
+                        )
+                        .map((item) => (
+                          <Button
+                            key={item.id}
+                            variant="ghost"
+                            size="sm"
+                            label={`${kindLabel[item.kind]} · ${item.title}`}
+                            onPress={() => choose(item.id)}
+                          />
+                        ))}
+                    </div>
+                  </div>
+                )}
                 {!!references.length && (
                   <div className="mt-5 border-t border-border pt-3">
                     <p className="mb-2 text-xs text-text-muted">
@@ -589,7 +599,7 @@ export function ContentGraphView({
               {sections
                 ? `${sections.length} Moodle-Abschnitte · ${sections.reduce((count, section) => count + section.modules.length, 0)} Aktivitäten · `
                 : ""}
-              {graph.nodes.length} Knoten
+              {graph.nodes.length} Einträge · {grouped.boxes.length} Gruppen
             </span>
             <details className="study-trace-help">
               <summary aria-label="Was zeigt der Graph?">Info</summary>

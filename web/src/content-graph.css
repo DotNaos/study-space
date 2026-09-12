@@ -50,52 +50,151 @@
   outline: 2px solid var(--color-focus-ring);
   outline-offset: 4px;
 }
-.study-trace-node {
-  width: 252px;
-  height: 64px;
+.study-trace-cluster {
+  width: 100%;
+  height: 100%;
+  border: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
+  border-radius: 1rem;
+  background: color-mix(in srgb, var(--color-bg-1) 35%, transparent);
+  pointer-events: none;
+}
+.study-trace-root {
   display: flex;
   align-items: center;
-  gap: 0.7rem;
-  padding: 0.7rem 0.8rem;
+  border-radius: 0.65rem;
   border: 1px solid var(--color-border);
-  border-radius: 0.6rem;
-  background: var(--color-bg-1);
-  color: var(--color-text);
-  text-align: left;
-  cursor: pointer;
+  background: var(--color-bg-0);
 }
-.study-trace-node > svg {
-  flex-shrink: 0;
+.study-trace-root-action {
+  width: 100%;
+  padding: 0.5rem;
+}
+.study-trace-root-action button {
+  width: 100%;
+  height: auto;
+  min-height: 2.5rem;
+  white-space: normal;
+  text-align: left;
+  justify-content: flex-start;
+  font-size: 13px;
+  line-height: 18px;
+}
+.study-trace-root-action button > span {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.study-trace-root-subtitle {
+  display: block;
+  margin-left: 2.5rem;
+  font-size: 11px;
   color: var(--color-text-muted);
 }
-.study-trace-node.is-selected {
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-bg-0));
+.study-trace-root-fallback {
+  display: flex;
+  gap: 0.6rem;
+  padding: 1rem;
+  font-size: 13px;
 }
-.study-trace-node-label {
-  min-width: 0;
-  flex: 1;
+.study-trace-root-action[data-selected="true"] {
+  color: var(--color-accent);
 }
-.study-trace-node-label > span {
+.study-trace-group {
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: var(--color-bg-0);
+  color: var(--color-text);
+  overflow: hidden;
+}
+.study-trace-group-header {
+  height: 43px;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 0.875rem;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 13px;
+  font-weight: 500;
+  background: var(--color-bg-1);
+}
+.study-trace-group-header > svg {
+  color: var(--color-text-muted);
+}
+.study-trace-group-header small {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+.study-trace-group-body {
+  position: relative;
+  height: calc(100% - 43px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+  padding: 4px;
+}
+.study-trace-group-body:focus-visible {
+  outline: 2px solid var(--color-focus-ring);
+  outline-offset: -3px;
+}
+.study-trace-row {
+  height: 44px;
+  position: relative;
+  border-radius: 0.3rem;
+}
+.study-trace-row button {
+  width: 100%;
+  height: 44px;
+  min-height: 44px;
+  justify-content: flex-start;
+  text-align: left;
+  padding: 0.25rem 1.75rem 0.25rem 0.5rem;
+  white-space: normal;
+  font-size: 12px;
+  line-height: 16px;
+}
+.study-trace-row button > span {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
-  font-size: 12px;
-  line-height: 16px;
-  font-weight: 500;
 }
-.study-trace-node-label small {
-  display: block;
-  margin-top: 2px;
-  font-size: 10px;
-  line-height: 12px;
+.study-trace-row button svg {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
   color: var(--color-text-muted);
 }
-.study-trace-warning {
-  flex-shrink: 0;
+.study-trace-row.is-nested {
+  margin-left: 1.25rem;
+  border-left: 1px solid var(--color-border);
+  border-radius: 0;
+}
+.study-trace-row.is-nested button {
+  color: var(--color-text-muted);
+}
+.study-trace-row[data-related="true"] {
+  background: color-mix(in srgb, var(--color-accent) 5%, transparent);
+}
+.study-trace-row[data-selected="true"] {
+  background: color-mix(in srgb, var(--color-accent) 13%, var(--color-bg-0));
+  box-shadow: inset 2px 0 var(--color-accent);
+}
+.study-trace-row-warning {
+  position: absolute;
+  right: 0.35rem;
+  top: 15px;
+  pointer-events: none;
   color: var(--color-warning);
 }
+.study-trace-row-warning svg {
+  width: 12px;
+  height: 12px;
+}
+
 .study-content-graph .react-flow__handle {
   width: 4px;
   height: 4px;

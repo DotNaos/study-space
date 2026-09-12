@@ -1,9 +1,9 @@
+import { groupContentGraph } from "../src/content-graph-layout";
 import { expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import {
   buildContentGraph,
   findGraphNodes,
-  layoutContentGraph,
   graphFocusFromHash,
   materialNodeId,
   sourceLocations,
@@ -99,7 +99,7 @@ test("ready but unreferenced material is visible with an explicitly unknown omis
   const added = graph.nodes.find((node) => node.title === "Neu.pdf")!;
   expect(added.notice).toBe("Nicht referenziert");
   expect(added.reason).toContain("nicht dokumentiert");
-  expect(layoutContentGraph(graph).has(added.id)).toBe(true);
+  expect(groupContentGraph(graph).itemToBox.has(added.id)).toBe(true);
 });
 
 test("failed, inaccessible and pending resources remain visible without a revision", () => {
@@ -203,16 +203,13 @@ test("the whole course is laid out without pagination or isolated-node loss", ()
     ]),
     original,
   );
-  const positions = layoutContentGraph(graph);
-  expect(positions.size).toBe(graph.nodes.length);
-  expect(
-    new Set([...positions.values()].map((p) => `${p.x}:${p.y}`)).size,
-  ).toBe(graph.nodes.length);
+  const grouped = groupContentGraph(graph);
+  expect(grouped.itemToBox.size).toBe(graph.nodes.length);
   for (const edge of graph.edges) {
-    expect(positions.has(edge.source)).toBe(true);
-    expect(positions.has(edge.target)).toBe(true);
+    expect(grouped.itemToBox.has(edge.source)).toBe(true);
+    expect(grouped.itemToBox.has(edge.target)).toBe(true);
   }
-  expect(layoutContentGraph(graph)).toEqual(positions);
+  expect(groupContentGraph(graph)).toEqual(grouped);
 });
 
 test("search includes gaps, chapter and task nodes, full names and accents", () => {
@@ -325,7 +322,7 @@ test("all live Moodle sections, activities and resources appear before any prepa
   expect(
     graph.edges.every((e) => e.kind === "contains" && !e.references.length),
   ).toBe(true);
-  expect(layoutContentGraph(graph).size).toBe(5);
+  expect(groupContentGraph(graph).itemToBox.size).toBe(5);
 });
 
 test("new uploads, unknown activity types and extra files appear with the old material snapshot", () => {
@@ -396,11 +393,11 @@ test("selection and search never prune the canvas and provider data is independe
     new URL("../src/ContentGraphView.tsx", import.meta.url),
     "utf8",
   );
-  expect(source).toContain("layoutContentGraph");
+  expect(source).toContain("groupContentGraph");
   expect(source).not.toContain("graphNeighbourhood");
   expect(source).not.toContain("pageSize");
   expect(source).not.toContain("setPage");
-  expect(source).toContain("graph.nodes.map");
+  expect(source).toContain("grouped.boxes.map");
   expect(source).toContain("Gesamten Kurs anzeigen");
   const graph = buildContentGraph(undefined, version(), liveSections());
   expect(graph.nodes.some((n) => n.kind === "activity")).toBe(true);
