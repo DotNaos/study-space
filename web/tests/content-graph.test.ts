@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import {
   buildContentGraph,
   findGraphNodes,
-  graphNeighbourhood,
+  layoutContentGraph,
   graphFocusFromHash,
   materialNodeId,
   sourceLocations,
@@ -99,7 +99,7 @@ test("ready but unreferenced material is visible with an explicitly unknown omis
   const added = graph.nodes.find((node) => node.title === "Neu.pdf")!;
   expect(added.notice).toBe("Nicht referenziert");
   expect(added.reason).toContain("nicht dokumentiert");
-  expect(graphNeighbourhood(graph, added.id).nodes).toEqual([added]);
+  expect(layoutContentGraph(graph).has(added.id)).toBe(true);
 });
 
 test("failed, inaccessible and pending resources remain visible without a revision", () => {
@@ -190,30 +190,29 @@ test("a course without a generated version still exposes all material outcomes",
   expect(buildContentGraph(snapshot([])).nodes).toEqual([]);
 });
 
-test("large neighbourhoods are explicitly paged and every connection is reachable", () => {
+test("the whole course is laid out without pagination or isolated-node loss", () => {
   const original = version();
-  original.sections = Array.from({ length: 31 }, (_, index) => ({
+  original.sections = Array.from({ length: 100 }, (_, i) => ({
     ...original.sections[0],
-    id: `chapter-${index}`,
-    title: `Kapitel ${index}`,
+    id: `chapter-${i}`,
   }));
-  const graph = buildContentGraph(snapshot(), original);
-  const focus = materialNodeId(materialId, revision);
-  const first = graphNeighbourhood(graph, focus);
-  expect(first.total).toBe(32);
-  expect(first.pages).toBe(4);
-  expect(first.nodes).toHaveLength(9);
-  const seen = new Set(
-    Array.from(
-      { length: first.pages },
-      (_, page) => graphNeighbourhood(graph, focus, page).edges,
-    )
-      .flat()
-      .map((edge) => edge.id),
+  const graph = buildContentGraph(
+    snapshot([
+      material(),
+      material({ id: "c".repeat(64), name: "Unlinked.pdf" }),
+    ]),
+    original,
   );
-  expect(seen.size).toBe(32);
-  expect(graphNeighbourhood(graph, focus, 999).page).toBe(3);
-  expect(graphNeighbourhood(graph, focus, 0, 1).nodes).toHaveLength(2);
+  const positions = layoutContentGraph(graph);
+  expect(positions.size).toBe(graph.nodes.length);
+  expect(
+    new Set([...positions.values()].map((p) => `${p.x}:${p.y}`)).size,
+  ).toBe(graph.nodes.length);
+  for (const edge of graph.edges) {
+    expect(positions.has(edge.source)).toBe(true);
+    expect(positions.has(edge.target)).toBe(true);
+  }
+  expect(layoutContentGraph(graph)).toEqual(positions);
 });
 
 test("search includes gaps, chapter and task nodes, full names and accents", () => {
@@ -242,7 +241,7 @@ test("graph uses shared controls, lazy loading, tokens and no dashboard extras o
   expect(view).toContain('from "@dotnaos/ui-base"');
   expect(view).not.toContain("MiniMap");
   expect(view).not.toContain("<Background");
-  expect(view).toContain("Ohne hinterlegten Kapitelplan");
+  expect(view).toContain("erwartete, nie erstellte Kapitel");
   expect(view).not.toContain('method: "POST"');
   expect(view).not.toContain('method: "PUT"');
   expect(read("CourseDetail.tsx")).toContain(
@@ -266,4 +265,148 @@ test("source location links group blocks on a page but never merge different rev
       { ...ref, page: null, blockId: "block-3" },
     ]),
   ).toHaveLength(1);
+});
+
+const liveSections = () => [
+  {
+    id: 1,
+    name: "Grundlagen",
+    summary: "Kursinformationen",
+    modules: [
+      {
+        id: 2,
+        name: "Vorlesung",
+        type: "resource",
+        url: null,
+        description: "Neue Beschreibung",
+        resources: [
+          {
+            id: "file-id",
+            name: "Folien.pdf",
+            type: "file",
+            mimeType: "application/pdf",
+            size: 500,
+            modifiedAt: 1,
+            url: null,
+          },
+        ],
+      },
+      {
+        id: 3,
+        name: "Ankündigungen",
+        type: "forum",
+        url: null,
+        description: "",
+        resources: [],
+      },
+    ],
+  },
+  { id: 4, name: "Noch leer", summary: "Kommt später", modules: [] },
+];
+
+test("all live Moodle sections, activities and resources appear before any preparation", () => {
+  const graph = buildContentGraph(undefined, undefined, liveSections());
+  expect(graph.nodes.map((n) => n.kind)).toEqual([
+    "section",
+    "activity",
+    "resource",
+    "activity",
+    "section",
+  ]);
+  expect(graph.nodes.find((n) => n.id === "section:4")?.title).toBe(
+    "Noch leer",
+  );
+  expect(graph.nodes.find((n) => n.id === "activity:3")?.notice).toBe(
+    "Noch nicht erfasst",
+  );
+  expect(graph.nodes.find((n) => n.id === "activity:2")?.description).toBe(
+    "Neue Beschreibung",
+  );
+  expect(
+    graph.edges.every((e) => e.kind === "contains" && !e.references.length),
+  ).toBe(true);
+  expect(layoutContentGraph(graph).size).toBe(5);
+});
+
+test("new uploads, unknown activity types and extra files appear with the old material snapshot", () => {
+  const sections = liveSections();
+  sections[0].modules[0].resources.push({
+    ...sections[0].modules[0].resources[0],
+    id: "new-file",
+    name: "Neu.pdf",
+  });
+  sections[0].modules.push({
+    id: 9,
+    name: "Interaktives Werkzeug",
+    type: "custom-plugin",
+    url: null,
+    description: "",
+    resources: [],
+  });
+  const graph = buildContentGraph(snapshot(), version(), sections);
+  expect(graph.nodes.find((n) => n.title === "Neu.pdf")?.kind).toBe("resource");
+  expect(graph.nodes.find((n) => n.id === "activity:9")?.notice).toBe(
+    "Noch nicht erfasst",
+  );
+  expect(graph.nodes.filter((n) => n.kind === "section")).toHaveLength(2);
+  expect(graph.nodes.filter((n) => n.kind === "activity")).toHaveLength(3);
+  expect(graph.nodes.filter((n) => n.kind === "resource")).toHaveLength(2);
+  expect(graph.nodes.filter((n) => n.kind === "material")).toHaveLength(1);
+  expect(graph.edges.filter((e) => e.kind === "provenance")).toHaveLength(2);
+  expect(
+    graph.edges.find(
+      (e) =>
+        e.source === "activity:2" &&
+        e.target === materialNodeId(materialId, revision),
+    )?.kind,
+  ).toBe("contains");
+});
+
+test("identical names do not conflate live resources or imply identical prepared revisions", () => {
+  const sections = liveSections();
+  sections[0].modules[0].resources.push({
+    ...sections[0].modules[0].resources[0],
+    id: "different-id",
+  });
+  const graph = buildContentGraph(snapshot(), version(), sections);
+  const resources = graph.nodes.filter((n) => n.kind === "resource");
+  expect(resources).toHaveLength(2);
+  expect(new Set(resources.map((n) => n.id)).size).toBe(2);
+  expect(resources.every((n) => !n.revision && !n.materialId)).toBe(true);
+  expect(
+    graph.edges
+      .filter((e) => e.kind === "provenance")
+      .every((e) => e.source === materialNodeId(materialId, revision)),
+  ).toBe(true);
+});
+
+test("missing raw resource IDs retain every occurrence", () => {
+  const sections = liveSections();
+  sections[0].modules[0].resources = [
+    { ...sections[0].modules[0].resources[0], id: "" },
+    { ...sections[0].modules[0].resources[0], id: "" },
+  ];
+  const graph = buildContentGraph(undefined, undefined, sections);
+  expect(new Set(graph.nodes.map((n) => n.id)).size).toBe(graph.nodes.length);
+  expect(graph.nodes.filter((n) => n.kind === "resource")).toHaveLength(2);
+});
+
+test("selection and search never prune the canvas and provider data is independent of generation", () => {
+  const source = readFileSync(
+    new URL("../src/ContentGraphView.tsx", import.meta.url),
+    "utf8",
+  );
+  expect(source).toContain("layoutContentGraph");
+  expect(source).not.toContain("graphNeighbourhood");
+  expect(source).not.toContain("pageSize");
+  expect(source).not.toContain("setPage");
+  expect(source).toContain("graph.nodes.map");
+  expect(source).toContain("Gesamten Kurs anzeigen");
+  const graph = buildContentGraph(undefined, version(), liveSections());
+  expect(graph.nodes.some((n) => n.kind === "activity")).toBe(true);
+  expect(graph.nodes.some((n) => n.kind === "chapter")).toBe(true);
+  const before = JSON.stringify(graph);
+  findGraphNodes(graph, "Vorlesung");
+  findGraphNodes(graph, "", true);
+  expect(JSON.stringify(graph)).toBe(before);
 });

@@ -32,7 +32,7 @@
   grid-template-columns: minmax(0, 1fr) 16rem;
 }
 .study-trace-canvas {
-  height: clamp(25rem, 59dvh, 39rem);
+  height: clamp(30rem, 65dvh, 48rem);
   min-width: 0;
 }
 .study-content-graph .react-flow {
@@ -125,7 +125,7 @@
   padding: 1rem;
   border-left: 1px solid var(--color-border);
   overflow-y: auto;
-  max-height: 39rem;
+  max-height: 48rem;
 }
 .study-trace-footer {
   display: flex;
@@ -195,7 +195,7 @@
     grid-template-columns: minmax(0, 1fr);
   }
   .study-trace-canvas {
-    height: 25rem;
+    height: 32rem;
   }
   .study-trace-inspector {
     border-left: 0;
@@ -205,4 +205,15 @@
   .study-trace-picker {
     max-width: 60%;
   }
+}
+
+/* Hierarchy is not evidence that the learning content covers a source. */
+.study-content-graph .study-trace-structure-edge .react-flow__edge-path {
+  stroke-dasharray: 4 5;
+}
+.study-content-graph .study-trace-provenance-edge .react-flow__edge-path {
+  opacity: 0.65;
+}
+.study-content-graph .study-trace-active-edge .react-flow__edge-path {
+  opacity: 1;
 }

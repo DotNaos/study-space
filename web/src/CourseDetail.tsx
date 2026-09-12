@@ -73,9 +73,9 @@ export function CourseDetail({
   }
   const semester = courseSemester(course);
   const subtitle = courseSubtitle(course);
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserve = false) => {
     setError("");
-    setSections(undefined);
+    if (!preserve) setSections(undefined);
     if (!moodleConnected) return;
     try {
       setSections(
@@ -107,7 +107,7 @@ export function CourseDetail({
   const sectionName = (section: CourseSection, index: number) =>
     cleanCourseText(section.name) || `Abschnitt ${index + 1}`;
   return (
-    <div data-learning-course className="max-w-5xl">
+    <div data-learning-course className={tab === "graph" ? "min-w-0" : "max-w-5xl"}>
       <AppLink
         navigate={navigate}
         href="/courses"
@@ -176,8 +176,9 @@ export function CourseDetail({
       ) : tab === "graph" ? (
         <Suspense fallback={<div className="py-6"><Loading label="Graph wird geöffnet …" /></div>}>
           <ContentGraphView learning={learning} materials={materials} sections={sections} onSource={setSource}
+            sectionsError={error} sectionsLoading={moodleConnected && !sections && !error} moodleConnected={moodleConnected} onRefresh={() => void load(true)}
             onOpenLearning={(target) => { chooseTab("learning"); setLearningTarget(target); }}
-            onOpenActivity={(moduleId) => navigate(`/courses/${course.id}/activities/${moduleId}`)} />
+            onOpenActivity={(moduleId, resourceId) => navigate(`/courses/${course.id}/activities/${moduleId}${resourceId ? `?resource=${encodeURIComponent(resourceId)}` : ""}`)} />
         </Suspense>
       ) : tab === "learning" ? (
         <Suspense

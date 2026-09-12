@@ -1,9 +1,10 @@
-import type { CourseSection } from "./api";
+import type { CourseModule, CourseResource, CourseSection } from "./api";
 import { cleanCourseText } from "./course-content";
 import type { LearningVersion, SourceRef } from "./learning-api";
 import type { MaterialEntry, MaterialSnapshot } from "./material-api";
 
-export type ContentKind = "material" | "chapter" | "exercise";
+export type ContentKind =
+  "section" | "activity" | "resource" | "material" | "chapter" | "exercise";
 export type TraceNode = {
   id: string;
   kind: ContentKind;
@@ -15,15 +16,23 @@ export type TraceNode = {
   materialId?: string;
   revision?: string;
   contentId?: string;
+  sectionId?: number;
+  moduleId?: number;
+  description?: string;
+  resource?: CourseResource;
 };
 export type TraceEdge = {
   id: string;
   source: string;
   target: string;
   references: SourceRef[];
+  kind: "contains" | "provenance";
 };
 export type ContentGraph = { nodes: TraceNode[]; edges: TraceEdge[] };
 export const kindLabel = {
+  section: "Moodle-Abschnitt",
+  activity: "Moodle-Aktivität",
+  resource: "Moodle-Ressource",
   material: "Material",
   chapter: "Kapitel",
   exercise: "Aufgabe",
@@ -33,14 +42,14 @@ export const materialNodeId = (id: string, revision?: string | null) =>
 
 /** A relation records provenance only, never semantic coverage or an inferred task/chapter relation. */
 export function buildContentGraph(
-  snapshot: MaterialSnapshot,
+  snapshot?: MaterialSnapshot,
   version?: LearningVersion | null,
   sections: CourseSection[] = [],
 ): ContentGraph {
   const nodes = new Map<string, TraceNode>();
   const edges = new Map<string, TraceEdge>();
   const materials = new Map(
-    snapshot.materials.map((material) => [material.id, material]),
+    (snapshot?.materials ?? []).map((material) => [material.id, material]),
   );
   const moduleNames = new Map(
     sections.flatMap((section) =>
@@ -107,12 +116,14 @@ export function buildContentGraph(
       reason,
       material,
       materialId,
+      moduleId: material?.moduleId ?? undefined,
+      sectionId: material?.sectionId,
       revision: revision || undefined,
     };
     nodes.set(id, node);
     return node;
   }
-  for (const material of snapshot.materials)
+  for (const material of snapshot?.materials ?? [])
     sourceNode(material.id, material.revision);
 
   function addContent(
@@ -141,6 +152,7 @@ export function buildContentGraph(
         source: source.id,
         target: id,
         references: [],
+        kind: "provenance",
       };
       if (
         !edge.references.some(
@@ -171,6 +183,74 @@ export function buildContentGraph(
         : "Es gibt noch keine aktive Lernversion. Dieses Material bleibt sichtbar, auch ohne daraus erzeugten Lerninhalt.";
     }
   }
+  function contains(parent: string, child: string) {
+    const id = `contains:${parent}->${child}`;
+    edges.set(id, {
+      id,
+      source: parent,
+      target: child,
+      kind: "contains",
+      references: [],
+    });
+  }
+  // The provider inventory is independent of material preparation and generation.
+  // Even empty sections, labels, unsupported activities and new uploads get nodes.
+  for (const [sectionIndex, section] of sections.entries()) {
+    const sectionId = `section:${section.id}`;
+    nodes.set(sectionId, {
+      id: sectionId,
+      kind: "section",
+      sectionId: section.id,
+      title: cleanCourseText(section.name) || `Abschnitt ${sectionIndex + 1}`,
+      subtitle: `${section.modules.length} Aktivitäten`,
+      description: cleanCourseText(section.summary),
+      notice: null,
+      reason: "Abschnitt der von Moodle gelieferten Kursstruktur.",
+    });
+    for (const module of section.modules) {
+      const moduleId = `activity:${module.id}`;
+      const prepared = [...nodes.values()].filter(
+        (node) => node.kind === "material" && node.moduleId === module.id,
+      );
+      nodes.set(moduleId, {
+        id: moduleId,
+        kind: "activity",
+        sectionId: section.id,
+        moduleId: module.id,
+        title: cleanCourseText(module.name) || `Aktivität ${module.id}`,
+        subtitle: activityLabel(module),
+        description: cleanCourseText(module.description),
+        notice: prepared.length ? null : "Noch nicht erfasst",
+        reason: prepared.length
+          ? "Die Verbindung zum Material zeigt dieselbe Moodle-Aktivität, nicht identische Dateifassungen."
+          : "Diese Moodle-Aktivität ist im Graph sichtbar, aber noch nicht im aufbereiteten Materialstand. Ihre Inhalte wurden noch nicht mit dem Lernskript abgeglichen.",
+      });
+      contains(sectionId, moduleId);
+      // Provider resource IDs change with revisions. Do not guess equivalence with
+      // prepared material IDs from a matching filename or imply up-to-date coverage.
+      const occurrences = new Map<string, number>();
+      for (const resource of module.resources) {
+        const key = resource.id || `${resource.type}:${resource.name}`;
+        const occurrence = occurrences.get(key) || 0;
+        occurrences.set(key, occurrence + 1);
+        const id = `resource:${module.id}:${encodeURIComponent(key)}:${occurrence}`;
+        nodes.set(id, {
+          id,
+          kind: "resource",
+          sectionId: section.id,
+          moduleId: module.id,
+          resource,
+          title: resource.name || "Moodle-Ressource",
+          subtitle: "Moodle · " + (resource.mimeType || resource.type),
+          notice: null,
+          reason:
+            "Ressource aus der aktuellen Kursstruktur. Ein Aufbereitungsstand oder eine identische gespeicherte Fassung lässt sich daraus allein nicht ableiten.",
+        });
+        contains(moduleId, id);
+      }
+      for (const material of prepared) contains(moduleId, material.id);
+    }
+  }
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
@@ -195,36 +275,48 @@ export function findGraphNodes(
   );
 }
 
-/** Keep the canvas readable without losing access to any neighbour. Paging is explicit in the UI. */
-export function graphNeighbourhood(
-  graph: ContentGraph,
-  focusId: string,
-  page = 0,
-  pageSize = 8,
-) {
-  const focus = graph.nodes.find((node) => node.id === focusId);
-  const incident = graph.edges.filter(
-    (edge) => edge.source === focusId || edge.target === focusId,
-  );
-  const neighbours = new Set(
-    incident.map((edge) =>
-      edge.source === focusId ? edge.target : edge.source,
-    ),
-  );
-  const all = graph.nodes.filter((node) => neighbours.has(node.id));
-  const pages = Math.max(1, Math.ceil(all.length / pageSize));
-  const safePage = Math.min(Math.max(0, page), pages - 1);
-  const visible = all.slice(safePage * pageSize, (safePage + 1) * pageSize);
-  const ids = new Set([focusId, ...visible.map((node) => node.id)]);
-  return {
-    nodes: focus ? [focus, ...visible] : [],
-    edges: incident.filter(
-      (edge) => ids.has(edge.source) && ids.has(edge.target),
-    ),
-    total: all.length,
-    page: safePage,
-    pages,
+/** A deterministic whole-course layout. Every node gets a position; no paging,
+ * focus filtering or fabricated learning relations. Search only moves the camera. */
+export function layoutContentGraph(graph: ContentGraph) {
+  const positions = new Map<string, { x: number; y: number }>();
+  const lanes: ContentKind[][] = [
+    ["section"],
+    ["activity"],
+    ["resource", "material"],
+    ["chapter"],
+    ["exercise"],
+  ];
+  const rows = Math.max(8, Math.ceil(Math.sqrt(graph.nodes.length) * 1.4));
+  let x = 0;
+  for (const kinds of lanes) {
+    const nodes = graph.nodes.filter((node) => kinds.includes(node.kind));
+    for (const [index, node] of nodes.entries()) {
+      positions.set(node.id, {
+        x: x + Math.floor(index / rows) * 284,
+        y: (index % rows) * 84,
+      });
+    }
+    if (nodes.length) x += Math.ceil(nodes.length / rows) * 284 + 92;
+  }
+  return positions;
+}
+
+function activityLabel(module: CourseModule): string {
+  const labels: Record<string, string> = {
+    page: "Seite",
+    label: "Text",
+    resource: "Datei",
+    folder: "Ordner",
+    url: "Link",
+    forum: "Forum",
+    assign: "Abgabe",
+    quiz: "Test",
+    book: "Buch",
+    lesson: "Lektion",
+    h5pactivity: "Interaktiver Inhalt",
+    subsection: "Unterabschnitt",
   };
+  return labels[module.type] || module.type || "Moodle-Aktivität";
 }
 
 export function graphFocusFromHash(hash: string): string | undefined {
