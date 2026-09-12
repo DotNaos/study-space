@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
+import { AppLink, activityPath, type Navigate } from "./navigation";
 import { Icon as LibraryIcon } from "@dotnaos/ui-base";
 import {
   ArrowUpRight,
+  ChevronRight,
   FileText,
   FolderOpen,
   Link2,
@@ -27,6 +29,8 @@ import {
   type ResourceAction,
   type ResourcePreview,
 } from "./resource-preview";
+
+type ActivityAction = ResourceAction | { kind: "activity"; href: string };
 
 function activityIcon(type: string) {
   switch (type) {
@@ -56,12 +60,21 @@ function RowAction({
   label,
   children,
   onPreview,
+  navigate,
 }: {
-  action: ResourceAction;
+  action: ActivityAction;
   label: string;
   children: ReactNode;
-  onPreview: (preview: ResourcePreview) => void;
+  onPreview?: (preview: ResourcePreview) => void;
+  navigate?: Navigate;
 }) {
+  if (action.kind === "activity" && navigate)
+    return (
+      <AppLink navigate={navigate} href={action.href} className={rowClass}
+        aria-label={`${label} – in Study Space öffnen`}>
+        {children}
+      </AppLink>
+    );
   if (action.kind === "preview")
     return (
       <button
@@ -70,7 +83,7 @@ function RowAction({
         aria-label={`${label} – Vorschau öffnen`}
         onClick={(event) => {
           event.currentTarget.focus({ preventScroll: true });
-          onPreview(action.preview);
+          onPreview?.(action.preview);
         }}
       >
         {children}
@@ -109,9 +122,11 @@ function RowAction({
     </div>
   );
 }
-function ActionIcon({ action }: { action: ResourceAction }) {
+function ActionIcon({ action }: { action: ActivityAction }) {
   const Icon =
-    action.kind === "preview"
+    action.kind === "activity"
+      ? ChevronRight
+      : action.kind === "preview"
       ? Expand
       : action.kind === "download"
         ? Download
@@ -133,7 +148,7 @@ function ResourceMeta({
 }: {
   resource: CourseResource;
   showName: boolean;
-  action: ResourceAction;
+  action: ActivityAction;
 }) {
   const extension =
     resource.name.match(/\.([a-z0-9]{1,6})$/i)?.[1].toUpperCase() || "Datei";
@@ -157,10 +172,12 @@ export function CourseActivities({
   courseId,
   modules,
   onPreview,
+  navigate,
 }: {
   courseId: number;
   modules: CourseModule[];
-  onPreview: (preview: ResourcePreview) => void;
+  onPreview?: (preview: ResourcePreview) => void;
+  navigate?: Navigate;
 }) {
   const visible = modules.filter(visibleModule);
   if (!visible.length)
@@ -192,7 +209,9 @@ export function CourseActivities({
           module.type === "resource" && resources.length === 1
             ? resources[0]
             : undefined;
-        const action: ResourceAction = single
+        const action: ActivityAction = navigate
+          ? { kind: "activity", href: activityPath(courseId, module.id) }
+          : single
           ? resourceAction(courseId, module, single)
           : url
             ? { kind: "moodle", href: url }
@@ -200,7 +219,7 @@ export function CourseActivities({
         const label = name || single?.name || "Aktivität";
         return (
           <li key={module.id}>
-            <RowAction action={action} label={label} onPreview={onPreview}>
+            <RowAction action={action} label={label} onPreview={onPreview} navigate={navigate}>
               <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center text-text-muted">
                 {single ? <LibraryIcon.File filename={single.name} size={22} /> : <Icon size={17} strokeWidth={1.7} aria-hidden="true" />}
               </span>
@@ -226,13 +245,16 @@ export function CourseActivities({
             {!single && resources.length > 0 && (
               <ul className="mb-1 ml-8">
                 {resources.map((resource, index) => {
-                  const fileAction = resourceAction(courseId, module, resource);
+                  const fileAction: ActivityAction = navigate && resource.id
+                    ? { kind: "activity", href: activityPath(courseId, module.id, resource.id) }
+                    : resourceAction(courseId, module, resource);
                   return (
                     <li key={resource.id || `${resource.name}-${index}`}>
                       <RowAction
                         action={fileAction}
                         label={resource.name}
                         onPreview={onPreview}
+                        navigate={navigate}
                       >
                         <LibraryIcon.File filename={resource.name} size={20} className="mt-0.5 shrink-0" />
                         <span className="min-w-0 flex-1">

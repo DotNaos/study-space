@@ -54,3 +54,13 @@ This checkpoint supports browser SSO through the browser's registered `web+study
 - `courses` returns an array of `{id:number,name:string,shortName:string,summary:string,imageUrl:string|null,startDate:number|null,endDate:number|null}`. Dates are upstream Unix seconds when present; they do not establish a semester. Summaries and descriptions are converted to plain text on the server and must never be rendered as raw HTML.
 - Course browsing groups only explicit HS/FS year labels from course names or short names, newest first. Missing or conflicting semester labels remain under **Allgemein**. Search spans the groups. Course details show section navigation, activity-specific icons and actual file metadata; link-only metadata and decorative punctuation labels do not become duplicate file rows.
 - Runtime tokens and Data Protection key material live exclusively below `STUDY_PRIVATE_DIR`; app database/general backups contain no token. A restore intentionally requires reconnecting Moodle unless the private directory is recovered separately.
+
+## Activity deep links (#52)
+
+- `/courses/{courseId}/activities/{moduleId}` addresses the existing course-module identity, not a title, assignment ID or array position. Existing `/courses/{courseId}` links remain valid.
+- `?resource={resourceId}` selects an exact file within the activity. Missing resources, duplicate/invalid selectors, inaccessible activities and expired connections produce explicit states; they never silently open another file.
+- Assignment activities show read-only task data from the existing task API. Materials in the same course section remain separate from actual assignment attachments.
+- Single-file PDF/image activities open the existing `ResourceViewer`; multiple files have an explicit file list. Unsupported formats retain a download state. No new renderer, submission or upload endpoint is introduced.
+- Links are ordinary anchors with client-side navigation. Fresh tabs, reload, Back/Forward and resource-only URL changes retain their target. Closing a file returns to the activity file list or its course section; section anchors resolve after asynchronous loading.
+- GET course, course-content, task and prepared-material responses include optional `study_url` fields. `StudyLinks` derives these from configured `STUDY_PUBLIC_URL`, never request headers, provider URLs or credentials. The configured address must be an HTTP(S) origin; unsafe configuration or invalid identities result in a null link.
+- Resource metadata links select their resource ID. Prepared-material links address their source activity, not an immutable imported revision. Existing file/preview API paths are unchanged.

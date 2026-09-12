@@ -5,9 +5,17 @@ namespace StudySpace.Api.Providers.Moodle;
 
 public sealed record CourseSection(long Id, string Name, string Summary, CourseModule[] Modules);
 public sealed record CourseModule(long Id, string Name, string Type, string? Url, string Description, CourseResource[] Resources,
-    long? SubsectionId = null);
+    long? SubsectionId = null)
+{
+    [System.Text.Json.Serialization.JsonPropertyName("study_url")]
+    public string? StudyUrl { get; init; }
+}
 public sealed record CourseResource(string Type, string Name, string? MimeType, long? Size, long? ModifiedAt, string? Url,
-    string? Id = null, string? PreviewUrl = null, string? DownloadUrl = null, string? PreviewKind = null);
+    string? Id = null, string? PreviewUrl = null, string? DownloadUrl = null, string? PreviewKind = null)
+{
+    [System.Text.Json.Serialization.JsonPropertyName("study_url")]
+    public string? StudyUrl { get; init; }
+}
 
 public static class MoodleCourseContents
 {

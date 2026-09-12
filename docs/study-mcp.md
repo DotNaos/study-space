@@ -29,3 +29,9 @@ Solutions and personal answer drafts are omitted by `study_learning` unless the 
 ## Purpose
 
 This MCP is the assistant-facing study interface. Moodle remains a source provider and Study Space remains the canonical local store for imported sources, generated learning content, exercise state, and source anchors. An assistant can therefore answer questions, solve or prepare exercises, and explain source material with its own model even when the Study Space Codex runtime is signed out or usage-limited.
+
+## Canonical Study Space links
+
+`study_courses`, `study_course`, `study_tasks` and `study_materials` preserve the API's optional `study_url` fields. `study_course` includes activity and exact resource links; `study_tasks` includes task and related-material links. Source hits in `study_search` link to the prepared material's source activity. Generated learning sections/exercises without an activity target do not receive a guessed activity URL. Existing `study_file`/native document transport is unchanged.
+
+Example task path: `/courses/23691/activities/1015573`. Exact file selection uses `/courses/{courseId}/activities/{moduleId}?resource={resourceId}`. Links use the installation's configured public origin and only work from a client with access to that installation. They do not grant additional access.

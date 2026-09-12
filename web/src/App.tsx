@@ -200,6 +200,8 @@ export function App() {
             <CoursesView
               connection={connection}
               courseId={route.courseId}
+              moduleId={route.moduleId}
+              resourceId={route.resourceId}
               navigate={navigate}
             />
           ) : (
