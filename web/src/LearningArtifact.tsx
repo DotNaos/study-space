@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@dotnaos/ui-base";
-import { BookOpen, ChevronDown, PencilLine } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import { api, message } from "./api";
 import {
   learningPath,
@@ -64,25 +64,22 @@ export function LearningArtifact({
           aria-label="Lerninhalt"
           className="flex items-center gap-1"
         >
-          <button
-            type="button"
-            aria-pressed={view === "script"}
-            onClick={() => setView("script")}
-            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${view === "script" ? "bg-bg-1 font-medium" : "text-text-muted hover:text-text"}`}
-          >
-            <BookOpen size={15} /> Lernskript
-          </button>
-          <button
-            type="button"
-            aria-pressed={view === "exercises"}
-            onClick={() => setView("exercises")}
-            className={`flex items-center gap-2 rounded-md px-3 py-2 text-sm ${view === "exercises" ? "bg-bg-1 font-medium" : "text-text-muted hover:text-text"}`}
-          >
-            <PencilLine size={15} /> Übungen{" "}
-            <span className="text-xs text-text-muted">
-              {version.exercises.length}
-            </span>
-          </button>
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="file-text"
+            label="Lernskript"
+            pressed={view === "script"}
+            onPress={() => setView("script")}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            icon="pencil-line"
+            label={`Übungen ${version.exercises.length}`}
+            pressed={view === "exercises"}
+            onPress={() => setView("exercises")}
+          />
         </div>
         {view === "script" && selectedSection && (
           <Button

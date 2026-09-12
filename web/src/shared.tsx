@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react";
+import { Container, Icon, Spinner, Text } from "@dotnaos/ui-base";
 
 export function Notice({
   children,
@@ -7,31 +7,37 @@ export function Notice({
   children: React.ReactNode;
   success?: boolean;
 }) {
-  const Icon = success ? CheckCircle2 : AlertCircle;
   return (
-    <div
+    <Container
       role={success ? "status" : "alert"}
-      className={`flex items-start gap-3 rounded-lg border px-4 py-3 text-sm leading-6 ${success ? "border-success/25 bg-success/5 text-success" : "border-danger/25 bg-danger/5 text-danger"}`}
+      surface="panel"
+      tone={success ? "success" : "danger"}
+      padding={3}
+      className="flex items-start gap-3 text-sm leading-6"
     >
-      <Icon size={18} className="mt-1 shrink-0" aria-hidden="true" />
-      <div>{children}</div>
-    </div>
+      <Icon
+        name={success ? "check-circle" : "alert-circle"}
+        size="m"
+        color={success ? "success" : "danger"}
+        className="mt-0.5 shrink-0"
+      />
+      <div className="min-w-0 flex-1">{children}</div>
+    </Container>
   );
 }
 
 export function Loading({ label = "Wird geladen …" }: { label?: string }) {
   return (
-    <div
+    <Container.Stack
       role="status"
-      className="flex items-center gap-2 text-sm text-text-muted"
+      direction="horizontal"
+      align="center"
+      gap={2}
+      part="unstyled"
     >
-      <Loader2
-        size={16}
-        className="motion-safe:animate-spin"
-        aria-hidden="true"
-      />
-      {label}
-    </div>
+      <Spinner size="s" />
+      <Text text={label} size="m" color="muted" />
+    </Container.Stack>
   );
 }
 

@@ -1,20 +1,6 @@
 import type { ReactNode } from "react";
 import { AppLink, activityPath, type Navigate } from "./navigation";
-import { Icon as LibraryIcon } from "@dotnaos/ui-base";
-import {
-  ArrowUpRight,
-  ChevronRight,
-  FileText,
-  FolderOpen,
-  Link2,
-  ListChecks,
-  MessageSquare,
-  BookOpen,
-  Video,
-  ClipboardList,
-  Download,
-  Expand,
-} from "lucide-react";
+import { Icon, type IconName } from "@dotnaos/ui-base";
 import { safeWebUrl, type CourseModule, type CourseResource } from "./api";
 import {
   cleanCourseText,
@@ -32,25 +18,25 @@ import {
 
 type ActivityAction = ResourceAction | { kind: "activity"; href: string };
 
-function activityIcon(type: string) {
+function activityIcon(type: string): IconName {
   switch (type) {
     case "folder":
-      return FolderOpen;
+      return "folder-open";
     case "url":
-      return Link2;
+      return "globe";
     case "quiz":
-      return ListChecks;
+      return "list";
     case "assign":
-      return ClipboardList;
+      return "clipboard";
     case "forum":
-      return MessageSquare;
+      return "message-circle";
     case "resource":
-      return FileText;
+      return "file-text";
     case "video":
     case "hvp":
-      return Video;
+      return "app-window";
     default:
-      return BookOpen;
+      return "layers";
   }
 }
 const rowClass =
@@ -123,21 +109,22 @@ function RowAction({
   );
 }
 function ActionIcon({ action }: { action: ActivityAction }) {
-  const Icon =
+  const icon: IconName | undefined =
     action.kind === "activity"
-      ? ChevronRight
+      ? "chevron-right"
       : action.kind === "preview"
-      ? Expand
+        ? "maximize"
       : action.kind === "download"
-        ? Download
+        ? "download"
         : action.kind === "moodle"
-          ? ArrowUpRight
+          ? "external-link"
           : undefined;
-  return Icon ? (
+  return icon ? (
     <Icon
-      size={15}
-      className="mt-0.5 ml-auto shrink-0 text-text-muted"
-      aria-hidden="true"
+      name={icon}
+      size="s"
+      color="muted"
+      className="mt-0.5 ml-auto shrink-0"
     />
   ) : null;
 }
@@ -191,7 +178,7 @@ export function CourseActivities({
         const name = cleanCourseText(module.name);
         const description = cleanCourseText(module.description);
         const resources = visibleResources(module);
-        const Icon = activityIcon(module.type);
+        const moduleIcon = activityIcon(module.type);
         if (module.type === "label" && resources.length === 0)
           return (
             <li key={module.id} className="px-2 py-2.5">
@@ -221,7 +208,7 @@ export function CourseActivities({
           <li key={module.id}>
             <RowAction action={action} label={label} onPreview={onPreview} navigate={navigate}>
               <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center text-text-muted">
-                {single ? <LibraryIcon.File filename={single.name} size={22} /> : <Icon size={17} strokeWidth={1.7} aria-hidden="true" />}
+                {single ? <Icon.File filename={single.name} size={22} /> : <Icon name={moduleIcon} size="m" color="muted" />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block break-words text-sm font-medium leading-5 group-hover:text-accent">
@@ -256,7 +243,7 @@ export function CourseActivities({
                         onPreview={onPreview}
                         navigate={navigate}
                       >
-                        <LibraryIcon.File filename={resource.name} size={20} className="mt-0.5 shrink-0" />
+                        <Icon.File filename={resource.name} size={20} className="mt-0.5 shrink-0" />
                         <span className="min-w-0 flex-1">
                           <span className="block break-words text-sm leading-5 group-hover:text-accent">
                             {cleanCourseText(resource.name)}

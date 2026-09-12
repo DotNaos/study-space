@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
+import { Button, Form, Textarea } from "@dotnaos/ui-base";
 import { api, message } from "./api";
 import { learningPath, type LearningState } from "./learning-api";
 import { Notice } from "./shared";
@@ -70,22 +70,18 @@ export function ExerciseAnswer({
   }, [value, saved]);
   return (
     <div className="mt-5 space-y-2">
-      <label
-        htmlFor={`answer-${exerciseId}`}
-        className="block text-xs font-medium text-text-muted"
-      >
-        Deine Antwort
-      </label>
-      <textarea
-        id={`answer-${exerciseId}`}
-        value={value}
-        maxLength={12000}
-        rows={4}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={() => void save()}
-        className="w-full resize-y rounded-md border border-border bg-bg-0 px-3 py-2 text-sm leading-6 outline-none focus-visible:border-focus-ring focus-visible:ring-1 focus-visible:ring-focus-ring"
-        placeholder="Notiere deinen Lösungsweg …"
-      />
+      <div onBlur={() => void save()}>
+        <Form.Field label="Deine Antwort">
+          <Textarea
+            id={`answer-${exerciseId}`}
+            value={value}
+            rows={4}
+            fullWidth
+            onValueChange={(next) => setValue(next.slice(0, 12000))}
+            placeholder="Notiere deinen Lösungsweg …"
+          />
+        </Form.Field>
+      </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span role="status" className="text-xs text-text-muted">
           {busy

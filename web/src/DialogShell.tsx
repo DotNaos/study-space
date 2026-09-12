@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
-import { viewerButtonClass } from "./ViewerButton";
+import { Button } from "@dotnaos/ui-base";
 
 export function DialogShell({
   title,
@@ -15,7 +14,6 @@ export function DialogShell({
   wide?: boolean;
 }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
-  const closeRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -24,7 +22,9 @@ export function DialogShell({
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
     dialog.showModal();
-    closeRef.current?.focus({ preventScroll: true });
+    dialog
+      .querySelector<HTMLButtonElement>('[aria-label="Dialog schließen"]')
+      ?.focus({ preventScroll: true });
     return () => {
       dialog.close();
       document.body.style.overflow = overflow;
@@ -49,15 +49,14 @@ export function DialogShell({
         >
           {title}
         </h2>
-        <button
-          ref={closeRef}
-          type="button"
-          onClick={onClose}
-          className={viewerButtonClass}
-          aria-label="Dialog schließen"
-        >
-          <X size={20} />
-        </button>
+        <Button
+          variant="icon"
+          size="sm"
+          icon="close"
+          accessibilityLabel="Dialog schließen"
+          title="Dialog schließen"
+          onPress={onClose}
+        />
       </div>
       {children}
     </dialog>,
