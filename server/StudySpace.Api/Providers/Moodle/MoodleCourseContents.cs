@@ -4,7 +4,8 @@ using StudySpace.Api.Infrastructure;
 namespace StudySpace.Api.Providers.Moodle;
 
 public sealed record CourseSection(long Id, string Name, string Summary, CourseModule[] Modules);
-public sealed record CourseModule(long Id, string Name, string Type, string? Url, string Description, CourseResource[] Resources);
+public sealed record CourseModule(long Id, string Name, string Type, string? Url, string Description, CourseResource[] Resources,
+    long? SubsectionId = null);
 public sealed record CourseResource(string Type, string Name, string? MimeType, long? Size, long? ModifiedAt, string? Url,
     string? Id = null, string? PreviewUrl = null, string? DownloadUrl = null, string? PreviewKind = null);
 
@@ -37,7 +38,35 @@ public static class MoodleCourseContents
                 ResourceUrl(MoodleJson.Text(content, "fileurl"), site));
             return MoodleCourseFiles.Describe(resource, content, site, courseId, id);
         }).ToArray();
-        return new(id, MoodleText.Plain(MoodleJson.Text(module, "name") ?? "Activity"), type, url, MoodleText.Plain(MoodleJson.Text(module, "description")), resources);
+        return new(id, MoodleText.Plain(MoodleJson.Text(module, "name") ?? "Activity"), type, url, MoodleText.Plain(MoodleJson.Text(module, "description")), resources,
+            type == "subsection" ? SubsectionId(module) : null);
+    }
+
+    // Moodle links a subsection activity to its delegated course section through
+    // customdata.sectionid. Expose only this ID, never arbitrary module customdata.
+    private static long? SubsectionId(JsonElement module)
+    {
+        if (!module.TryGetProperty("customdata", out var custom)) return null;
+        if (custom.ValueKind == JsonValueKind.Object) return SectionId(custom);
+        if (custom.ValueKind != JsonValueKind.String) return null;
+        var json = custom.GetString();
+        if (string.IsNullOrEmpty(json) || json.Length > 4096) return null;
+        try
+        {
+            using var data = JsonDocument.Parse(json, new JsonDocumentOptions { MaxDepth = 8 });
+            return SectionId(data.RootElement);
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static long? SectionId(JsonElement custom)
+    {
+        if (custom.ValueKind != JsonValueKind.Object || !custom.TryGetProperty("sectionid", out var value)) return null;
+        if (value.ValueKind == JsonValueKind.Number && value.TryGetInt64(out var number) && number > 0) return number;
+        if (value.ValueKind == JsonValueKind.String && long.TryParse(value.GetString(),
+            System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out number) && number > 0)
+            return number;
+        return null;
     }
 
     private static string? ResourceUrl(string? raw, Uri site)

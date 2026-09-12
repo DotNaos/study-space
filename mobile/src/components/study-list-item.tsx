@@ -11,6 +11,7 @@ export function StudyListItem({
   style,
   subtitle,
   title,
+  titleNumberOfLines = 2,
   trailing,
 }: {
   disabled?: boolean;
@@ -19,6 +20,7 @@ export function StudyListItem({
   style?: StyleProp<ViewStyle>;
   subtitle?: string;
   title: string;
+  titleNumberOfLines?: number;
   trailing?: ReactNode;
 }) {
   const colors = useStudyColors();
@@ -41,9 +43,9 @@ export function StudyListItem({
       >
         <Stack align="center" direction="horizontal" gap={3}>
           {leading}
-          <Stack gap={1} style={{ flex: 1 }}>
+          <Stack gap={1} style={{ flex: 1, minWidth: 0 }}>
             <Text
-              numberOfLines={2}
+              numberOfLines={titleNumberOfLines}
               size="l"
               text={title}
               style={{ color: colors.text, fontWeight: "600", lineHeight: 21 }}
