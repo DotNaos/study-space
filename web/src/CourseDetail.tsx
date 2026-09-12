@@ -93,7 +93,7 @@ export function CourseDetail({
   const sectionName = (section: CourseSection, index: number) =>
     cleanCourseText(section.name) || `Abschnitt ${index + 1}`;
   return (
-    <div className="max-w-5xl">
+    <div data-learning-course className="max-w-5xl">
       <AppLink
         navigate={navigate}
         href="/courses"
