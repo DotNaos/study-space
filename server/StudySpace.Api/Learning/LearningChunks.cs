@@ -29,7 +29,7 @@ public static class LearningChunks
             {
                 if (blocks.Count == 0) return;
                 var values = blocks.ToArray(); var visuals = images.ToArray();
-                var identity = JsonSerializer.Serialize(new { profile = "multimodal-compact-citations-v2", blocks = values, images = visuals }, LearningStore.Json);
+                var identity = JsonSerializer.Serialize(new { profile = "multimodal-span-citations-v3", blocks = values, images = visuals }, LearningStore.Json);
                 chunks.Add(new(Hash(identity), document.Name, input.SectionName, values, visuals));
                 blocks.Clear(); images.Clear(); length = 0;
             }
@@ -107,6 +107,13 @@ public static class LearningChunks
         Existing solutions and generated solution suggestions must be clearly distinguished in the solution text.
         Every section and exercise must cite at least one provided integer citation label in its sources array.
         Choose relevant citations; do not repeatedly cite every source block for an individual claim.
+        Each section also includes mappings for concrete text spans in its markdown. Every mapping quote must
+        be an exact, unique substring of that section markdown, including its Markdown punctuation.
+        Map paragraphs or smaller claims to the specific supplied citation labels that support them; use
+        several labels when combining sources. The spans must not overlap. Do not map a whole section to
+        every source. Use origin source for source-derived text, including paraphrases. Use origin agent
+        with an empty sources array only for your own explicitly added explanation. Leave uncertain text
+        unmapped. These mappings record provenance, not a claim of verified semantic completeness.
         Never invent URLs, image links or source IDs. Markdown must have no HTML or external links/images.
         Produce only JSON matching the supplied schema. Keep output below 18000 characters.
         Source blocks follow as JSON:
@@ -124,10 +131,7 @@ public static class LearningChunks
         }, LearningStore.Json);
 
     public static readonly JsonElement Schema = JsonDocument.Parse("""
-        {"type":"object","additionalProperties":false,"required":["title","sections","exercises"],"properties":{
-        "title":{"type":"string"},
-        "sections":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["title","markdown","sources"],"properties":{"title":{"type":"string"},"markdown":{"type":"string"},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}}}}},
-        "exercises":{"type":"array","minItems":1,"maxItems":15,"items":{"type":"object","additionalProperties":false,"required":["title","prompt","hint","solution","origin","sources"],"properties":{"title":{"type":"string"},"prompt":{"type":"string"},"hint":{"type":"string"},"solution":{"type":"string"},"origin":{"type":"string","enum":["source","generated"]},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}}}}}}}
+        {"type":"object","additionalProperties":false,"required":["title","sections","exercises"],"properties":{"title":{"type":"string"},"sections":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["title","markdown","sources","mappings"],"properties":{"title":{"type":"string"},"markdown":{"type":"string"},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}},"mappings":{"type":"array","maxItems":200,"items":{"type":"object","additionalProperties":false,"required":["quote","sources","origin"],"properties":{"quote":{"type":"string"},"origin":{"type":"string","enum":["source","agent"]},"sources":{"type":"array","maxItems":100,"items":{"type":"integer","minimum":1}}}}}}}},"exercises":{"type":"array","minItems":1,"maxItems":15,"items":{"type":"object","additionalProperties":false,"required":["title","prompt","hint","solution","origin","sources"],"properties":{"title":{"type":"string"},"prompt":{"type":"string"},"hint":{"type":"string"},"solution":{"type":"string"},"origin":{"type":"string","enum":["source","generated"]},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}}}}}}}
         """).RootElement.Clone();
 
     public static ChunkResult Validate(string json, LearningChunk chunk)
@@ -143,7 +147,7 @@ public static class LearningChunks
                 var heading = Text(section, "title", 250);
                 var markdown = Text(section, "markdown", 22000);
                 var refs = References(section, chunk);
-                return new LearningSection(Hash(chunk.Id + "section" + index + heading), heading, markdown, refs);
+                return new LearningSection(Hash(chunk.Id + "section" + index + heading), heading, markdown, refs, LearningProvenance.Read(section, markdown, chunk));
             }).ToArray();
             var exercises = root.GetProperty("exercises").EnumerateArray().Select((exercise, index) =>
             {

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
+import type { ScriptProvenance } from "./script-provenance";
 import { api, message } from "./api";
 
-export type LearningTarget = { kind: "chapter" | "exercise"; id: string };
+export type LearningTarget = { kind: "chapter" | "exercise"; id: string; mode?: "comparison" };
 
 export type SourceRef = {
   materialId: string;
@@ -19,6 +20,7 @@ export type LearningSection = {
   title: string;
   markdown: string;
   sources: SourceRef[];
+  provenance?: ScriptProvenance | null;
 };
 export type LearningExercise = {
   id: string;

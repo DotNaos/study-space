@@ -467,6 +467,7 @@ export function ContentGraphView({
                   </p>
                 )}
                 <div className="mt-4 flex flex-wrap gap-1">
+                  {selected.kind === "chapter" && selected.contentId && <Button variant="ghost" size="sm" label="Im Quellenvergleich öffnen" onPress={() => onOpenLearning({ kind: "chapter", id: selected.contentId!, mode: "comparison" })} />}
                   {selected.kind === "material" &&
                     selected.revision &&
                     selected.materialId && (

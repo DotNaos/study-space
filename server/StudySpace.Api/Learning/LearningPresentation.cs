@@ -38,7 +38,7 @@ public static partial class LearningPresentation
         return version with
         {
             Title = RepairDirections(version.Title),
-            Sections = version.Sections.Select(section => section with { Title = RepairDirections(section.Title), Markdown = RepairDirections(section.Markdown) }).ToArray(),
+            Sections = version.Sections.Select(LearningProvenance.Project).ToArray(),
             Exercises = version.Exercises.Select(exercise => Exercise(exercise, sourceBlocks)).ToArray()
         };
     }

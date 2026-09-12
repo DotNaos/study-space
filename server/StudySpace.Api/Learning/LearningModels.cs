@@ -3,7 +3,7 @@ namespace StudySpace.Api.Learning;
 
 public sealed record SourceRef(string MaterialId, string Revision, string BlockId, int? Page);
 public sealed record LearningSource(string MaterialId, string Revision, string Name);
-public sealed record LearningSection(string Id, string Title, string Markdown, SourceRef[] Sources);
+public sealed record LearningSection(string Id, string Title, string Markdown, SourceRef[] Sources, ScriptProvenance? Provenance = null);
 public sealed record LearningExercise(string Id, string Title, string Prompt, string Hint, string Solution, string Origin, SourceRef[] Sources);
 public sealed record LearningVersion(string Id, DateTimeOffset CreatedAt, string SnapshotId, string Title, bool Partial,
     string[] Warnings, LearningSection[] Sections, LearningExercise[] Exercises, LearningSource[] Sources);
