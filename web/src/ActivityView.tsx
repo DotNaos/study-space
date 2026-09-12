@@ -288,7 +288,11 @@ function AssignmentDetails({
           <dt className="text-text-muted">Status</dt>
           <dd>{statuses[task.status] || task.status}</dd>
           <dt className="text-text-muted">Abgabe bis</dt>
-          <dd>{deadline(task.dueAt)}</dd>
+          <dd>
+            {task.dueAt === null && task.status === "unknown"
+              ? "Nicht verfügbar"
+              : deadline(task.dueAt)}
+          </dd>
           {task.cutoffAt && task.cutoffAt !== task.dueAt ? (
             <>
               <dt className="text-text-muted">Annahmeschluss</dt>
