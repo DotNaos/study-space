@@ -18,7 +18,7 @@ public sealed class MoodleFileService(MoodleService moodle, CredentialStore cred
             {
                 await CheckConnection(credential);
                 var contents = await moodle.AuthorizedContents(credential, courseId, timeout.Token, freshEnrollment: true);
-                var source = MoodleCourseFiles.Find(contents, MoodleSite.Parse(credential.SiteUrl), courseId, moduleId, resourceId);
+                var source = await moodle.ActivityFile(credential, contents, courseId, moduleId, resourceId, timeout.Token);
                 if (source.Resource.Size > MoodleCourseFiles.MaximumBytes) throw MoodleCourseFiles.TooLarge();
                 if (preview && source.Resource.PreviewKind is null)
                     throw new ApiFailure("course_file_unsupported", "This file has no preview. Download it or open it in Moodle.", 415);

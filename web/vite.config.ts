@@ -4,5 +4,5 @@ import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  build: { outDir: "dist", sourcemap: false },
+  build: { outDir: "dist", sourcemap: false, rollupOptions: { input: { app: "index.html", reader: "reader.html" } } },
 });
