@@ -38,6 +38,8 @@ export type Course = {
   shortName: string;
   summary: string;
   imageUrl?: string | null;
+  imageVersion?: string | null;
+  hasCustomImage?: boolean;
   startDate?: number | null;
   endDate?: number | null;
 };

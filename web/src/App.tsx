@@ -90,26 +90,25 @@ export function App() {
     document.title = `${title} · ${settings.displayName}`;
   }, [route.page, settings.displayName]);
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[236px_minmax(0,1fr)]">
+    <div className="min-h-screen md:grid md:grid-cols-[208px_minmax(0,1fr)]">
       <a
         href="#main"
         className="sr-only z-50 rounded-md bg-bg-0 p-3 focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
       >
         Zum Inhalt springen
       </a>
-      <aside className="flex flex-col border-b border-border bg-bg-1 px-5 py-5 md:sticky md:top-0 md:h-screen md:border-r md:border-b-0 md:px-6 md:py-8">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-text text-bg-0">
+      <aside className="flex min-h-14 items-center gap-1 border-b border-border/60 bg-bg-0 px-3 py-1.5 md:sticky md:top-0 md:h-dvh md:flex-col md:items-stretch md:border-r md:border-b-0 md:px-4 md:py-6">
+        <div className="mr-auto flex items-center gap-2 md:mr-0 md:px-2">
+          <span className="flex size-8 shrink-0 items-center justify-center text-text-muted">
             <BookOpen size={21} strokeWidth={1.6} aria-hidden="true" />
           </span>
-          <span className="min-w-0 break-words text-sm font-semibold tracking-tight">
+          <span className="sr-only text-sm font-medium tracking-tight md:not-sr-only">
             {settings.displayName}
           </span>
-          <ThemeToggle />
         </div>
         <nav
           aria-label="Hauptnavigation"
-          className="mt-5 flex flex-wrap gap-1 md:mt-12 md:flex-col md:flex-nowrap"
+          className="flex items-center gap-1 md:mt-8 md:flex-col md:items-stretch"
         >
           {(
             [
@@ -123,13 +122,16 @@ export function App() {
               navigate={navigate}
               href={`/${item.id}`}
               aria-current={route.page === item.id ? "page" : undefined}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring ${route.page === item.id ? "bg-bg-0 font-medium shadow-sm" : "text-text-muted hover:bg-bg-2 hover:text-text"}`}
+              aria-label={item.label}
+              title={item.label}
+              className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring md:justify-start ${route.page === item.id ? "bg-bg-1 font-medium" : "text-text-muted hover:bg-bg-1 hover:text-text"}`}
             >
               <item.icon size={17} aria-hidden="true" />
-              {item.label}
+              <span className={route.page === item.id ? "hidden min-[360px]:inline md:inline" : "hidden md:inline"}>{item.label}</span>
             </AppLink>
           ))}
         </nav>
+        <div className="shrink-0 md:mt-3 md:self-start md:px-1"><ThemeToggle /></div>
         <div className="mt-auto hidden pt-8 md:block">
           <div className="flex items-center gap-2 text-xs text-text-muted">
             <Circle
@@ -159,7 +161,7 @@ export function App() {
       <main
         id="main"
         tabIndex={-1}
-        className="min-w-0 px-6 py-10 sm:px-10 md:px-14 md:py-16 lg:px-20 lg:py-20"
+        className="min-w-0 px-4 py-6 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:px-8 md:px-12 md:py-12 lg:px-16"
       >
         {route.page === "moodle-return" ? (
           <MoodleReturn

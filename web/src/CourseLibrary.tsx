@@ -11,21 +11,21 @@ export function CourseLibrary({
   navigate: Navigate;
 }) {
   return (
-    <div className="space-y-8">
+    <div className="space-y-7">
       {groups.map(({ semester, courses }) => (
         <section
           key={semester.key}
           aria-labelledby={`semester-${semester.key}`}
         >
-          <div className="mb-3 flex items-baseline gap-3 border-b border-border pb-3">
+          <div className="mb-1 flex items-baseline gap-2 border-b border-border/60 pb-2">
             <h2
               id={`semester-${semester.key}`}
-              className="text-lg font-medium tracking-tight sm:text-xl"
+              className="text-sm font-medium tracking-tight sm:text-base"
             >
-              {semester.label}
+              <span className="sm:hidden">{semester.shortLabel}</span><span className="hidden sm:inline">{semester.label}</span>
             </h2>
-            <span className="text-xs tabular-nums text-text-muted">
-              {courses.length} {courses.length === 1 ? "Kurs" : "Kurse"}
+            <span className="text-xs tabular-nums text-text-muted" aria-label={`${courses.length} Kurse`}>
+              {courses.length}
             </span>
           </div>
           <ul className="divide-y divide-border/60">
@@ -36,18 +36,18 @@ export function CourseLibrary({
                   <AppLink
                     href={`/courses/${course.id}`}
                     navigate={navigate}
-                    className="group -mx-2 flex items-center gap-4 rounded-xl px-2 py-3 transition-colors hover:bg-bg-1/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:gap-5"
+                    className="group -mx-2 flex items-center gap-3 rounded-lg px-2 py-3 transition-colors hover:bg-bg-1/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:gap-5"
                   >
                     <CourseArtwork
                       course={course}
-                      className="h-14 w-20 sm:h-16 sm:w-24"
+                      className="size-14 sm:h-16 sm:w-24"
                     />
                     <div className="min-w-0 flex-1">
-                      <h3 className="break-words text-sm font-medium leading-6 group-hover:text-accent sm:text-base">
+                      <h3 className="break-words text-sm font-medium leading-5 group-hover:text-accent sm:text-base">
                         {course.name}
                       </h3>
                       {subtitle && (
-                        <p className="mt-1 break-words text-xs leading-5 text-text-muted">
+                        <p className="mt-1 hidden break-words text-xs leading-5 text-text-muted sm:block">
                           {subtitle}
                         </p>
                       )}

@@ -33,7 +33,7 @@ export function ThemeToggle() {
       type="button"
       aria-label={label}
       title={label}
-      className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg text-text-muted hover:bg-bg-2 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
       onClick={() => {
         const next = theme === "dark" ? "light" : "dark";
         try {

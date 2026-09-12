@@ -41,11 +41,33 @@ public static class ApiEndpoints
         moodle.MapDelete("", async (MoodleService service, CancellationToken ct) => { await service.Disconnect(ct); return Results.NoContent(); });
         moodle.MapGet("/courses", (MoodleService service, CancellationToken ct) => service.Courses(ct));
         moodle.MapGet("/tasks", (long? courseId, MoodleService service, CancellationToken ct) => service.Tasks(courseId, ct));
-        moodle.MapGet("/courses/{id:long}/image", async (long id, MoodleImageService service, CancellationToken ct) =>
+        moodle.MapGet("/courses/{id:long}/image", async (long id, MoodleImageService service, HttpContext context, CancellationToken ct) =>
         {
             var image = await service.Get(id, ct);
-            return Results.File(image.Bytes, image.ContentType);
+            var version = context.Request.Query["v"].ToString();
+            if (version.Length > 0 && version != image.Version)
+                throw new ApiFailure("artwork_changed", "The course image changed. Reload the course list.", 404);
+            context.Response.Headers.CacheControl = version.Length > 0 ? "private, max-age=86400" : "private, no-cache";
+            var digest = Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(image.Bytes));
+            return Results.File(image.Bytes, image.ContentType,
+                entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{digest}\""));
         }).RequireRateLimiting("moodle-images");
+        moodle.MapPut("/courses/{id:long}/artwork", async (long id, HttpContext context, MoodleImageService service, CancellationToken ct) =>
+        {
+            var mime = context.Request.ContentType?.Split(';')[0].Trim().ToLowerInvariant();
+            if (!MoodleCourseImages.AllowedMime(mime)) throw new ApiFailure("artwork_format", "Choose PNG, JPEG or WebP.", 415);
+            if (context.Request.ContentLength > MoodleCourseImages.MaximumBytes) throw new ApiFailure("artwork_size", "Choose an image no larger than 4 MiB.", 413);
+            using var image = new MemoryStream();
+            var chunk = new byte[8192];
+            int count;
+            while ((count = await context.Request.Body.ReadAsync(chunk, ct)) > 0)
+            {
+                if (image.Length + count > MoodleCourseImages.MaximumBytes) throw new ApiFailure("artwork_size", "Choose an image no larger than 4 MiB.", 413);
+                image.Write(chunk, 0, count);
+            }
+            return await service.Update(id, image.ToArray(), mime, ct);
+        });
+        moodle.MapDelete("/courses/{id:long}/artwork", (long id, MoodleImageService service, CancellationToken ct) => service.Update(id, null, null, ct));
         moodle.MapGet("/courses/{id:long}/contents", (long id, MoodleService service, CancellationToken ct) => service.Contents(id, ct));
         moodle.MapGet("/courses/{courseId:long}/modules/{moduleId:long}/resources/{resourceId}/preview",
             (long courseId, long moduleId, string resourceId, MoodleFileService service, HttpContext context, CancellationToken ct) =>

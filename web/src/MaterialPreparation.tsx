@@ -1,9 +1,9 @@
+import { Icon } from "@dotnaos/ui-base";
 import { Button } from "@dotnaos/ui-base";
 import {
   AlertCircle,
   Check,
   ChevronDown,
-  FileText,
   Loader2,
 } from "lucide-react";
 import {
@@ -157,7 +157,7 @@ export function MaterialPreparation({
                       ) || entry.warnings.length ? (
                       <AlertCircle size={15} className="text-warning" />
                     ) : (
-                      <FileText size={15} />
+                      <Icon.File filename={entry.name} size={18} />
                     )}
                   </span>
                   <span className="min-w-0 flex-1">
