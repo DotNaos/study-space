@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Icon as LibraryIcon } from "@dotnaos/ui-base";
 import {
   ArrowUpRight,
   FileText,
@@ -11,7 +12,6 @@ import {
   ClipboardList,
   Download,
   Expand,
-  Image,
 } from "lucide-react";
 import { safeWebUrl, type CourseModule, type CourseResource } from "./api";
 import {
@@ -202,7 +202,7 @@ export function CourseActivities({
           <li key={module.id}>
             <RowAction action={action} label={label} onPreview={onPreview}>
               <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center text-text-muted">
-                <Icon size={17} strokeWidth={1.7} aria-hidden="true" />
+                {single ? <LibraryIcon.File filename={single.name} size={22} /> : <Icon size={17} strokeWidth={1.7} aria-hidden="true" />}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block break-words text-sm font-medium leading-5 group-hover:text-accent">
@@ -227,8 +227,6 @@ export function CourseActivities({
               <ul className="mb-1 ml-8">
                 {resources.map((resource, index) => {
                   const fileAction = resourceAction(courseId, module, resource);
-                  const FileIcon =
-                    resource.previewKind === "image" ? Image : FileText;
                   return (
                     <li key={resource.id || `${resource.name}-${index}`}>
                       <RowAction
@@ -236,11 +234,7 @@ export function CourseActivities({
                         label={resource.name}
                         onPreview={onPreview}
                       >
-                        <FileIcon
-                          size={15}
-                          className="mt-1 shrink-0 text-text-muted"
-                          aria-hidden="true"
-                        />
+                        <LibraryIcon.File filename={resource.name} size={20} className="mt-0.5 shrink-0" />
                         <span className="min-w-0 flex-1">
                           <span className="block break-words text-sm leading-5 group-hover:text-accent">
                             {cleanCourseText(resource.name)}

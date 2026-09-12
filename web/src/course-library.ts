@@ -76,10 +76,13 @@ export function groupCourses(courses: Course[], query = ""): CourseGroup[] {
 }
 
 export function courseImagePath(
-  course: Pick<Course, "id" | "imageUrl">,
+  course: Pick<Course, "id" | "imageUrl" | "imageVersion">,
 ): string | undefined {
   // The backend owns authenticated image fetching. Never send the browser to a
   // Moodle file URL or accept a different origin supplied through course data.
   const expected = `/api/providers/moodle/courses/${course.id}/image`;
-  return course.imageUrl === expected ? expected : undefined;
+  if (course.imageUrl !== expected) return undefined;
+  return course.imageVersion && /^[a-f0-9]{64}$/.test(course.imageVersion)
+    ? `${expected}?v=${course.imageVersion}`
+    : expected;
 }

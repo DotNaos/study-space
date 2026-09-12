@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { BookOpen } from "lucide-react";
+import { ImageOff } from "lucide-react";
 import type { Course } from "./api";
 import { courseImagePath } from "./course-library";
 
@@ -20,7 +20,7 @@ export function CourseArtwork({
       aria-hidden="true"
     >
       <div className="absolute inset-0 flex items-center justify-center text-text-muted/45">
-        <BookOpen size={30} strokeWidth={1.2} />
+        <ImageOff size={22} strokeWidth={1.4} />
       </div>
       {src && failed !== src && (
         <img

@@ -36,6 +36,7 @@ builder.Services.AddSingleton<IDataProtectionProvider>(services => RuntimeConfig
 builder.Services.AddSingleton<CredentialStore>();
 builder.Services.AddSingleton<ProjectConfigurationStore>();
 builder.Services.AddSingleton<MoodleService>();
+builder.Services.AddSingleton<CourseArtworkStore>();
 builder.Services.AddSingleton<MoodleImageService>();
 builder.Services.AddSingleton<IMoodleImageTransport, MoodleImageTransport>();
 builder.Services.AddSingleton<MoodleFileService>();
@@ -80,6 +81,10 @@ app.Use(async (context, next) =>
     context.Response.Headers["X-Frame-Options"] = "DENY";
     try
     {
+        var artworkUpload = HttpMethods.IsPut(context.Request.Method) &&
+            System.Text.RegularExpressions.Regex.IsMatch(context.Request.Path.Value ?? "", @"^/api/providers/moodle/courses/[1-9][0-9]*/artwork$");
+        if (artworkUpload && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodyLimit)
+            bodyLimit.MaxRequestBodySize = MoodleCourseImages.MaximumBytes;
         if (context.Request.Path.StartsWithSegments("/api") && !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))
         {
             var expected = config["STUDY_PUBLIC_URL"] ?? "http://localhost:8080";
@@ -88,12 +93,13 @@ app.Use(async (context, next) =>
             if ((origin.Length > 0 && !OriginMatches(origin, expected)) || fetchSite is "cross-site" ||
                 (origin.Length == 0 && fetchSite.Length > 0 && fetchSite != "same-origin"))
                 throw new ApiFailure("origin_rejected", "Open Study Space at its configured address before making changes.", 403);
-            if (context.Request.ContentLength > 0 && !context.Request.HasJsonContentType())
+            if (context.Request.ContentLength > 0 && !context.Request.HasJsonContentType() && !artworkUpload)
                 throw new ApiFailure("json_required", "Send a JSON request.", 415);
         }
         await next(context);
     }
     catch (ApiFailure error) { await Failure(context, error.Status, error.Code, error.Message); }
+    catch (BadHttpRequestException error) when (error.StatusCode == 413) { await Failure(context, 413, "request_too_large", "The uploaded image is too large."); }
     catch (BadHttpRequestException) { await Failure(context, 400, "request_invalid", "The request is invalid."); }
     catch (Exception error) when (error is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
     { await Failure(context, 502, "upstream_unavailable", "Moodle could not complete this request. Check the connection and try again."); }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
-import { FileText, Download } from "lucide-react";
+import { Button, Icon } from "@dotnaos/ui-base";
+import { Download } from "lucide-react";
 import { api, message } from "./api";
 import {
   materialDocumentPath,
@@ -337,7 +337,7 @@ export function SourceChips({
             className="inline-flex w-full max-w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-left text-xs text-text-muted hover:bg-bg-1 hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring sm:w-auto"
             title={source.name}
           >
-            <FileText size={12} className="shrink-0" />
+            <Icon.File filename={source.name} size={16} />
             <span className="min-w-0 flex-1 truncate sm:max-w-60">{source.name}</span>
             {reference.page != null && (
               <span className="shrink-0">· S. {reference.page}</span>
