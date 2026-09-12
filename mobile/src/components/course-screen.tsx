@@ -1,12 +1,14 @@
 import {
   Button,
-  Card,
-  NativeContainer,
+  Icon,
+  ListItem,
+  SectionHeader,
   Stack as UIStack,
   Text,
   designTokens,
+  useNativeTheme,
+  type IconName,
 } from "@dotnaos/ui/native";
-import { Image } from "expo-image";
 import * as Linking from "expo-linking";
 import { Stack as RouterStack, useLocalSearchParams, useRouter } from "expo-router";
 import * as WebBrowser from "expo-web-browser";
@@ -14,7 +16,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, RefreshControl, SectionList, View } from "react-native";
 
 import { CourseArtwork } from "@/components/course-artwork";
-import { StudyListItem } from "@/components/study-list-item";
 import {
   api,
   message,
@@ -32,10 +33,9 @@ import {
   visibleResources,
 } from "@/lib/course-library";
 import { rootCourseSections, subsectionFor } from "@/lib/course-sections";
-import { useStudyColors } from "@/lib/theme";
 
 function sameServerPath(value?: string | null): string | undefined {
-  return value?.startsWith("/") ? value : undefined;
+  return value?.startsWith("/api/") && !value.includes("\\") ? value : undefined;
 }
 
 function shortCourseTitle(course?: Course): string {
@@ -63,52 +63,25 @@ function moduleTypeLabel(type: string): string {
   return labels[type] ?? "Aktivität";
 }
 
-function symbolFor(module: CourseModule, resource?: CourseResource): string {
-  if (resource?.previewKind === "pdf" || resource?.mimeType === "application/pdf") return "doc.richtext";
-  if (resource?.previewKind === "image" || resource?.mimeType?.startsWith("image/")) return "photo";
-  if (module.type === "assign") return "checklist";
-  if (module.type === "forum") return "bubble.left.and.bubble.right";
-  if (module.type === "url") return "link";
-  if (module.type === "quiz") return "questionmark.circle";
-  return "doc";
-}
-
-function IconTile({ symbol }: { symbol: string }) {
-  const colors = useStudyColors();
-  return (
-    <NativeContainer
-      surface="sunken"
-      radius={3}
-      style={{ width: 42, height: 42, alignItems: "center", justifyContent: "center", backgroundColor: colors.surfaceMuted }}
-    >
-      <Image source={`sf:${symbol}`} style={{ width: 20, height: 20 }} tintColor={colors.textMuted} />
-    </NativeContainer>
-  );
-}
-
-function Chevron() {
-  const colors = useStudyColors();
-  return <Image source="sf:chevron.right" style={{ width: 11, height: 17 }} tintColor={colors.textMuted} />;
+function moduleIcon(type: string): IconName {
+  if (type === "assign" || type === "quiz") return "clipboard-list";
+  if (type === "forum") return "message";
+  if (type === "url") return "link";
+  if (type === "book") return "book-open";
+  return "file-text";
 }
 
 function LabelBlock({ module }: { module: CourseModule }) {
-  const colors = useStudyColors();
   const title = labelTitle(module);
   const description = cleanCourseText(module.description);
-  const duplicateDescription = description.toLocaleLowerCase("de") === title.toLocaleLowerCase("de");
-
-  return (
-    <UIStack gap={1} style={{ paddingHorizontal: designTokens.spacing[1], paddingVertical: designTokens.spacing[2] }}>
-      <Text selectable size="l" text={title} style={{ color: colors.text, fontWeight: "700", lineHeight: 22 }} />
-      {description && !duplicateDescription ? (
-        <Text selectable text={description} style={{ color: colors.textMuted, lineHeight: 20 }} />
-      ) : null}
-    </UIStack>
-  );
+  return <UIStack gap={1} style={{ paddingVertical: designTokens.spacing[2] }}>
+    <Text selectable accessibilityRole="header" size="l" text={title} style={{ fontWeight: "600" }} />
+    {description && description.toLocaleLowerCase("de") !== title.toLocaleLowerCase("de") ? <Text selectable color="muted" text={description} /> : null}
+  </UIStack>;
 }
 
 export default function CourseScreen() {
-  const colors = useStudyColors();
+  const { colors } = useNativeTheme();
   const router = useRouter();
   const params = useLocalSearchParams<{ courseId: string; sectionId?: string }>();
   const sectionId = params.sectionId === undefined ? undefined : Number(params.sectionId);
@@ -194,23 +167,23 @@ export default function CourseScreen() {
         ListHeaderComponent={
           <UIStack gap={3} style={{ paddingTop: designTokens.spacing[2], paddingBottom: designTokens.spacing[3] }}>
             {course && sectionId === undefined ? (
-              <Card style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+              <UIStack gap={2}>
                 <UIStack direction="horizontal" align="center" gap={3}>
-                  <CourseArtwork course={course} size={68} />
+                  <CourseArtwork course={course} size={42} />
                   <UIStack gap={1} style={{ flex: 1 }}>
-                    <Text selectable text={course.name} style={{ color: colors.text, fontSize: 18, fontWeight: "700", lineHeight: 24 }} />
+                    <Text selectable text={course.name} style={{ color: colors.text, fontSize: 18, fontWeight: "600", lineHeight: 24 }} />
                     {course.shortName ? <Text selectable size="s" text={course.shortName} style={{ color: colors.textMuted }} /> : null}
                   </UIStack>
                 </UIStack>
-              </Card>
+              </UIStack>
             ) : null}
             {error ? (
-              <Card style={{ backgroundColor: colors.surface, borderColor: colors.border }}>
+              <UIStack gap={2}>
                 <UIStack gap={3}>
                   <Text selectable text={error} style={{ color: colors.text, lineHeight: 20 }} />
                   <Button label="Erneut versuchen" variant="secondary" onPress={() => void load()} />
                 </UIStack>
-              </Card>
+              </UIStack>
             ) : null}
           </UIStack>
         }
@@ -225,15 +198,7 @@ export default function CourseScreen() {
             />
           ) : null
         }
-        renderSectionHeader={({ section }) => {
-          const summary = cleanCourseText(section.summary);
-          return (
-            <UIStack gap={1} style={{ paddingTop: designTokens.spacing[5], paddingBottom: designTokens.spacing[2] }}>
-              <Text selectable text={section.name || "Abschnitt"} style={{ color: colors.text, fontSize: 19, fontWeight: "700", lineHeight: 25 }} />
-              {summary ? <Text selectable text={summary} style={{ color: colors.textMuted, lineHeight: 20 }} /> : null}
-            </UIStack>
-          );
-        }}
+        renderSectionHeader={({ section }) => <SectionHeader title={section.name || "Abschnitt"} subtitle={cleanCourseText(section.summary) || undefined} />}
         renderSectionFooter={({ section }) => section.data.length === 0 ? (
           <Text selectable text="Dieser Abschnitt enthält noch keine sichtbaren Inhalte."
             style={{ color: colors.textMuted, paddingBottom: designTokens.spacing[3] }} />
@@ -242,17 +207,17 @@ export default function CourseScreen() {
           if (module.type === "subsection") {
             const target = subsectionFor(module, sections ?? []);
             return (
-              <StudyListItem
+              <ListItem
                title={module.name || "Unterabschnitt"}
                 titleNumberOfLines={0}
-                subtitle={target ? "Unterabschnitt öffnen" : "Abschnitt derzeit nicht verfügbar"}
-                leading={<IconTile symbol="folder" />}
-                trailing={target ? <Chevron /> : undefined}
+                subtitle={target ? undefined : "Abschnitt derzeit nicht verfügbar"}
+                leading={<Icon name="folder" color="muted" size={26} />}
+                trailing={target ? <Icon name="chevron-right" color="muted" size={18} /> : undefined}
                 onPress={target ? () => router.push({
                   pathname: "/course/[courseId]/section/[sectionId]",
                   params: { courseId: String(courseId), sectionId: String(target.id) },
                 }) : undefined}
-                style={{ marginBottom: designTokens.spacing[2] }}
+
               />
             );
           }
@@ -274,56 +239,56 @@ export default function CourseScreen() {
             const canOpen = Boolean(path || canOpenModule);
 
             return (
-              <StudyListItem
+              <ListItem
                 titleNumberOfLines={0}
                 title={module.name || resource.name}
                 subtitle={subtitle}
-                leading={<IconTile symbol={symbolFor(module, resource)} />}
-                trailing={canOpen ? <Chevron /> : undefined}
+                leading={<Icon.File filename={resource.name} mimeType={resource.mimeType} />}
+                trailing={canOpen ? <Icon name="chevron-right" color="muted" size={18} /> : undefined}
                 disabled={!canOpen}
                 onPress={() => path ? void openPath(path) : void openModule(module)}
-                style={{ marginBottom: designTokens.spacing[2] }}
+
               />
             );
           }
 
           if (resources.length > 1) {
             return (
-              <Card style={{ backgroundColor: colors.surface, borderColor: colors.border, marginBottom: designTokens.spacing[2] }}>
+              <UIStack gap={1}>
                 <UIStack gap={3}>
-                  <Text selectable size="l" text={module.name || moduleTypeLabel(module.type)} style={{ color: colors.text, fontWeight: "700", lineHeight: 22 }} />
+                  <Text selectable size="l" text={module.name || moduleTypeLabel(module.type)} style={{ color: colors.text, fontWeight: "600", lineHeight: 22 }} />
                   {resources.map((resource) => {
                     const path = sameServerPath(resource.previewUrl ?? resource.downloadUrl);
                     const size = formatFileSize(resource.size);
                     return (
-                      <StudyListItem
+                      <ListItem
                         titleNumberOfLines={0}
                         key={resource.id ?? resource.name}
                         title={resource.name}
                         subtitle={size}
-                        leading={<IconTile symbol={symbolFor(module, resource)} />}
-                        trailing={path ? <Chevron /> : undefined}
+                        leading={<Icon.File filename={resource.name} mimeType={resource.mimeType} />}
+                        trailing={path ? <Icon name="chevron-right" color="muted" size={18} /> : undefined}
                         disabled={!path}
                         onPress={() => path && void openPath(path)}
                       />
                     );
                   })}
                 </UIStack>
-              </Card>
+              </UIStack>
             );
           }
 
           const description = cleanCourseText(module.description);
           return (
-            <StudyListItem
+            <ListItem
               titleNumberOfLines={0}
               title={module.name || moduleTypeLabel(module.type)}
               subtitle={description || moduleTypeLabel(module.type)}
-              leading={<IconTile symbol={symbolFor(module)} />}
-              trailing={canOpenModule ? <Chevron /> : undefined}
+              leading={<Icon name={moduleIcon(module.type)} color="muted" size={26} />}
+              trailing={canOpenModule ? <Icon name="chevron-right" color="muted" size={18} /> : undefined}
               disabled={!canOpenModule}
               onPress={() => void openModule(module)}
-              style={{ marginBottom: designTokens.spacing[2] }}
+
             />
           );
         }}

@@ -1,12 +1,15 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from "expo-router";
 import { Stack } from "expo-router/stack";
-import { useColorScheme } from "react-native";
+import { NativeThemeProvider, useNativeTheme } from "@dotnaos/ui/native";
 
-import { useStudyColors } from "@/lib/theme";
 
 export default function RootLayout() {
-  const colors = useStudyColors();
-  const base = useColorScheme() === "dark" ? DarkTheme : DefaultTheme;
+  return <NativeThemeProvider><Navigation /></NativeThemeProvider>;
+}
+
+function Navigation() {
+  const { colors, mode } = useNativeTheme();
+  const base = mode === "dark" ? DarkTheme : DefaultTheme;
   const navigationTheme = {
     ...base,
     colors: {
