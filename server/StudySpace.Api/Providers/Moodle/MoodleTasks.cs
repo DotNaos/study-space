@@ -25,7 +25,11 @@ public sealed record MoodleTask(
     bool? Locked,
     long? SubmittedAt,
     MoodleTaskAttachment[] Attachments,
-    string[] Warnings);
+    string[] Warnings)
+{
+    [System.Text.Json.Serialization.JsonPropertyName("study_url")]
+    public string? StudyUrl { get; init; }
+}
 
 public sealed record MoodleTaskList(MoodleTask[] Tasks, bool Partial, string[] Warnings);
 

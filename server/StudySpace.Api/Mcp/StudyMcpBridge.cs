@@ -142,12 +142,12 @@ public sealed class StudyMcpTools(HttpClient client)
         {
             type = "object", additionalProperties = false, properties = new { }
         }),
-        Tool("study_courses", "List the user's currently enrolled Moodle courses through Study Space. Returns course IDs needed by the other study tools.", new
+        Tool("study_courses", "List the user's currently enrolled Moodle courses through Study Space. Returns course IDs and canonical study_url links into Study Space.", new
         {
             type = "object", additionalProperties = false,
             properties = new { offset = Integer(0, 10_000), max_items = Integer(1, 200) }
         }),
-        Tool("study_course", "Read one course's sections, activities and resource metadata. This is live course structure from Study Space; it never exposes Moodle credentials.", new
+        Tool("study_course", "Read one course's sections, activities and resource metadata. Includes canonical study_url links to activities and selected resources; never exposes Moodle credentials.", new
         {
             type = "object", additionalProperties = false,
             properties = new
@@ -214,7 +214,7 @@ public sealed class StudyMcpTools(HttpClient client)
             },
             required = new[] { "material_id", "revision" }
         }),
-        Tool("study_tasks", "List Moodle assignments as actionable Study tasks with deadlines, submission state, attachments and related prepared materials. Use this for questions about what is due, overdue, submitted, or coming up.", new
+        Tool("study_tasks", "List Moodle assignments as actionable Study tasks with deadlines, submission state, attachments and related prepared materials. Use this for questions about what is due, overdue, submitted, or coming up. Open the returned study_url in Study Space.", new
         {
             type = "object", additionalProperties = false,
             properties = new
@@ -295,6 +295,7 @@ public sealed class StudyMcpTools(HttpClient client)
                 course.Id,
                 course.Name,
                 course.ShortName,
+                study_url = course.StudyUrl,
                 summary = Clip(course.Summary, 800),
                 course.StartDate,
                 course.EndDate,
@@ -321,6 +322,7 @@ public sealed class StudyMcpTools(HttpClient client)
                 module.Id,
                 module.Name,
                 module.Type,
+                study_url = module.StudyUrl,
                 description = Clip(module.Description, 1_000),
                 resources = module.Resources.Take(100).Select(resource => new
                 {
@@ -331,6 +333,7 @@ public sealed class StudyMcpTools(HttpClient client)
                     resource.Size,
                     resource.ModifiedAt,
                     resource.PreviewKind,
+                    study_url = resource.StudyUrl,
                 }).ToArray(),
             }).ToArray(),
         }).ToArray();
@@ -434,6 +437,7 @@ public sealed class StudyMcpTools(HttpClient client)
                 item.SectionId,
                 item.SectionName,
                 item.ModuleId,
+                study_url = item.StudyUrl,
                 item.Status,
                 item.Reason,
                 item.Warnings,
@@ -495,6 +499,7 @@ public sealed class StudyMcpTools(HttpClient client)
                     item.Name,
                     mime_type = item.MimeType,
                     module_id = item.ModuleId,
+                    study_url = item.StudyUrl,
                 }).ToArray();
             output.Add(new
             {
@@ -504,6 +509,7 @@ public sealed class StudyMcpTools(HttpClient client)
                 task.SectionId,
                 task.SectionName,
                 task.ModuleId,
+                study_url = task.StudyUrl,
                 task.AssignmentId,
                 task.Title,
                 description = Clip(task.Description, 3_000),
@@ -687,6 +693,7 @@ public sealed class StudyMcpTools(HttpClient client)
                     hit.Page,
                     hit.Slide,
                     hit.Sources,
+                    study_url = hit.MaterialId is null ? null : snapshot.Materials.FirstOrDefault(item => item.Id == hit.MaterialId)?.StudyUrl,
                 }).ToArray(),
         };
     }

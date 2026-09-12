@@ -3,6 +3,7 @@ import { Button, Input } from "@dotnaos/ui-base";
 import { Search } from "lucide-react";
 import { api, message, type Connection, type Course } from "./api";
 import { CourseDetail } from "./CourseDetail";
+import { ActivityView } from "./ActivityView";
 import { type Navigate } from "./navigation";
 import { Loading, Notice } from "./shared";
 import { CourseLibrary } from "./CourseLibrary";
@@ -11,10 +12,14 @@ import { groupCourses } from "./course-library";
 export function CoursesView({
   connection,
   courseId,
+  moduleId,
+  resourceId,
   navigate,
 }: {
   connection: Connection;
   courseId?: number;
+  moduleId?: number;
+  resourceId?: string;
   navigate: Navigate;
 }) {
   const [courses, setCourses] = useState<Course[]>();
@@ -32,6 +37,18 @@ export function CoursesView({
   useEffect(() => {
     void load();
   }, [load]);
+  if (courseId && moduleId)
+    return (
+      <ActivityView
+        key={`${courseId}:${moduleId}`}
+        courseId={courseId}
+        courseName={courses?.find((course) => course.id === courseId)?.name}
+        moduleId={moduleId}
+        resourceId={resourceId}
+        connected={connection.status === "connected"}
+        navigate={navigate}
+      />
+    );
   if (courseId && (connection.status !== "connected" || error))
     return (
       <CourseDetail

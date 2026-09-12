@@ -76,6 +76,20 @@ export function CourseDetail({
   useEffect(() => {
     void load();
   }, [load]);
+  useEffect(() => {
+    if (!sections || tab !== "materials") return;
+    const scrollToSection = () => {
+      const id = window.location.hash.slice(1);
+      if (/^section-[1-9][0-9]*$/.test(id))
+        document.getElementById(id)?.scrollIntoView({ block: "start" });
+    };
+    const frame = requestAnimationFrame(scrollToSection);
+    window.addEventListener("hashchange", scrollToSection);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("hashchange", scrollToSection);
+    };
+  }, [sections, tab]);
   const sectionName = (section: CourseSection, index: number) =>
     cleanCourseText(section.name) || `Abschnitt ${index + 1}`;
   return (
@@ -243,6 +257,7 @@ export function CourseDetail({
                       )}
                       <CourseActivities
                         courseId={course.id}
+                        navigate={navigate}
                         modules={section.modules}
                         onPreview={setPreview}
                       />

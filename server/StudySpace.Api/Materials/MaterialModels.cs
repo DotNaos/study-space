@@ -5,7 +5,11 @@ public sealed record MaterialSnapshot(long CourseId, string? SnapshotId, string 
 public sealed record MaterialCoverage(int Total, int Ready, int Failed, int Unsupported, int Pending, bool Complete);
 public sealed record MaterialEntry(string Id, string? Revision, string Name, string Kind, string? MimeType,
     long SectionId, string SectionName, long? ModuleId, string Status, string? Reason,
-    string? DocumentUrl, string? OriginalUrl, string[] Warnings);
+    string? DocumentUrl, string? OriginalUrl, string[] Warnings)
+{
+    [System.Text.Json.Serialization.JsonPropertyName("study_url")]
+    public string? StudyUrl { get; init; }
+}
 public sealed record MaterialJob(string Id, string Status, int Completed, int Total, DateTimeOffset CreatedAt,
     DateTimeOffset? FinishedAt, string? Error);
 

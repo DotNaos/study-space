@@ -39,8 +39,10 @@ public static class ApiEndpoints
         moodle.MapDelete("/login/{id}", async (string id, MoodleService service, CancellationToken ct) => { await service.Cancel(id, ct); return Results.NoContent(); });
         moodle.MapPost("/login/{id}/complete", (string id, CompleteRequest request, MoodleService service, CancellationToken ct) => service.Complete(id, request, ct));
         moodle.MapDelete("", async (MoodleService service, CancellationToken ct) => { await service.Disconnect(ct); return Results.NoContent(); });
-        moodle.MapGet("/courses", (MoodleService service, CancellationToken ct) => service.Courses(ct));
-        moodle.MapGet("/tasks", (long? courseId, MoodleService service, CancellationToken ct) => service.Tasks(courseId, ct));
+        moodle.MapGet("/courses", async (MoodleService service, IConfiguration config, CancellationToken ct) =>
+            StudyLinks.Courses(config, await service.Courses(ct)));
+        moodle.MapGet("/tasks", async (long? courseId, MoodleService service, IConfiguration config, CancellationToken ct) =>
+            StudyLinks.Tasks(config, await service.Tasks(courseId, ct)));
         moodle.MapGet("/courses/{id:long}/image", async (long id, MoodleImageService service, HttpContext context, CancellationToken ct) =>
         {
             var image = await service.Get(id, ct);
@@ -69,7 +71,8 @@ public static class ApiEndpoints
             return await service.Update(id, image.ToArray(), mime, ct);
         });
         moodle.MapDelete("/courses/{id:long}/artwork", (long id, MoodleImageService service, CancellationToken ct) => service.Update(id, null, null, ct));
-        moodle.MapGet("/courses/{id:long}/contents", (long id, MoodleService service, CancellationToken ct) => service.Contents(id, ct));
+        moodle.MapGet("/courses/{id:long}/contents", async (long id, MoodleService service, IConfiguration config, CancellationToken ct) =>
+            StudyLinks.Contents(config, id, await service.Contents(id, ct)));
         moodle.MapGet("/courses/{courseId:long}/modules/{moduleId:long}/resources/{resourceId}/preview",
             (long courseId, long moduleId, string resourceId, MoodleFileService service, HttpContext context, CancellationToken ct) =>
                 CourseFile(courseId, moduleId, resourceId, true, service, context, ct)).RequireRateLimiting("moodle-files");

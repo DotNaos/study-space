@@ -17,7 +17,8 @@ public static class MaterialEndpoints
     public static void MapStudyMaterials(this WebApplication app)
     {
         var routes = app.MapGroup("/api/materials");
-        routes.MapGet("/courses/{courseId:long}", (long courseId, IMaterialCatalog catalog, CancellationToken ct) => catalog.GetSnapshot(courseId, ct));
+        routes.MapGet("/courses/{courseId:long}", async (long courseId, IMaterialCatalog catalog, IConfiguration config, CancellationToken ct) =>
+            StudyLinks.Materials(config, await catalog.GetSnapshot(courseId, ct)));
         routes.MapPost("/courses/{courseId:long}/import", async (long courseId, IMaterialCatalog catalog, CancellationToken ct) =>
             Results.Json(await catalog.StartImport(courseId, ct), statusCode: 202));
         routes.MapDelete("/courses/{courseId:long}/jobs/{jobId}", (long courseId, string jobId, IMaterialCatalog catalog, CancellationToken ct) => catalog.Cancel(courseId, jobId, ct));

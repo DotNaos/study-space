@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Configuration;
+using StudySpace.Api.Infrastructure;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -109,6 +111,28 @@ public sealed class StudyMcpTests
     }
 
     [Fact]
+    public async Task CanonicalStudyUrlsSurviveMcpProjections()
+    {
+        var handler = new FixtureHandler();
+        var tools = Tools(handler);
+        var courses = Structured(await tools.Call(Parameters("study_courses", new { }), default));
+        Assert.Equal("https://study.fixture.test/courses/7", courses.GetProperty("courses")[0].GetProperty("study_url").GetString());
+        var course = Structured(await tools.Call(Parameters("study_course", new { course_id = 7 }), default));
+        Assert.Equal("https://study.fixture.test/courses/7/activities/12", course.GetProperty("sections")[0].GetProperty("modules")[0].GetProperty("study_url").GetString());
+        Assert.Equal($"https://study.fixture.test/courses/7/activities/12?resource={new string('a', 64)}",
+            course.GetProperty("sections")[0].GetProperty("modules")[0].GetProperty("resources")[0].GetProperty("study_url").GetString());
+        var materials = Structured(await tools.Call(Parameters("study_materials", new { course_id = 7 }), default));
+        Assert.Equal("https://study.fixture.test/courses/7/activities/12", materials.GetProperty("materials")[0].GetProperty("study_url").GetString());
+        var tasks = Structured(await tools.Call(Parameters("study_tasks", new { course_id = 7 }), default));
+        var task = tasks.GetProperty("tasks")[0];
+        Assert.Equal("https://study.fixture.test/courses/7/activities/99", task.GetProperty("study_url").GetString());
+        Assert.Equal("https://study.fixture.test/courses/7/activities/12", task.GetProperty("relatedMaterials")[0].GetProperty("study_url").GetString());
+        var search = Structured(await tools.Call(Parameters("study_search", new { course_id = 7, query = "multiplication" }), default));
+        Assert.Equal("https://study.fixture.test/courses/7/activities/12", search.GetProperty("results")[0].GetProperty("study_url").GetString());
+        Assert.All(handler.Methods, method => Assert.Equal(HttpMethod.Get, method));
+    }
+
+    [Fact]
     public async Task EveryToolUsesOnlyReadRequestsAgainstStudySpace()
     {
         var handler = new FixtureHandler();
@@ -168,12 +192,22 @@ public sealed class StudyMcpTests
                 "/api/providers/moodle/tasks" => Tasks(),
                 "/api/providers/moodle/courses/7/contents" => new CourseSection[]
                 {
-                    new(11, "Week 1", "Introduction", [new(12, "Exercise sheet", "resource", null, "Solve matrix tasks", [])]),
+                    new(11, "Week 1", "Introduction", [new(12, "Exercise sheet", "resource", null, "Solve matrix tasks", [new("file", "Sheet.pdf", "application/pdf", 123, null, null, new string('a', 64))])]),
                 },
                 "/api/learning/courses/7" => LearningState(),
                 "/api/materials/courses/7" => Snapshot(),
                 "/api/materials/material-1/revisions/revision-1" => Document(),
                 _ => throw new InvalidOperationException($"Unexpected fixture request: {path}"),
+            };
+            var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+                { ["STUDY_PUBLIC_URL"] = "https://study.fixture.test" }).Build();
+            body = body switch
+            {
+                Course[] courses => StudyLinks.Courses(config, courses),
+                CourseSection[] sections => StudyLinks.Contents(config, 7, sections),
+                MoodleTaskList tasks => StudyLinks.Tasks(config, tasks),
+                MaterialSnapshot snapshot => StudyLinks.Materials(config, snapshot),
+                _ => body,
             };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(body, options: Options) });
         }
