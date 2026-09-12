@@ -5,6 +5,7 @@
 @import "@dotnaos/design/tokens.css";
 @import "@dotnaos/design/theme.css";
 @source "../node_modules/@dotnaos/ui-base/dist";
+@source "../node_modules/@dotnaos/ui/dist/layout.js";
 
 @layer components {
   .study-markdown-table {

@@ -11,6 +11,7 @@ import { SafeMarkdown } from "./SafeMarkdown";
 import { SourceChips, type SourceSelection } from "./SourceViewer";
 import { ExerciseAnswer } from "./ExerciseAnswer";
 import { ChapterNavigation } from "./ChapterNavigation";
+import { useCurrentChapter } from "./useCurrentChapter";
 import { Notice } from "./shared";
 
 export function LearningArtifact({
@@ -32,6 +33,7 @@ export function LearningArtifact({
 }) {
   const [view, setView] = useState<"script" | "exercises">("script");
   const [error, setError] = useState("");
+  const { contentRef, currentSectionId } = useCurrentChapter(version.sections, view === "script");
   async function goToSection(id: string) {
     document
       .getElementById(`learning-heading-${id}`)
@@ -95,18 +97,18 @@ export function LearningArtifact({
         </div>
       )}
       {view === "script" ? (
-        <div className="pt-5">
+        <div className={`grid min-w-0 items-start gap-6 pt-5 ${version.sections.length > 1 ? "lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-8" : ""}`}>
           <ChapterNavigation
             sections={version.sections}
-            readingSectionId={readingSectionId}
+            currentSectionId={currentSectionId}
             onSelect={(id) => void goToSection(id)}
           />
-          <div className="space-y-7 sm:space-y-9">
+          <div ref={contentRef} className="min-w-0 space-y-7 sm:space-y-9 lg:col-start-1 lg:row-start-1">
             {version.sections.map((section, index) => (
               <section
                 key={section.id}
                 id={`learning-section-${section.id}`}
-                className="scroll-mt-6"
+                className="scroll-mt-24 last:min-h-[calc(100dvh-8rem)]"
                 aria-labelledby={`learning-heading-${section.id}`}
               >
                 <h3
