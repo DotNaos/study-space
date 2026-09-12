@@ -214,6 +214,21 @@ public sealed class StudyMcpTools(HttpClient client)
             },
             required = new[] { "material_id", "revision" }
         }),
+        Tool("study_tasks", "List Moodle assignments as actionable Study tasks with deadlines, submission state, attachments and related prepared materials. Use this for questions about what is due, overdue, submitted, or coming up.", new
+        {
+            type = "object", additionalProperties = false,
+            properties = new
+            {
+                course_id = Integer(1, long.MaxValue),
+                status = new { @enum = new[] { "open", "upcoming", "overdue", "draft", "closed", "submitted", "graded" } },
+                query = String(1, 500),
+                due_after = String(1, 64),
+                due_before = String(1, 64),
+                include_finished = new { type = "boolean" },
+                offset = Integer(0, 10_000),
+                max_items = Integer(1, MaxItems),
+            }
+        }),
         Tool("study_search", "Search the active saved script, exercises and prepared source text for a course. Use this first for broad study questions, then open exact learning/source items returned by the search.", new
         {
             type = "object", additionalProperties = false,
@@ -251,6 +266,7 @@ public sealed class StudyMcpTools(HttpClient client)
             "study_course" => await Course(arguments, ct),
             "study_learning" => await Learning(arguments, ct),
             "study_materials" => await Materials(arguments, ct),
+            "study_tasks" => await Tasks(arguments, ct),
             "study_source" => await Source(arguments, ct),
             "study_search" => await Search(arguments, ct),
             _ => throw new StudyMcpException($"Unknown tool: {name}"),
@@ -424,6 +440,114 @@ public sealed class StudyMcpTools(HttpClient client)
             }).ToArray(),
         };
     }
+
+    private async Task<object> Tasks(JsonElement args, CancellationToken ct)
+    {
+        var courseId = OptionalLong(args, "course_id", 1, long.MaxValue);
+        var path = "/api/providers/moodle/tasks" + (courseId is null ? "" : $"?courseId={courseId.Value}");
+        var taskList = await Get<MoodleTaskList>(path, ct);
+        IEnumerable<MoodleTask> tasks = taskList.Tasks;
+
+        var query = OptionalString(args, "query", 500);
+        if (query is not null)
+            tasks = tasks.Where(task => task.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                task.CourseName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                task.SectionName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                task.Description.Contains(query, StringComparison.OrdinalIgnoreCase));
+
+        var status = OptionalString(args, "status", 32);
+        var allowedStatuses = new HashSet<string>(["open", "upcoming", "overdue", "draft", "closed", "submitted", "graded"], StringComparer.OrdinalIgnoreCase);
+        if (status is not null && !allowedStatuses.Contains(status)) throw new StudyMcpException("status must be open, upcoming, overdue, draft, closed, submitted, or graded.");
+        if (status is not null) tasks = tasks.Where(task => string.Equals(task.Status, status, StringComparison.OrdinalIgnoreCase));
+
+        var includeFinished = Bool(args, "include_finished", false);
+        if (!includeFinished && status is null)
+            tasks = tasks.Where(task => task.Status is not ("submitted" or "graded"));
+
+        var dueAfter = OptionalDate(args, "due_after");
+        var dueBefore = OptionalDate(args, "due_before");
+        if (dueAfter is not null && dueBefore is not null && dueAfter > dueBefore)
+            throw new StudyMcpException("due_after must be before due_before.");
+        if (dueAfter is not null) tasks = tasks.Where(task => task.DueAt is { } due && due >= dueAfter.Value);
+        if (dueBefore is not null) tasks = tasks.Where(task => task.DueAt is { } due && due <= dueBefore.Value);
+
+        tasks = tasks.OrderBy(task => TaskPriority(task.Status)).ThenBy(task => task.DueAt ?? long.MaxValue)
+            .ThenBy(task => task.CourseName, StringComparer.OrdinalIgnoreCase).ThenBy(task => task.Title, StringComparer.OrdinalIgnoreCase);
+        var total = tasks.Count();
+        var offset = Int(args, "offset", 0, 0, 10_000);
+        var max = Int(args, "max_items", DefaultItems, 1, MaxItems);
+        var page = tasks.Skip(offset).Take(max).ToArray();
+        var materialCache = new Dictionary<long, MaterialSnapshot>();
+        var output = new List<object>();
+        foreach (var task in page)
+        {
+            if (!materialCache.TryGetValue(task.CourseId, out var snapshot))
+            {
+                snapshot = await Get<MaterialSnapshot>($"/api/materials/courses/{task.CourseId}", ct);
+                materialCache[task.CourseId] = snapshot;
+            }
+            var relatedMaterials = snapshot.Materials.Where(item => item.Status == "ready" && item.Revision is not null &&
+                    task.SectionId > 0 && item.SectionId == task.SectionId)
+                .Take(12).Select(item => new
+                {
+                    material_id = item.Id,
+                    revision = item.Revision,
+                    item.Name,
+                    mime_type = item.MimeType,
+                    module_id = item.ModuleId,
+                }).ToArray();
+            output.Add(new
+            {
+                task.Id,
+                task.CourseId,
+                task.CourseName,
+                task.SectionId,
+                task.SectionName,
+                task.ModuleId,
+                task.AssignmentId,
+                task.Title,
+                description = Clip(task.Description, 3_000),
+                task.Status,
+                task.SubmissionStatus,
+                task.GradingStatus,
+                task.CanSubmit,
+                task.Locked,
+                opensAt = task.OpensAt,
+                opensAtUtc = Timestamp(task.OpensAt),
+                dueAt = task.DueAt,
+                dueAtUtc = Timestamp(task.DueAt),
+                cutoffAt = task.CutoffAt,
+                cutoffAtUtc = Timestamp(task.CutoffAt),
+                submittedAt = task.SubmittedAt,
+                submittedAtUtc = Timestamp(task.SubmittedAt),
+                task.Attachments,
+                relatedMaterials,
+                task.Warnings,
+            });
+        }
+        return new
+        {
+            total,
+            offset,
+            partial = taskList.Partial,
+            warnings = taskList.Warnings,
+            tasks = output.ToArray(),
+        };
+    }
+
+    private static int TaskPriority(string status) => status switch
+    {
+        "overdue" => 0,
+        "draft" => 1,
+        "open" => 2,
+        "upcoming" => 3,
+        "closed" => 4,
+        "submitted" => 5,
+        "graded" => 6,
+        _ => 7,
+    };
+
+    private static string? Timestamp(long? value) => value is { } unix ? DateTimeOffset.FromUnixTimeSeconds(unix).ToString("O") : null;
 
     private async Task<object> Source(JsonElement args, CancellationToken ct)
     {
@@ -685,6 +809,15 @@ public sealed class StudyMcpTools(HttpClient client)
         return number;
     }
     private static int? OptionalInt(JsonElement args, string name, int min, int max) => args.TryGetProperty(name, out _) ? Int(args, name, min, min, max) : null;
+    private static long? OptionalDate(JsonElement args, string name)
+    {
+        var value = OptionalString(args, name, 64);
+        if (value is null) return null;
+        if (!DateTimeOffset.TryParse(value, System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.AllowWhiteSpaces | System.Globalization.DateTimeStyles.AssumeUniversal, out var parsed))
+            throw new StudyMcpException($"{name} must be an ISO-8601 date/time.");
+        return parsed.ToUnixTimeSeconds();
+    }
     private static long Long(JsonElement args, string name, long min, long max)
     {
         if (!args.TryGetProperty(name, out var value) || value.ValueKind != JsonValueKind.Number || !value.TryGetInt64(out var number) || number < min || number > max)

@@ -304,9 +304,20 @@ export function SourceChips({
   sources: LearningSource[];
   onOpen: (source: SourceSelection) => void;
 }) {
+  const uniqueReferences = references.filter(
+    (reference, index) =>
+      references.findIndex(
+        (candidate) =>
+          candidate.materialId === reference.materialId &&
+          candidate.revision === reference.revision &&
+          (reference.page != null
+            ? candidate.page === reference.page
+            : candidate.page == null && candidate.blockId === reference.blockId),
+      ) === index,
+  );
   return (
     <div className="mt-3 flex flex-wrap gap-2" aria-label="Quellen">
-      {references.map((reference) => {
+      {uniqueReferences.map((reference) => {
         const source = sources.find(
           (source) =>
             source.materialId === reference.materialId &&
@@ -323,11 +334,11 @@ export function SourceChips({
             key={`${reference.materialId}-${reference.revision}-${reference.blockId}`}
             type="button"
             onClick={() => onOpen({ ...reference, name: source.name })}
-            className="inline-flex max-w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-left text-xs text-text-muted hover:bg-bg-1 hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring"
+            className="inline-flex w-full max-w-full items-center gap-1.5 rounded-md border border-border px-2 py-1 text-left text-xs text-text-muted hover:bg-bg-1 hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring sm:w-auto"
             title={source.name}
           >
             <FileText size={12} className="shrink-0" />
-            <span className="max-w-60 truncate">{source.name}</span>
+            <span className="min-w-0 flex-1 truncate sm:max-w-60">{source.name}</span>
             {reference.page != null && (
               <span className="shrink-0">· S. {reference.page}</span>
             )}

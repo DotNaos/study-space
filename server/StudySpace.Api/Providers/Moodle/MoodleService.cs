@@ -191,6 +191,156 @@ public sealed class MoodleService(IMoodleTransport transport, CredentialStore cr
         var site = MoodleSite.Parse(credential.SiteUrl);
         return await transport.Authenticated(site, credential.Token, "core_course_get_contents", new() { ["courseid"] = courseId.ToString(System.Globalization.CultureInfo.InvariantCulture) }, ct);
     }
+    public async Task<MoodleTaskList> Tasks(long? courseId, CancellationToken ct)
+    {
+        var credential = await credentials.Read() ?? throw new ApiFailure("moodle_disconnected", "Connect Moodle first.", 409);
+        var courses = await Courses(credential, ct);
+        Course[] selected;
+        if (courseId is { } requested)
+        {
+            selected = courses.Where(course => course.Id == requested).ToArray();
+            if (selected.Length == 0) throw new ApiFailure("course_unavailable", "This course is not available in your Moodle course list.", 404);
+        }
+        else
+        {
+            var now = clock.GetUtcNow().ToUnixTimeSeconds();
+            var recent = now - (30L * 24 * 60 * 60);
+            var nearFuture = now + (14L * 24 * 60 * 60);
+            selected = courses.Where(course =>
+                    (course.StartDate is null || course.StartDate <= nearFuture) &&
+                    (course.EndDate is null || course.EndDate >= recent))
+                .ToArray();
+        }
+
+        if (selected.Length == 0) return new([], false, []);
+        var site = MoodleSite.Parse(credential.SiteUrl);
+        var warnings = new List<string>();
+        MoodleAssignment[] assignments;
+        var fallback = false;
+        try
+        {
+            var arguments = selected.Select((course, index) => new KeyValuePair<string, string>($"courseids[{index}]", course.Id.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+                .ToDictionary(pair => pair.Key, pair => pair.Value);
+            var result = await transport.Authenticated(site, credential.Token, "mod_assign_get_assignments", arguments, ct);
+            var parsed = MoodleTasks.ParseAssignments(result);
+            assignments = parsed.Assignments.Where(assignment => selected.Any(course => course.Id == assignment.CourseId)).ToArray();
+            warnings.AddRange(parsed.Warnings);
+        }
+        catch (ApiFailure error) when (error.Code is "moodle_rejected" or "moodle_response")
+        {
+            fallback = true;
+            assignments = [];
+            warnings.Add("Detailed Moodle assignment metadata is unavailable; Study Space is using visible assignment modules without deadline/submission metadata.");
+        }
+
+        var sections = new Dictionary<long, CourseSection[]>();
+        foreach (var course in selected.Where(course => fallback || assignments.Any(assignment => assignment.CourseId == course.Id)))
+        {
+            try
+            {
+                var contents = await AuthorizedContents(credential, course.Id, ct);
+                sections[course.Id] = MoodleCourseContents.Parse(contents, site, course.Id);
+            }
+            catch (ApiFailure error) when (error.Code is "moodle_rejected" or "moodle_response")
+            {
+                warnings.Add($"Course contents could not be read for {course.Name}.");
+                sections[course.Id] = [];
+            }
+        }
+
+        if (fallback)
+        {
+            var tasks = selected.SelectMany(course => FallbackTasks(course, sections.GetValueOrDefault(course.Id) ?? [])).ToArray();
+            return new(tasks, true, warnings.Distinct().Take(32).ToArray());
+        }
+
+        var statusFailures = 0;
+        var tasksWithStatus = new List<MoodleTask>();
+        foreach (var assignment in assignments.OrderBy(assignment => assignment.DueAt ?? long.MaxValue).ThenBy(assignment => assignment.Title, StringComparer.OrdinalIgnoreCase))
+        {
+            MoodleSubmissionState? submission = null;
+            var taskWarnings = new List<string>();
+            if (!assignment.NoSubmissions)
+            {
+                try
+                {
+                    var statusResult = await transport.Authenticated(site, credential.Token, "mod_assign_get_submission_status", new()
+                    {
+                        ["assignid"] = assignment.AssignmentId.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    }, ct);
+                    submission = MoodleTasks.ParseSubmission(statusResult);
+                    taskWarnings.AddRange(MoodleTasks.Warnings(statusResult));
+                }
+                catch (ApiFailure error) when (error.Code is "moodle_rejected" or "moodle_response")
+                {
+                    statusFailures++;
+                    taskWarnings.Add("Submission status is unavailable for this assignment; open/due state is derived from the deadline.");
+                }
+            }
+
+            var course = selected.Single(item => item.Id == assignment.CourseId);
+            var location = FindLocation(sections.GetValueOrDefault(course.Id) ?? [], assignment.ModuleId);
+            var attachmentList = assignment.Attachments.AsEnumerable();
+            if (location.Module is { } module)
+                attachmentList = attachmentList.Concat(module.Resources.Select(resource => new MoodleTaskAttachment(resource.Name, resource.MimeType, resource.Size, resource.ModifiedAt)));
+            var attachments = attachmentList.DistinctBy(file => (file.Name, file.MimeType, file.Size, file.ModifiedAt)).Take(32).ToArray();
+            var effectiveDue = submission?.ExtensionDueAt is { } extension && (assignment.DueAt is null || extension > assignment.DueAt) ? extension : assignment.DueAt;
+            tasksWithStatus.Add(new(
+                $"moodle:{course.Id}:assign:{assignment.AssignmentId}",
+                course.Id,
+                course.Name,
+                location.Section?.Id ?? 0,
+                location.Section?.Name ?? "",
+                assignment.ModuleId,
+                assignment.AssignmentId,
+                assignment.Title,
+                string.IsNullOrWhiteSpace(assignment.Description) ? location.Module?.Description ?? "" : assignment.Description,
+                assignment.OpensAt,
+                effectiveDue,
+                assignment.CutoffAt,
+                TaskStatus(assignment, submission, effectiveDue),
+                submission?.SubmissionStatus,
+                submission?.GradingStatus,
+                submission?.CanSubmit,
+                submission?.Locked,
+                submission?.SubmittedAt,
+                attachments,
+                taskWarnings.Distinct().Take(16).ToArray()));
+        }
+        if (statusFailures > 0) warnings.Add($"Submission status could not be read for {statusFailures} assignment(s); other assignments were still checked.");
+        return new(tasksWithStatus.ToArray(), statusFailures > 0 || warnings.Count > 0, warnings.Distinct().Take(32).ToArray());
+    }
+    private string TaskStatus(MoodleAssignment assignment, MoodleSubmissionState? submission, long? dueAt)
+    {
+        if (submission?.Graded == true) return "graded";
+        if (string.Equals(submission?.SubmissionStatus, "submitted", StringComparison.OrdinalIgnoreCase)) return "submitted";
+        if (string.Equals(submission?.SubmissionStatus, "draft", StringComparison.OrdinalIgnoreCase)) return "draft";
+        var now = clock.GetUtcNow().ToUnixTimeSeconds();
+        if (assignment.OpensAt is { } opens && opens > now) return "upcoming";
+        if (assignment.CutoffAt is { } cutoff && cutoff < now) return "closed";
+        if (submission?.CanSubmit == false && submission?.Locked == true) return "closed";
+        if (dueAt is { } due && due < now) return "overdue";
+        return "open";
+    }
+    private static (CourseSection? Section, CourseModule? Module) FindLocation(CourseSection[] sections, long moduleId)
+    {
+        foreach (var section in sections)
+        {
+            var module = section.Modules.SingleOrDefault(module => module.Id == moduleId);
+            if (module is not null) return (section, module);
+        }
+        return (null, null);
+    }
+    private static IEnumerable<MoodleTask> FallbackTasks(Course course, CourseSection[] sections)
+    {
+        foreach (var section in sections)
+        foreach (var module in section.Modules.Where(module => string.Equals(module.Type, "assign", StringComparison.OrdinalIgnoreCase)))
+            yield return new(
+                $"moodle:{course.Id}:cm:{module.Id}", course.Id, course.Name, section.Id, section.Name, module.Id, null,
+                module.Name, module.Description, null, null, null, "open", null, null, null, null, null,
+                module.Resources.Select(resource => new MoodleTaskAttachment(resource.Name, resource.MimeType, resource.Size, resource.ModifiedAt)).Take(32).ToArray(),
+                ["Deadline and submission status are unavailable for this fallback task."]);
+    }
     private async Task Validate(MoodleCredential credential, CancellationToken ct)
     {
         var site = MoodleSite.Parse(credential.SiteUrl);

@@ -104,7 +104,7 @@ export function LearningArtifact({
             readingSectionId={readingSectionId}
             onSelect={(id) => void goToSection(id)}
           />
-          <div className="space-y-9">
+          <div className="space-y-7 sm:space-y-9">
             {version.sections.map((section, index) => (
               <section
                 key={section.id}
@@ -115,12 +115,12 @@ export function LearningArtifact({
                 <h3
                   tabIndex={-1}
                   id={`learning-heading-${section.id}`}
-                  className="text-lg font-medium tracking-tight"
+                  className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-x-1.5 text-base font-medium tracking-tight sm:text-lg"
                 >
-                  <span className="mr-2 text-sm text-text-muted/60">
+                  <span className="pt-0.5 text-sm text-text-muted/60">
                     {index + 1}
                   </span>
-                  {section.title}
+                  <span className="min-w-0 break-words">{section.title}</span>
                 </h3>
                 <SafeMarkdown>{section.markdown}</SafeMarkdown>
                 <SourceChips
@@ -136,7 +136,7 @@ export function LearningArtifact({
         <ol className="divide-y divide-border">
           {version.exercises.map((exercise, index) => (
             <li key={exercise.id} className="py-6">
-              <div className="mb-2 flex items-baseline justify-between gap-3">
+              <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
                 <h3 className="text-base font-medium">
                   <span className="mr-2 text-sm text-text-muted/60">
                     {index + 1}

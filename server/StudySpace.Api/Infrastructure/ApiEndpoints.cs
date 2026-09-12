@@ -40,6 +40,7 @@ public static class ApiEndpoints
         moodle.MapPost("/login/{id}/complete", (string id, CompleteRequest request, MoodleService service, CancellationToken ct) => service.Complete(id, request, ct));
         moodle.MapDelete("", async (MoodleService service, CancellationToken ct) => { await service.Disconnect(ct); return Results.NoContent(); });
         moodle.MapGet("/courses", (MoodleService service, CancellationToken ct) => service.Courses(ct));
+        moodle.MapGet("/tasks", (long? courseId, MoodleService service, CancellationToken ct) => service.Tasks(courseId, ct));
         moodle.MapGet("/courses/{id:long}/image", async (long id, MoodleImageService service, CancellationToken ct) =>
         {
             var image = await service.Get(id, ct);

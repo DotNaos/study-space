@@ -15,7 +15,7 @@ public sealed class StudyMcpTests
     {
         var tools = JsonSerializer.SerializeToElement(StudyMcpTools.ToolDefinitions, Options);
         Assert.Equal(
-            ["study_status", "study_courses", "study_course", "study_learning", "study_materials", "study_source", "study_file", "study_search"],
+            ["study_status", "study_courses", "study_course", "study_learning", "study_materials", "study_source", "study_file", "study_tasks", "study_search"],
             tools.EnumerateArray().Select(tool => tool.GetProperty("name").GetString() ?? "").ToArray());
         foreach (var tool in tools.EnumerateArray())
         {
@@ -90,6 +90,25 @@ public sealed class StudyMcpTests
     }
 
     [Fact]
+    public async Task TasksExposeDeadlinesAndRelatedPreparedMaterials()
+    {
+        var result = Structured(await Tools(new FixtureHandler()).Call(Parameters("study_tasks", new
+        {
+            course_id = 7,
+            due_before = "2026-09-13T23:59:59Z",
+        }), default));
+
+        Assert.Equal(1, result.GetProperty("total").GetInt32());
+        var task = Assert.Single(result.GetProperty("tasks").EnumerateArray());
+        Assert.Equal("moodle:7:assign:501", task.GetProperty("id").GetString());
+        Assert.Equal("open", task.GetProperty("status").GetString());
+        Assert.Equal(1789214400, task.GetProperty("dueAt").GetInt64());
+        var material = Assert.Single(task.GetProperty("relatedMaterials").EnumerateArray());
+        Assert.Equal("material-1", material.GetProperty("material_id").GetString());
+        Assert.Equal("revision-1", material.GetProperty("revision").GetString());
+    }
+
+    [Fact]
     public async Task EveryToolUsesOnlyReadRequestsAgainstStudySpace()
     {
         var handler = new FixtureHandler();
@@ -103,6 +122,7 @@ public sealed class StudyMcpTests
             Parameters("study_materials", new { course_id = 7 }),
             Parameters("study_source", new { material_id = "material-1", revision = "revision-1", block_id = "block-1" }),
             Parameters("study_file", new { material_id = "material-1", revision = "revision-1" }),
+            Parameters("study_tasks", new { course_id = 7 }),
             Parameters("study_search", new { course_id = 7, query = "matrix" }),
         };
 
@@ -145,6 +165,7 @@ public sealed class StudyMcpTests
                 "/api/status" => new { app = "study-space", database = "ready" },
                 "/api/providers/moodle" => new { status = "connected" },
                 "/api/providers/moodle/courses" => new Course[] { new(7, "Biology", "BIO", "Course summary") },
+                "/api/providers/moodle/tasks" => Tasks(),
                 "/api/providers/moodle/courses/7/contents" => new CourseSection[]
                 {
                     new(11, "Week 1", "Introduction", [new(12, "Exercise sheet", "resource", null, "Solve matrix tasks", [])]),
@@ -156,6 +177,12 @@ public sealed class StudyMcpTests
             };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) { Content = JsonContent.Create(body, options: Options) });
         }
+
+        private static MoodleTaskList Tasks() => new(
+            [new("moodle:7:assign:501", 7, "Biology", 11, "Week 1", 99, 501, "Problem set 1", "Analyse the sequences.",
+                1789034400, 1789214400, 1789387200, "open", "new", "notgraded", true, false, null,
+                [new("instructions.pdf", "application/pdf", 1234, 1789000000)], [])],
+            false, []);
 
         private static LearningState LearningState()
         {
