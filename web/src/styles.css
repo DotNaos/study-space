@@ -5,3 +5,78 @@
 @import "@dotnaos/design/tokens.css";
 @import "@dotnaos/design/theme.css";
 @source "../node_modules/@dotnaos/ui-base/dist";
+
+@layer components {
+  .study-markdown-table {
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .study-markdown-table table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+  }
+
+  .study-markdown-table th,
+  .study-markdown-table td {
+    border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    padding: 0.5rem 0.75rem;
+    vertical-align: top;
+  }
+
+  @media (max-width: 639px) {
+    .study-markdown-table {
+      overflow: visible;
+    }
+
+    .study-markdown-table table,
+    .study-markdown-table thead,
+    .study-markdown-table tbody {
+      display: block;
+      width: 100%;
+    }
+
+    .study-markdown-table tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(6.5rem, auto);
+      gap: 0.25rem 1rem;
+      padding: 0.75rem 0;
+      border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+    }
+
+    .study-markdown-table thead tr {
+      padding-top: 0.25rem;
+      color: color-mix(in srgb, currentColor 62%, transparent);
+    }
+
+    .study-markdown-table th,
+    .study-markdown-table td {
+      display: block;
+      min-width: 0;
+      padding: 0;
+      border: 0;
+    }
+
+    .study-markdown-table th:first-child,
+    .study-markdown-table td:first-child {
+      grid-column: 1 / -1;
+    }
+
+    .study-markdown-table th:not(:first-child) {
+      font-size: 0.75rem;
+      line-height: 1.15rem;
+    }
+
+    .study-markdown-table td:not(:first-child) {
+      font-size: 0.8125rem;
+      line-height: 1.3rem;
+      color: color-mix(in srgb, currentColor 78%, transparent);
+    }
+
+    .study-markdown-table th:last-child,
+    .study-markdown-table td:last-child {
+      text-align: right;
+    }
+  }
+}
