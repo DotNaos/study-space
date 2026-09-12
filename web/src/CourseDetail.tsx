@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
-import { ArrowLeft, CalendarDays, BookOpen, Files } from "lucide-react";
+import { ArrowLeft, CalendarDays, BookOpen, Files, ImagePlus } from "lucide-react";
 import { api, message, type Course, type CourseSection } from "./api";
 import { AppLink, type Navigate } from "./navigation";
 import { cleanCourseText } from "./course-content";
@@ -13,6 +13,7 @@ import { useLearningCourse } from "./learning-api";
 import { useMaterialSnapshot } from "./material-api";
 import { MaterialPreparation } from "./MaterialPreparation";
 import type { SourceSelection } from "./SourceViewer";
+const CourseArtworkEditor = lazy(() => import("./CourseArtworkEditor").then((module) => ({ default: module.CourseArtworkEditor })));
 const LearningPanel = lazy(() =>
   import("./LearningPanel").then((module) => ({
     default: module.LearningPanel,
@@ -32,11 +33,14 @@ export function CourseDetail({
   course,
   navigate,
   moodleConnected = true,
+  onCourseChanged,
 }: {
   course: Course;
   navigate: Navigate;
   moodleConnected?: boolean;
+  onCourseChanged?: (course: Course) => void;
 }) {
+  const [artworkOpen, setArtworkOpen] = useState(false);
   const [sections, setSections] = useState<CourseSection[]>();
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<ResourcePreview>();
@@ -88,7 +92,7 @@ export function CourseDetail({
           {semester && (
             <p className="mb-1.5 flex items-center gap-2 text-xs font-medium text-text-muted">
               <CalendarDays size={14} aria-hidden="true" />
-              {semester.label}
+              {semester.shortLabel}
             </p>
           )}
           <h1 className="break-words text-xl font-medium leading-snug tracking-tight sm:text-2xl">
@@ -100,12 +104,16 @@ export function CourseDetail({
             </p>
           )}
         </div>
-        <CourseArtwork
-          course={course}
-          eager
-          className="mt-1 h-12 w-16 sm:mt-0 sm:h-20 sm:w-28"
-        />
+        <button type="button" onClick={() => setArtworkOpen(true)} disabled={!moodleConnected || !onCourseChanged}
+          aria-label="Kursbild ändern" title="Kursbild ändern"
+          className="group relative mt-1 shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default sm:mt-0">
+          <CourseArtwork course={course} eager className="size-14 sm:h-20 sm:w-28" />
+          {moodleConnected && onCourseChanged && <span className="absolute bottom-0 right-0 rounded-tl-md rounded-br-lg bg-bg-0/90 p-1.5 text-text-muted"><ImagePlus size={14} aria-hidden="true" /></span>}
+        </button>
       </header>
+      {artworkOpen && onCourseChanged && <Suspense fallback={<Loading label="Bildeditor wird geöffnet …" />}>
+        <CourseArtworkEditor course={course} onChanged={onCourseChanged} onClose={() => setArtworkOpen(false)} />
+      </Suspense>}
       <div
         role="group"
         aria-label="Kursansicht"

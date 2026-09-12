@@ -1,6 +1,7 @@
+import { Icon } from "@dotnaos/ui-base";
 import { lazy, Suspense, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Download, FileText, X, ArrowUpRight } from "lucide-react";
+import { Download, X, ArrowUpRight } from "lucide-react";
 import { Button } from "@dotnaos/ui-base";
 import { fetchPreviewBytes, type ResourcePreview } from "./resource-preview";
 import { message } from "./api";
@@ -64,11 +65,7 @@ export function ResourceViewer({
       className="fixed inset-0 m-auto h-dvh max-h-none w-screen max-w-none flex-col overflow-hidden border border-border bg-bg-0 p-0 text-text shadow-2xl backdrop:bg-black/45 open:flex sm:h-[92dvh] sm:w-[94vw] sm:max-w-6xl sm:rounded-xl"
     >
       <div className="flex shrink-0 items-center gap-3 border-b border-border px-3 py-2.5 sm:px-5">
-        <FileText
-          size={18}
-          className="hidden shrink-0 text-text-muted sm:block"
-          aria-hidden="true"
-        />
+        <Icon.File filename={preview.name} size={22} />
         <h2
           id={titleId}
           className="min-w-0 flex-1 break-words text-sm font-medium leading-5"

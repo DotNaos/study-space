@@ -1,7 +1,7 @@
 using StudySpace.Api.Infrastructure;
 namespace StudySpace.Api.Providers.Moodle;
 
-public sealed record MoodleImage(byte[] Bytes, string ContentType);
+public sealed record MoodleImage(byte[] Bytes, string ContentType, string? Version = null);
 public interface IMoodleImageTransport
 {
     Task<MoodleImage> Fetch(Uri site, Uri source, string token, CancellationToken ct);
@@ -44,7 +44,7 @@ public sealed class MoodleImageTransport(IHttpClientFactory clients) : IMoodleIm
         return new(bytes, mime!);
     }
 
-    private static bool MatchesSignature(byte[] bytes, string mime) => mime switch
+    internal static bool MatchesSignature(byte[] bytes, string mime) => mime switch
     {
         "image/png" => bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }),
         "image/jpeg" => bytes.AsSpan().StartsWith(new byte[] { 255, 216, 255 }),

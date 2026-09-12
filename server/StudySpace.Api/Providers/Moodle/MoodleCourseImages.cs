@@ -6,6 +6,11 @@ public static class MoodleCourseImages
     public const int MaximumBytes = 4 * 1024 * 1024;
     public static bool AllowedMime(string? mime) => mime is "image/png" or "image/jpeg" or "image/webp";
 
+    internal static string ModifiedKey(JsonElement course) =>
+        course.TryGetProperty("overviewfiles", out var files) && files.ValueKind == JsonValueKind.Array
+            ? string.Join(";", files.EnumerateArray().Where(file => file.ValueKind == JsonValueKind.Object)
+                .Select(file => $"{MoodleJson.Number(file, "timemodified")}:{MoodleJson.Number(file, "filesize")}")) : "";
+
     public static Uri? Select(JsonElement course, Uri site)
     {
         if (course.TryGetProperty("overviewfiles", out var files) && files.ValueKind == JsonValueKind.Array)

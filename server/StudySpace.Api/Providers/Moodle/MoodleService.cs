@@ -5,7 +5,7 @@ using System.Text.RegularExpressions;
 using StudySpace.Api.Infrastructure;
 namespace StudySpace.Api.Providers.Moodle;
 
-public sealed partial class MoodleService(IMoodleTransport transport, CredentialStore credentials, TimeProvider clock)
+public sealed partial class MoodleService(IMoodleTransport transport, CredentialStore credentials, TimeProvider clock, CourseArtworkStore? artwork = null)
 {
     private readonly ConcurrentDictionary<string, PendingLogin> logins = new();
     private readonly SemaphoreSlim changes = new(1, 1);
@@ -139,7 +139,8 @@ public sealed partial class MoodleService(IMoodleTransport transport, Credential
     }
     private async Task<Course[]> Courses(MoodleCredential credential, CancellationToken ct)
     {
-        return (await CourseEntries(credential, ct)).Select(entry => entry.Course).ToArray();
+        var entries = await CourseEntries(credential, ct);
+        return await Task.WhenAll(entries.Select(entry => WithArtwork(credential, entry.Course, ct)));
     }
     private async Task<CourseEntry[]> CourseEntries(MoodleCredential credential, CancellationToken ct, bool fresh = false)
     {
@@ -164,13 +165,30 @@ public sealed partial class MoodleService(IMoodleTransport transport, Credential
                 var endDate = MoodleJson.Number(x, "enddate");
                 var course = new Course(id, MoodleText.Plain(MoodleJson.Text(x, "fullname") ?? "Course"),
                     MoodleText.Plain(MoodleJson.Text(x, "shortname")), MoodleText.Plain(MoodleJson.Text(x, "summary")),
-                    image is null ? null : $"/api/providers/moodle/courses/{id}/image", startDate > 0 ? startDate : null, endDate > 0 ? endDate : null);
+                    image is null ? null : $"/api/providers/moodle/courses/{id}/image", startDate > 0 ? startDate : null, endDate > 0 ? endDate : null,
+                    image is null ? null : CourseArtworkStore.Version(credential, $"{id}:{image.AbsoluteUri}:{MoodleCourseImages.ModifiedKey(x)}"));
                 return new CourseEntry(course, image);
             }).ToArray();
             courseSnapshot = new(credential, clock.GetUtcNow().AddSeconds(30), entries);
             return entries;
         }
         finally { courseReads.Release(); }
+    }
+    internal async Task<Course> ImageCourse(MoodleCredential credential, long courseId, CancellationToken ct)
+    {
+        var entry = (await CourseEntries(credential, ct)).SingleOrDefault(entry => entry.Course.Id == courseId)
+            ?? throw new ApiFailure("course_unavailable", "This course is not available in your Moodle course list.", 404);
+        return await WithArtwork(credential, entry.Course, ct);
+    }
+    private async Task<Course> WithArtwork(MoodleCredential credential, Course course, CancellationToken ct)
+    {
+        var custom = artwork is null ? null : await artwork.Info(credential, course.Id, ct);
+        return custom is null ? course : course with
+        {
+            ImageUrl = $"/api/providers/moodle/courses/{course.Id}/image",
+            ImageVersion = CourseArtworkStore.Version(credential, $"{course.Id}:custom:{custom.Sha256}"),
+            HasCustomImage = true,
+        };
     }
     internal async Task<Uri> ImageSource(MoodleCredential credential, long courseId, CancellationToken ct)
     {

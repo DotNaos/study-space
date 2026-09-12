@@ -65,7 +65,7 @@ export function CoursesView({
   if (courseId && courses && !error) {
     const course = courses.find((item) => item.id === courseId);
     return course ? (
-      <CourseDetail key={course.id} course={course} navigate={navigate} />
+      <CourseDetail key={course.id} course={course} navigate={navigate} onCourseChanged={(updated) => setCourses((items) => items?.map((item) => item.id === updated.id ? updated : item))} />
     ) : (
       <div className="max-w-md space-y-4">
         <Notice>Dieser Kurs ist nicht mehr verfügbar.</Notice>
@@ -76,22 +76,18 @@ export function CoursesView({
   const groups = groupCourses(courses || [], query);
   return (
     <div className="max-w-4xl">
-      <div className="mb-9 flex flex-wrap items-end justify-between gap-5">
-        <div>
-          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-baseline gap-2.5">
+          <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">
             Kurse
           </h1>
           {courses && courses.length > 0 && (
-            <p className="mt-2 text-sm text-text-muted">
-              {courses.length}{" "}
-              {courses.length === 1
-                ? "Kurs in deiner Bibliothek"
-                : "Kurse in deiner Bibliothek"}
-            </p>
+            <span className="text-xs tabular-nums text-text-muted" aria-label={`${courses.length} Kurse`}>{courses.length}</span>
           )}
         </div>
         {!!courses?.length && !error && (
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full [&_input]:min-h-11 [&_input]:pl-10 [&_input]:text-base sm:w-72 sm:[&_input]:text-sm">
+            <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-text-muted" />
             <Input
               accessibilityLabel="Kurse durchsuchen"
               type="search"
