@@ -71,16 +71,19 @@ export function ScriptComparison({
           names.set(sourceKey(ref), { ...ref, name: "Gespeicherte Quelle" });
     return [...names.values()];
   }, [version]);
+  const initialSource =
+    activeRange?.sources[0] ??
+    (chapter ? sectionReferences(chapter)[0] : undefined);
   const [sourceId, setSourceId] = useState(() =>
-    chapter && sectionReferences(chapter)[0]
-      ? sourceKey(sectionReferences(chapter)[0])
+    initialSource
+      ? sourceKey(initialSource)
       : sources[0]
         ? sourceKey(sources[0])
         : "",
   );
   const chosenSource = sources.find((source) => sourceKey(source) === sourceId);
-  const [page, setPage] = useState<number | null>(() =>
-    chapter ? (sectionReferences(chapter)[0]?.page ?? null) : null,
+  const [page, setPage] = useState<number | null>(
+    () => initialSource?.page ?? null,
   );
   const [doc, setDoc] = useState<MaterialDocument>();
   const [error, setError] = useState("");
