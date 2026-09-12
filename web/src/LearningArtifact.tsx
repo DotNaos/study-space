@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
 import { ChevronDown } from "lucide-react";
 import { api, message } from "./api";
@@ -13,7 +13,9 @@ import { SourceChips, type SourceSelection } from "./SourceViewer";
 import { ExerciseAnswer } from "./ExerciseAnswer";
 import { ChapterNavigation } from "./ChapterNavigation";
 import { useCurrentChapter } from "./useCurrentChapter";
-import { Notice } from "./shared";
+import { Loading, Notice } from "./shared";
+
+const ScriptComparison = lazy(() => import("./ScriptComparison").then(module => ({ default: module.ScriptComparison })));
 
 export function LearningArtifact({
   courseId,
@@ -35,15 +37,26 @@ export function LearningArtifact({
   onSource: (source: SourceSelection) => void;
 }) {
   const [view, setView] = useState<"script" | "exercises">(initialTarget?.kind === "exercise" ? "exercises" : "script");
+  const [compare, setCompare] = useState(() => initialTarget?.mode === "comparison" || (typeof window !== "undefined" && window.location.hash.startsWith("#compare/")));
+  const [compareSection, setCompareSection] = useState<string | null | undefined>(initialTarget?.id);
+  function setReaderMode(value: boolean) {
+    setCompare(value);
+    if (value) setCompareSection(currentSectionId || readingSectionId);
+    else if (window.location.hash.startsWith("#compare/")) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+  }
   const [error, setError] = useState("");
-  const { contentRef, currentSectionId } = useCurrentChapter(version.sections, view === "script");
+  const { contentRef, currentSectionId } = useCurrentChapter(version.sections, view === "script" && !compare);
   useEffect(() => {
-    if (initialTarget) setView(initialTarget.kind === "chapter" ? "script" : "exercises");
+    if (initialTarget) {
+      setView(initialTarget.kind === "chapter" ? "script" : "exercises");
+      setCompare(initialTarget.mode === "comparison");
+      setCompareSection(initialTarget.id);
+    }
   }, [initialTarget]);
   useEffect(() => {
     if (!initialTarget) return;
     const wanted = initialTarget.kind === "chapter" ? "script" : "exercises";
-    if (view !== wanted) return;
+    if (view !== wanted || compare) return;
     const frame = requestAnimationFrame(() => {
       const id = initialTarget.kind === "chapter" ? `learning-heading-${initialTarget.id}` : `exercise-heading-${initialTarget.id}`;
       const target = document.getElementById(id);
@@ -51,7 +64,7 @@ export function LearningArtifact({
       target?.scrollIntoView({ block: "start", behavior: "instant" });
     });
     return () => cancelAnimationFrame(frame);
-  }, [initialTarget, version.id, view]);
+  }, [initialTarget, version.id, view, compare]);
   async function goToSection(id: string) {
     document
       .getElementById(`learning-heading-${id}`)
@@ -101,7 +114,7 @@ export function LearningArtifact({
             onPress={() => setView("exercises")}
           />
         </div>
-        {view === "script" && selectedSection && (
+        {view === "script" && !compare && selectedSection && (
           <Button
             variant="ghost"
             label="An Leseposition weiterlesen"
@@ -114,7 +127,13 @@ export function LearningArtifact({
           <Notice>{error}</Notice>
         </div>
       )}
-      {view === "script" ? (
+      {view === "script" && <div className="flex items-center gap-1 pt-3" role="group" aria-label="Skriptansicht">
+        <Button size="sm" variant="ghost" label="Lesen" pressed={!compare} onPress={() => setReaderMode(false)} />
+        <Button size="sm" variant="ghost" label="Quellenvergleich" pressed={compare} onPress={() => setReaderMode(true)} />
+      </div>}
+      {view === "script" && compare ? <Suspense fallback={<Loading label="Quellenvergleich wird geöffnet …" />}>
+        <ScriptComparison key={`${version.id}:${compareSection || ""}`} version={version} initialSectionId={compareSection} />
+      </Suspense> : view === "script" ? (
         <div className={`grid min-w-0 items-start gap-6 pt-5 ${version.sections.length > 1 ? "lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-8" : ""}`}>
           <ChapterNavigation
             sections={version.sections}

@@ -1,3 +1,4 @@
+import { sectionReferences, scriptRanges } from "./script-provenance";
 import type { CourseModule, CourseResource, CourseSection } from "./api";
 import { cleanCourseText } from "./course-content";
 import type { LearningVersion, SourceRef } from "./learning-api";
@@ -174,8 +175,16 @@ export function buildContentGraph(
     }
   }
   version?.sections.forEach((section, index) =>
-    addContent("chapter", section, index),
+    addContent("chapter", { ...section, sources: sectionReferences(section) }, index),
   );
+  for (const section of version?.sections ?? []) {
+    const node = nodes.get(`chapter:${section.id}`);
+    if (!node) continue;
+    const ranges = scriptRanges(section);
+    const mapped = ranges.filter(range => range.state === "source").length;
+    const open = ranges.filter(range => range.state !== "source").length;
+    node.description = section.provenance ? `${mapped} genaue Textzuordnungen · ${open} offene oder ergänzte Stellen. Quellenbezug ist keine Vollständigkeitsbewertung.` : "Nur Abschnittsbezüge gespeichert. Die genaue Textzuordnung ist ungeklärt.";
+  }
   version?.exercises.forEach((exercise, index) =>
     addContent("exercise", exercise, index),
   );
