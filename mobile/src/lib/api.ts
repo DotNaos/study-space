@@ -33,6 +33,7 @@ export type CourseModule = {
   url: string | null;
   description: string;
   resources: CourseResource[];
+  subsectionId?: number | null;
 };
 
 export type CourseSection = {

@@ -28,12 +28,17 @@ export default function RootLayout() {
           headerShadowVisible: false,
           headerStyle: { backgroundColor: colors.background },
           headerTintColor: colors.text,
+          headerTitleStyle: { color: colors.text },
         }}
       >
-        <Stack.Screen name="index" options={{ title: "Kurse", headerLargeTitle: true }} />
+        <Stack.Screen name="index" options={{ title: "Kurse", headerLargeTitleEnabled: false }} />
         <Stack.Screen
           name="course/[courseId]"
           options={{ title: "Kurs", headerBackButtonDisplayMode: "minimal" }}
+        />
+        <Stack.Screen
+          name="course/[courseId]/section/[sectionId]"
+          options={{ title: "Abschnitt", headerBackButtonDisplayMode: "minimal" }}
         />
       </Stack>
     </ThemeProvider>
