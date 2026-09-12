@@ -99,9 +99,15 @@ export function App() {
       </a>
       <aside className="flex min-h-14 items-center gap-1 border-b border-border/60 bg-bg-0 px-3 py-1.5 md:sticky md:top-0 md:h-dvh md:flex-col md:items-stretch md:border-r md:border-b-0 md:px-4 md:py-6">
         <div className="mr-auto flex items-center gap-2 md:mr-0 md:px-2">
-          <span className="flex size-8 shrink-0 items-center justify-center text-text-muted">
-            <BookOpen size={21} strokeWidth={1.6} aria-hidden="true" />
-          </span>
+          <img
+            src="/study-space-logo.png"
+            alt=""
+            width={32}
+            height={32}
+            decoding="async"
+            className="size-8 shrink-0 object-contain"
+            aria-hidden="true"
+          />
           <span className="sr-only text-sm font-medium tracking-tight md:not-sr-only">
             {settings.displayName}
           </span>

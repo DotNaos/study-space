@@ -329,7 +329,9 @@ Bun.serve({
     if (url.pathname.startsWith("/api/"))
       return json({ title: "Nicht verfügbar" }, 404);
     const path =
-      url.pathname.startsWith("/assets/") || url.pathname === "/favicon.svg"
+      url.pathname.startsWith("/assets/") ||
+      url.pathname === "/favicon.png" ||
+      url.pathname === "/study-space-logo.png"
         ? url.pathname
         : "/index.html";
     if (path.includes("..")) return new Response("Not found", { status: 404 });
