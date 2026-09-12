@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, message } from "./api";
 
+export type LearningTarget = { kind: "chapter" | "exercise"; id: string };
+
 export type SourceRef = {
   materialId: string;
   revision: string;

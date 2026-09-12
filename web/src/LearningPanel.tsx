@@ -8,6 +8,7 @@ import {
   type LearningCourse,
   type LearningState,
   type LearningVersion,
+  type LearningTarget,
 } from "./learning-api";
 import type { MaterialState } from "./material-api";
 import { useCodexConnection } from "./codex-api";
@@ -26,8 +27,10 @@ export function LearningPanel({
   materials,
   moodleConnected,
   onSource,
+  initialTarget,
 }: {
   courseId: number;
+  initialTarget?: LearningTarget;
   learning: LearningCourse;
   materials: MaterialState;
   moodleConnected: boolean;
@@ -310,6 +313,7 @@ export function LearningPanel({
           )}
           <LearningArtifact
             key={version.id}
+            initialTarget={initialTarget}
             courseId={courseId}
             version={version}
             drafts={state?.drafts || {}}
