@@ -34,14 +34,14 @@ export function PdfPreview({
       loading = openLocalPdf(bytes);
     } catch {
       onError(
-        "Die PDF-Vorschau konnte nicht gestartet werden. Bitte lade die Datei herunter.",
+        "Die PDF-Vorschau konnte nicht gestartet werden. Bitte erneut versuchen.",
       );
       return;
     }
     const timeout = window.setTimeout(() => {
       if (!stopped) {
         onError(
-          "Das PDF benötigt zu lange zum Öffnen. Bitte lade es herunter.",
+          "Das PDF benötigt zu lange zum Öffnen. Bitte erneut versuchen.",
         );
         void loading.dispose();
       }
@@ -61,8 +61,8 @@ export function PdfPreview({
         if (!stopped)
           onError(
             error instanceof Error && error.name === "PasswordException"
-              ? "Dieses PDF ist passwortgeschützt. Bitte lade es herunter und öffne es in einem PDF-Programm."
-              : "Dieses PDF konnte nicht geöffnet werden. Bitte lade es herunter oder öffne es in Moodle.",
+              ? "Dieses PDF ist passwortgeschützt. Geschützte PDFs werden hier noch nicht unterstützt."
+              : "Dieses PDF konnte nicht geöffnet werden. Bitte erneut versuchen.",
           );
       })
       .finally(() => window.clearTimeout(timeout));
@@ -89,7 +89,7 @@ export function PdfPreview({
         stopped = true;
         task?.cancel();
         onError(
-          "Diese PDF-Seite benötigt zu lange zum Anzeigen. Bitte lade die Datei herunter.",
+          "Diese PDF-Seite benötigt zu lange zum Anzeigen. Bitte erneut versuchen.",
         );
       }
     }, 20000);
@@ -144,7 +144,7 @@ export function PdfPreview({
         )
       )
         onError(
-          "Diese PDF-Seite konnte nicht angezeigt werden. Bitte lade die Datei herunter.",
+          "Diese PDF-Seite konnte nicht angezeigt werden. Bitte erneut versuchen.",
         );
     });
     return () => {

@@ -52,6 +52,7 @@ public static class ApiEndpoints
             return Results.File(image.Bytes, image.ContentType,
                 entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{digest}\""));
         }).RequireRateLimiting("moodle-images");
+        moodle.MapGet("/courses/{courseId:long}/modules/{moduleId:long}", (long courseId, long moduleId, MoodleService service, CancellationToken ct) => service.Activity(courseId, moduleId, ct));
         moodle.MapPut("/courses/{id:long}/artwork", async (long id, HttpContext context, MoodleImageService service, CancellationToken ct) =>
         {
             var mime = context.Request.ContentType?.Split(';')[0].Trim().ToLowerInvariant();

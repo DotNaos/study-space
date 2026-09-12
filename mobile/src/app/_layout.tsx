@@ -43,6 +43,8 @@ function Navigation() {
           name="course/[courseId]/section/[sectionId]"
           options={{ title: "Abschnitt", headerBackButtonDisplayMode: "minimal" }}
         />
+        <Stack.Screen name="course/[courseId]/activity/[moduleId]" options={{ title: "Inhalt", headerBackButtonDisplayMode: "minimal" }} />
+        <Stack.Screen name="course/[courseId]/module/[moduleId]/resource/[resourceId]" options={{ title: "Dokument", headerBackButtonDisplayMode: "minimal" }} />
       </Stack>
     </ThemeProvider>
   );

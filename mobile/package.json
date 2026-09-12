@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "0.1.0",
   "dependencies": {
-    "@dotnaos/ui": "file:vendor/dotnaos-ui-0.0.0-native.d76439357253.tgz",
+    "@dotnaos/ui": "file:vendor/dotnaos-ui-0.0.0-native.e6da9d4c90ee.tgz",
     "@expo/ui": "~57.0.18",
     "expo": "~57.0.22",
     "expo-constants": "~57.0.18",
@@ -26,7 +26,8 @@
     "react-native-screens": "~4.26.0",
     "react-native-svg": "15.15.4",
     "react-native-web": "~0.21.0",
-    "react-native-worklets": "0.10.1"
+    "react-native-worklets": "0.10.1",
+    "react-native-webview": "13.16.1"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
