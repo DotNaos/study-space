@@ -30,9 +30,11 @@ export function LearningPanel({
   moodleConnected,
   onSource,
   initialTarget,
+  preparationOpen = false,
 }: {
   courseId: number;
   initialTarget?: LearningTarget;
+  preparationOpen?: boolean;
   learning: LearningCourse;
   materials: MaterialState;
   moodleConnected: boolean;
@@ -139,7 +141,8 @@ export function LearningPanel({
   }
   return (
     <div className="min-w-0">
-      {version && (
+      {preparationOpen && <div className="prepare-section-heading"><Button variant="ghost" size="sm" icon="arrow-left" label="Quellen" onPress={()=>{window.location.hash="prepare";}}/><h2>Lerninhalte erstellen</h2></div>}
+      {version && !preparationOpen && (
         <TaskReconciliation
           key={version.id}
           courseId={courseId}
@@ -154,7 +157,7 @@ export function LearningPanel({
       )}
       <details
         open={
-          !version || generating || !!error || !!learning.error || undefined
+          preparationOpen || !version || generating || !!error || !!learning.error || undefined
         }
         className="group border-b border-border"
       >

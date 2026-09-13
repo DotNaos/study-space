@@ -58,6 +58,7 @@ export function CourseDetail({
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<ResourcePreview>();
   const [source, setSource] = useState<SourceSelection>();
+  const [preparing, setPreparing] = useState(false);
   const [learningTarget, setLearningTarget] = useState<LearningTarget>();
   const [tab, setTab] = useState<
     "materials" | "learning" | "graph" | "pipeline"
@@ -109,6 +110,7 @@ export function CourseDetail({
     setTab(next);
     setTabChosen(true);
     setLearningTarget(undefined);
+    setPreparing(false);
     if (
       next === "graph" ||
       next === "pipeline" ||
@@ -271,6 +273,7 @@ export function CourseDetail({
             courseId={course.id}
             version={learning.state?.activeVersion}
             onSource={setSource}
+            onCreate={() => { chooseTab("learning"); setPreparing(true); }}
             onOpenLearning={(target) => {
               chooseTab("learning");
               setLearningTarget(target);
@@ -316,6 +319,7 @@ export function CourseDetail({
           <LearningPanel
             courseId={course.id}
             initialTarget={learningTarget}
+            preparationOpen={preparing}
             learning={learning}
             materials={materials}
             moodleConnected={moodleConnected}
