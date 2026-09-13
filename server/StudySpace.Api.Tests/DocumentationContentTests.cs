@@ -53,6 +53,9 @@ public sealed class DocumentationContentTests : IDisposable
         client.DefaultRequestHeaders.Remove("Origin");
         Assert.Contains("standalone docs", await client.GetStringAsync("/docs/"));
         Assert.Contains("setup docs", await client.GetStringAsync("/docs/setup/"));
+        Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(new(HttpMethod.Head, "/docs/setup/"))).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync("/docs/missing/")).StatusCode);
+        Assert.Equal(HttpStatusCode.MethodNotAllowed, (await client.PostAsync("/docs/setup/", null)).StatusCode);
         client.DefaultRequestHeaders.Add("Origin", Origin);
         var api = await client.GetAsync("/health/live");
         Assert.False(api.Headers.Contains("Access-Control-Allow-Origin"));
