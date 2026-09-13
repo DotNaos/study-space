@@ -1,5 +1,5 @@
 import { PreparationSteps } from "./PreparationSteps";
-import { nextSourceDecision, sourceProgress } from "./preparation-flow";
+import { SourceMappingBoard } from "./SourceMappingBoard";
 import type { PipelineUnit } from "./pipeline-api";
 import "./preparation-flow.css";
 import { PipelineUnits } from "./PipelineUnits";
@@ -50,6 +50,7 @@ export function PipelineView({
   const [openOnly, setOpenOnly] = useState(false);
   const [pane, setPane] = useState<"source" | "output">("source");
   const navigationGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const mappingReturn = useRef<string | undefined>(undefined);
   const registerGuard = useCallback((guard: (() => Promise<boolean>) | null) => { navigationGuard.current = guard; }, []);
   const saveStructure = useCallback(async (units: PipelineUnit[], expectedRevision: number) => {
     const next = await api<PipelineState>(pipelinePath(courseId) + "/structure", {
@@ -58,11 +59,9 @@ export function PipelineView({
     setState(next);
     return next;
   }, [courseId]);
-  async function advance(next: PipelineState, after?: string) {
+  async function advance(next: PipelineState) {
     setState(next);
-    const source = nextSourceDecision(next, after);
-    if (source) await go({ kind: "source", id: source.source.id });
-    else onCreate();
+    await go(next.pending > 0 ? { kind: "mapping" } : { kind: "mapping" });
   }
   const positions = useRef(new Map<string, number>());
   const load = useCallback(
@@ -146,7 +145,7 @@ export function PipelineView({
   function back() {
     go(
       item
-        ? { kind: "group", id: String(item.source.sectionId) }
+        ? mappingReturn.current ? { kind: "mapping-unit", id: mappingReturn.current } : { kind: "mapping" }
         : group?.parentId
           ? { kind: "group", id: String(group.parentId) }
           : unit?.parentId
@@ -243,6 +242,9 @@ export function PipelineView({
       </div>
     );
   }
+  const currentMappingRoot = route.kind === "mapping-unit" ? route.id : undefined;
+  const preparingStructure = route.kind === "structure" ||
+    (route.kind === "overview" && !!state && state.units.length === 0);
   const groups =
     state?.groups.filter(
       (candidate) =>
@@ -251,11 +253,11 @@ export function PipelineView({
     ) ?? [];
   return (
     <section className="pipeline-view" aria-label="Kursaufbereitung">
-      {state && <PreparationSteps step={route.kind === "structure" ? "structure" : "sources"} structured={state.units.length > 0} open={state.pending} disabled={busy}
+      {state && <PreparationSteps step={preparingStructure ? "structure" : "sources"} structured={state.units.length > 0} open={state.pending} disabled={busy}
         onStructure={()=>void go({kind:"structure"})}
-        onSources={()=>{const next=nextSourceDecision(state);void go(next?{kind:"source",id:next.source.id}:{kind:"overview"});}}
+        onSources={()=>void go({kind:"mapping"})}
         onCreate={()=>{void (async()=>{if(navigationGuard.current && !await navigationGuard.current()) return; onCreate();})().catch(error=>setError(message(error)));}} />}
-      {route.kind !== "structure" && <div className="pipeline-toolbar">
+      {!preparingStructure && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
         <div className="pipeline-breadcrumb">
           {route.kind !== "overview" && (
             <Button
@@ -303,7 +305,7 @@ export function PipelineView({
       {state?.problem && <Notice>{state.problem}</Notice>}
       {!state ? (
         !error && <Loading label="Quellenstruktur wird gelesen …" />
-      ) : route.kind === "structure" ? (
+      ) : preparingStructure ? (
         <PipelineStructure
           state={state}
           busy={busy}
@@ -311,13 +313,19 @@ export function PipelineView({
           onGuard={registerGuard}
           onContinue={next => void advance(next)}
         />
+      ) : route.kind === "mapping" || route.kind === "overview" || route.kind === "mapping-unit" ? (
+        <SourceMappingBoard
+          courseId={courseId}
+          state={state}
+          rootId={currentMappingRoot}
+          onState={setState}
+          onOpenRoot={id => void go({kind:"mapping-unit",id})}
+          onOverview={()=>void go({kind:"mapping"})}
+          onOpenSource={source => { mappingReturn.current = currentMappingRoot; void go({kind:"source",id:source.source.id}); }}
+          onCreate={onCreate}
+        />
       ) : (
         <>
-          {item && <div className="prepare-source-progress" aria-label="Bestätigte Quellenverwendung">
-            <span>{sourceProgress(state).reviewed} / {sourceProgress(state).total}</span>
-            <progress max={Math.max(1,sourceProgress(state).total)} value={sourceProgress(state).reviewed}/>
-            <Button size="sm" variant="ghost" label="Später" disabled={busy} onPress={()=>{const next=nextSourceDecision(state,item.source.id);void go(next?{kind:"source",id:next.source.id}:{kind:"overview"});}}/>
-          </div>}
           <div
             className="pipeline-mobile-switch"
             role="group"
@@ -458,7 +466,6 @@ export function PipelineView({
                   state={state}
                   item={item}
                   busy={busy}
-                  continueAfterSave
                   onSave={async (body) => {
                     try {
                       const next = await change("/decisions", "POST", {
@@ -467,7 +474,7 @@ export function PipelineView({
                         sourceVersion: item.source.sourceVersion,
                         actor: "user",
                       });
-                      if (next) await advance(next, item.source.id);
+                      if (next && mappingReturn.current) await go({kind:"mapping-unit",id:mappingReturn.current});
                     } catch {
                       /* Error shown above; leave the draft intact. */
                     }
@@ -589,11 +596,7 @@ export function PipelineView({
           )}
         </>
       )}
-      {state && !item && route.kind !== "structure" && <footer className="prepare-next prepare-overview-next">
-        <span className="prepare-next-count">{state.units.length ? `${sourceProgress(state).open} Quellen offen` : ""}</span>
-        <Button label={!state.units.length ? "Struktur festlegen" : nextSourceDecision(state) ? "Quellen zuordnen" : "Zur Erstellung"} iconAfter="arrow-right" disabled={busy || !!state.problem}
-          onPress={()=>{if(!state.units.length)void go({kind:"structure"});else void advance(state);}}/>
-      </footer>}
+
     </section>
   );
 }

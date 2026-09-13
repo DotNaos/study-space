@@ -7,7 +7,8 @@ export function nextSourceDecision(state: PipelineState, after?: string) {
   return ordered.find(needsSourceDecision);
 }
 export function sourceProgress(state: PipelineState) {
-  // This measures explicit use decisions, not extraction or semantic completeness.
-  const reviewed = state.sources.filter(item => item.status === "reviewed" || item.status === "excluded" || item.status === "partial").length;
-  return { reviewed, total: state.sources.length, open: state.sources.filter(needsSourceDecision).length };
+  // Inherited hidden structure stays traceable but is outside the actionable mapping workload.
+  const visible = state.sources.filter(item => item.status !== "structure-hidden");
+  const reviewed = visible.filter(item => item.status === "reviewed" || item.status === "excluded" || item.status === "partial").length;
+  return { reviewed, total: visible.length, open: visible.filter(needsSourceDecision).length };
 }

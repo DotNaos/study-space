@@ -11,6 +11,7 @@ export type SourceUse = {
   firstPage?: number | null;
   lastPage?: number | null;
   relatedSourceId?: string | null;
+  order?: number | null;
 };
 export type SourceDecision = {
   sourceId: string;
@@ -75,6 +76,12 @@ export type PipelineState = {
   blocked: number;
   unattributedSections: string[];
 };
+export type MappingItem = {
+  sourceId: string;
+  sourceVersion: string;
+  disposition: "use" | "exclude";
+  uses: SourceUse[];
+};
 export const pipelinePath = (courseId: number) =>
   `/api/pipeline/courses/${courseId}`;
 export const readPipeline = (courseId: number, signal?: AbortSignal) =>
@@ -83,16 +90,17 @@ export const roleLabels: Record<string, string> = {
   teaching: "Skript",
   task: "Aufgaben",
   solution: "Musterlösung",
-  support: "Arbeitsmaterial",
-  reference: "Referenz / Organisation",
-  unresolved: "Noch offen",
+  support: "Material",
+  reference: "Referenz",
+  unresolved: "Offen",
 };
 export const statusLabels: Record<string, string> = {
-  partial: "Restliche Seiten ungeklärt",
-  pending: "Einordnung offen",
+  partial: "Teilweise zugeordnet",
+  pending: "Offen",
   stale: "Erneut prüfen",
-  reviewed: "Verwendung bestätigt",
-  excluded: "Begründet ausgeschlossen",
+  reviewed: "Zugeordnet",
+  excluded: "Ausgeblendet",
+  "structure-hidden": "Durch Struktur ausgeblendet",
   "not-returned": "Nicht mehr geliefert",
 };
 export const isOpen = (item: PipelineSourceView) =>
@@ -100,10 +108,14 @@ export const isOpen = (item: PipelineSourceView) =>
   ["pending", "stale", "partial", "not-returned"].includes(item.status);
 export type PipelineRoute =
   | { kind: "overview" }
-  | { kind: "group" | "source" | "unit"; id: string }
-  | { kind: "structure" };
+  | { kind: "group" | "source" | "unit" | "mapping-unit"; id: string }
+  | { kind: "structure" }
+  | { kind: "mapping" };
 export function parsePipelineRoute(hash: string): PipelineRoute {
   if (hash === "#prepare/structure") return { kind: "structure" };
+  if (hash === "#prepare/mapping") return { kind: "mapping" };
+  const mapping = /^#prepare\/mapping\/([a-f0-9]{32})$/.exec(hash);
+  if (mapping) return { kind: "mapping-unit", id: mapping[1] };
   const match = /^#prepare\/(group|source|unit)\/([a-zA-Z0-9-]+)$/.exec(hash);
   return match
     ? { kind: match[1] as "group" | "source" | "unit", id: match[2] }
@@ -114,7 +126,11 @@ export function pipelineHash(route: PipelineRoute) {
     ? "#prepare"
     : route.kind === "structure"
       ? "#prepare/structure"
-      : `#prepare/${route.kind}/${route.id}`;
+      : route.kind === "mapping"
+        ? "#prepare/mapping"
+        : route.kind === "mapping-unit"
+          ? `#prepare/mapping/${route.id}`
+          : `#prepare/${route.kind}/${route.id}`;
 }
 export function groupSources(
   state: PipelineState,

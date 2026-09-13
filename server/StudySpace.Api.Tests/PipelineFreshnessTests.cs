@@ -30,7 +30,7 @@ public sealed class PipelineFreshnessTests
         var task = Source(SourceId); var solution = Source(new('d', 64));
         var decision = new SourceDecision(solution.Id, solution.SourceVersion, "use", [new(Unit, "solution", RelatedSourceId: task.Id)],
             "Compared with the task statement", "user", DateTimeOffset.UtcNow, new() { [task.Id] = task.SourceVersion });
-        var plan = new PipelinePlan { Sources = [task, solution], Decisions = [decision] };
+        var plan = new PipelinePlan { Sources = [task, solution], Units = [new(Unit, "Unit", null, 0)], Decisions = [decision] };
         var observed = new PipelineObservation([], [task, solution], "first", null);
         Assert.Equal("reviewed", PipelineService.Project(7, plan, observed, null).Sources.Single(item => item.Source.Id == solution.Id).Status);
         observed = observed with { Sources = [task with { SourceVersion = new('e', 64) }, solution] };
