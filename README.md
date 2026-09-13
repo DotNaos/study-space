@@ -2,6 +2,10 @@
 
 Your learning materials, on your own computer. Study Space runs a React app and PostgreSQL in Docker and opens through your machine's private Tailnet address.
 
+## Documentation
+
+See the [documentation index](docs/README.md). The [accepted course-content pipeline](docs/content-pipeline.md) describes the target MDX script, separate tasks, reviewed source mappings, and hierarchy-first navigation. Existing runtime contracts and remaining work are explicitly distinguished.
+
 ## Install on os-pc
 
 Run this on **os-pc**, as your normal user:

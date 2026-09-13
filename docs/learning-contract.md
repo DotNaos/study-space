@@ -2,6 +2,8 @@
 
 This milestone adds durable local material processing, Codex connection, and source-linked script/exercises. Full agent editing (#16), nested learning (#1), and Drive backups (#9) remain later stages.
 
+> This page documents the existing learning API. The [accepted content-pipeline design](content-pipeline.md) defines the next-stage source review, MDX authoring, task reconciliation, and feedback workflow; those capabilities are not implied by this contract. See also the implemented [optional text provenance](source-comparison.md) extension.
+
 ## Learning API (root ownership)
 
 `GET /api/learning/courses/{courseId}` returns:
