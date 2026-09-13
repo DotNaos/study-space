@@ -17,6 +17,9 @@ public sealed class DocumentationContentTests : IDisposable
         await File.WriteAllTextAsync(Path.Combine(web, "index.html"), "<html>application</html>");
         await File.WriteAllTextAsync(Path.Combine(web, "docs-content", "manifest.json"), "{\"schemaVersion\":1}");
         await File.WriteAllTextAsync(Path.Combine(web, "docs-content", "pages", "README.md"), "# Documentation");
+        Directory.CreateDirectory(Path.Combine(web, "docs", "setup"));
+        await File.WriteAllTextAsync(Path.Combine(web, "docs", "index.html"), "<html>standalone docs</html>");
+        await File.WriteAllTextAsync(Path.Combine(web, "docs", "setup", "index.html"), "<html>setup docs</html>");
         await using var app = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
         {
             builder.UseEnvironment("Testing"); builder.UseWebRoot(web);
@@ -47,6 +50,10 @@ public sealed class DocumentationContentTests : IDisposable
         Assert.Equal(HttpStatusCode.OK, (await client.SendAsync(new(HttpMethod.Head, "/docs-content/pages/README.md"))).StatusCode);
         Assert.Equal(HttpStatusCode.NoContent, (await client.SendAsync(new(HttpMethod.Options, "/docs-content/manifest.json"))).StatusCode);
         Assert.Equal(HttpStatusCode.MethodNotAllowed, (await client.PostAsync("/docs-content/manifest.json", null)).StatusCode);
+        client.DefaultRequestHeaders.Remove("Origin");
+        Assert.Contains("standalone docs", await client.GetStringAsync("/docs/"));
+        Assert.Contains("setup docs", await client.GetStringAsync("/docs/setup/"));
+        client.DefaultRequestHeaders.Add("Origin", Origin);
         var api = await client.GetAsync("/health/live");
         Assert.False(api.Headers.Contains("Access-Control-Allow-Origin"));
         client.DefaultRequestHeaders.Remove("Origin"); client.DefaultRequestHeaders.Add("Origin", "https://forbidden.example");

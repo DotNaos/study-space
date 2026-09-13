@@ -4,6 +4,19 @@ This implementation covers local installation, Moodle connection, course browsin
 
 ## Deployment
 
+
+```mermaid
+flowchart LR
+  Browser["Browser on Tailnet"] -->|HTTPS| Proxy["Systems / Traefik"]
+  Proxy -->|loopback| App["Study Space ASP.NET Core"]
+  CLI["study CLI"] -->|local installation endpoint| App
+  App --> DB[(PostgreSQL)]
+  App --> Moodle["Moodle web services"]
+  App --> Codex["Codex runtime"]
+```
+
+The browser reaches the application only through the Tailnet-owned proxy. The CLI stays local, while the application owns persistence and the bounded Moodle/Codex integrations described below.
+
 - React/Vite application in `web/`, compiled into the ASP.NET Core host's `wwwroot`.
 - .NET 10 Minimal API host in `server/StudySpace.Api/`; PostgreSQL via EF Core/Npgsql with real migrations.
 - Native Rust `study` CLI in `cli/`.

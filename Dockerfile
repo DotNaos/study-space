@@ -24,11 +24,24 @@ WORKDIR /source/web
 COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY web/ ./
+COPY README.md /source/README.md
 COPY docs/ /source/docs/
 COPY scripts/docs-content.mjs /source/scripts/docs-content.mjs
 ARG COMMIT
 ENV DOCS_CONTENT_REVISION=$COMMIT
 RUN bun run build && bun test
+
+FROM oven/bun:1.3.9 AS docs
+WORKDIR /source
+COPY apps/docs/package.json apps/docs/bun.lock ./apps/docs/
+RUN cd apps/docs && bun install --frozen-lockfile
+COPY apps/docs/ ./apps/docs/
+COPY README.md ./README.md
+COPY docs/ ./docs/
+COPY scripts/docs-content.mjs ./scripts/docs-content.mjs
+ARG COMMIT
+ENV DOCS_CONTENT_REVISION=$COMMIT NEXT_TELEMETRY_DISABLED=1
+RUN cd apps/docs && bun run typecheck && bun run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS server
 WORKDIR /source
@@ -36,6 +49,7 @@ COPY server/ ./server/
 RUN dotnet restore server/StudySpace.Api/StudySpace.Api.csproj --locked-mode
 RUN dotnet publish server/StudySpace.Api/StudySpace.Api.csproj -c Release --no-restore -o /publish /p:UseAppHost=false
 COPY --from=web /source/web/dist /publish/wwwroot
+COPY --from=docs /source/apps/docs/out /publish/wwwroot/docs
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble AS runtime
 USER root

@@ -9,3 +9,10 @@ The existing ASP.NET application serves built docs separately from its SPA fallb
 Every Markdown/MDX source gets a stable chapter and revision-pinned source link. MDX is explicitly unsupported raw text, never executed. Symlinks and unsafe paths fail export. Only docs-local PNG/JPEG/GIF/WebP/AVIF images are exported. The [Architecture v1 wire contract](https://github.com/DotNaos/architecture/blob/main/content/docs/documentation-content.mdx) and [Project Template exporter usage](https://github.com/DotNaos/project-template/blob/main/docs/documentation-content.md) are canonical.
 
 Validation: exporter/module tests run in Project Template; Study Space's normal web test/build checks production bundling, `DocumentationContentTests` checks the real ASP.NET pipeline, and Architecture's browser integration exercises both real producer exports together. The narrow catalog contains only `docs.content`; it does not install baseline scaffolding or alter Study Space's existing instructions, setup, source structure, docs or `.gitignore`.
+
+
+## Standalone documentation site
+
+The same project-owned sources also build `apps/docs`, a static Fumadocs site served by the normal Study Space ASP.NET application at `/docs/`. There is no second documentation server and no copied authoring tree: the build reads the repository `README.md`, `docs/`, `docs/navigation.json`, and the same pinned `scripts/docs-content.mjs` used by `/docs-content`.
+
+Architecture consumes `/docs-content/manifest.json` and renders those bytes in its own project drilldown. The standalone site renders the same pages and navigation directly. Navigation labels/icons, README availability, Mermaid diagrams and source provenance therefore change in one repository and reach both surfaces in the next release.

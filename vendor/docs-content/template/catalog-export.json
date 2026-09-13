@@ -1,7 +1,8 @@
 {
   "formatVersion": 2,
   "modules": [
-    "docs.content"
+    "docs.content",
+    "docs.fumadocs"
   ],
-  "sourceDigest": "sha256:71f09fc0198a90ee4fbffb9fe3d040a26e36fde1e8c741fd51cd183e6e2a30e0"
+  "sourceDigest": "sha256:711e547afb86297801c77963c52b791327de56dfaaee0c080eeed8b55832060f"
 }

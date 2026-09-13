@@ -1,12 +1,73 @@
 {
   "version": 1,
-  "revision": "sha256:b8b63372ac98bc469dc29bf1221022dd45e8affccd089c163ad2ab9a5e64e518",
+  "revision": "sha256:9456184cda033cde17de5a1f6757ad4861dd21c168a4ff388a28c6564b460ebc",
   "modules": [
-    "docs.content"
+    "docs.content",
+    "docs.fumadocs"
   ],
   "files": {
+    "apps/docs/.gitignore": {
+      "digest": "f99c0439e77a09d994485654e19bf0a8526236b7713bfceffa7c00daf94f5aae",
+      "mode": 420
+    },
+    "apps/docs/app/[...slug]/page.tsx": {
+      "digest": "86a7bfa708cbbbcf4ee23f3fcf28ac91f72e03b35a4d2e8e87e4d0254268a15d",
+      "mode": 420
+    },
+    "apps/docs/app/global.css": {
+      "digest": "624ff4d10795004287774686a4b71e3e15beee438987fc8935bcb0d6b1e28667",
+      "mode": 420
+    },
+    "apps/docs/app/layout.tsx": {
+      "digest": "5dd6b6b41f7c41bf9040fab8db2f3138b457973ea2258bca44f6afaa629d5a54",
+      "mode": 420
+    },
+    "apps/docs/app/page.tsx": {
+      "digest": "134ad9e2868e3d4800ae222952f454e2146f48e5e005c35349fbfd3ee413ee33",
+      "mode": 420
+    },
+    "apps/docs/bun.lock": {
+      "digest": "0ea8f8d97aa1f0c3249dc60aee80ca7a2667d46b7499ecf96b76721fb84b3bd0",
+      "mode": 420
+    },
+    "apps/docs/components/DocumentPage.tsx": {
+      "digest": "f6c3d2efcd63e0b3d018beafc53297e39c600018aee599e40d8e62965a79d23d",
+      "mode": 420
+    },
+    "apps/docs/components/Markdown.tsx": {
+      "digest": "c6344bafe1c8f87c41db360acca5a35d38e8d201c7b5919455e4dd788e97803f",
+      "mode": 420
+    },
+    "apps/docs/lib/content.ts": {
+      "digest": "040bc221d9a5fda0a981d66ba4b0810a64793d073595fcaf715fa41bd0261d97",
+      "mode": 420
+    },
+    "apps/docs/lib/navigation.tsx": {
+      "digest": "02702cfa4179574da0bbb137a965ce8761791e4ae8c29a05a325c68ea3b06203",
+      "mode": 420
+    },
+    "apps/docs/next-env.d.ts": {
+      "digest": "1862ac4bbbc5192d4bf562161df66ea547ed3e67173100656ab606ae9797db2b",
+      "mode": 420
+    },
+    "apps/docs/next.config.mjs": {
+      "digest": "7f7ac4530cea4a131e6f2b9f0c5a16d4833dc38b708da309a61442474281f2b8",
+      "mode": 420
+    },
+    "apps/docs/package.json": {
+      "digest": "9d8c8ef5de86a14a24298e24810337d5be42a5fa7e63a5ed85d3446defdea120",
+      "mode": 420
+    },
+    "apps/docs/postcss.config.mjs": {
+      "digest": "f50058e0d309cdb3e7c25a1123337338641fb71e988572607d57f47209db1fd1",
+      "mode": 420
+    },
+    "apps/docs/tsconfig.json": {
+      "digest": "0ff128411193cf80789ad82aee52eb8250622c0381bd85ac43906053419bc87b",
+      "mode": 420
+    },
     "scripts/docs-content.mjs": {
-      "digest": "0fe0a77b16ae430ec88cd089d103b97c5070a6521faa4d93f4d5c5143e7913c0",
+      "digest": "548173955ac118912be73ede2c1a1bf5193ec33e8f07bc99fc3f3d681de7db2f",
       "mode": 420
     }
   },

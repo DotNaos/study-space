@@ -1,0 +1,8 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--color-fd-background); }
+.docs-project-content img { max-width: 100%; height: auto; }
+.docs-project-content table { display: block; max-width: 100%; overflow-x: auto; }

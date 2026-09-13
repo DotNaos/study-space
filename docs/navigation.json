@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "items": [
+    { "type": "page", "slug": "README", "label": "Overview", "icon": "house" },
+    { "type": "page", "slug": "project-readme", "label": "README", "icon": "book-open" },
+    {
+      "type": "group",
+      "label": "Getting started",
+      "icon": "rocket",
+      "children": [
+        { "type": "page", "slug": "implementation-contract", "label": "Installation and setup", "icon": "terminal" },
+        { "type": "page", "slug": "learning-contract", "label": "Learning workflow", "icon": "graduation-cap" }
+      ]
+    },
+    {
+      "type": "group",
+      "label": "Learning and content",
+      "icon": "graduation-cap",
+      "children": [
+        { "type": "page", "slug": "reviewed-pipeline", "label": "Course preparation", "icon": "workflow" },
+        { "type": "page", "slug": "learning-structure-editor", "label": "Structure editor", "icon": "blocks" },
+        {
+          "type": "group",
+          "label": "Sources and provenance",
+          "icon": "git-branch",
+          "children": [
+            { "type": "page", "slug": "content-graph", "label": "Content graph", "icon": "network" },
+            { "type": "page", "slug": "source-comparison", "label": "Source comparison", "icon": "scan-search" }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "group",
+      "label": "Architecture and development",
+      "icon": "code",
+      "children": [
+        { "type": "page", "slug": "content-pipeline", "label": "Content pipeline", "icon": "workflow" },
+        { "type": "page", "slug": "content-pipeline-cases", "label": "Acceptance cases", "icon": "badge-check" },
+        { "type": "page", "slug": "documentation-export", "label": "Documentation", "icon": "book-open-text" }
+      ]
+    },
+    {
+      "type": "group",
+      "label": "Reference",
+      "icon": "book-open-text",
+      "children": [
+        { "type": "page", "slug": "study-mcp", "label": "Study MCP", "icon": "server" }
+      ]
+    }
+  ]
+}

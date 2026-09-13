@@ -1,7 +1,11 @@
 {
   "source": "vendor/docs-content",
   "modules": [
-    "docs.content"
+    "docs.content",
+    "docs.fumadocs"
   ],
-  "revision": "sha256:b8b63372ac98bc469dc29bf1221022dd45e8affccd089c163ad2ab9a5e64e518"
+  "values": [
+    "project.slug=study-space"
+  ],
+  "revision": "sha256:9456184cda033cde17de5a1f6757ad4861dd21c168a4ff388a28c6564b460ebc"
 }
