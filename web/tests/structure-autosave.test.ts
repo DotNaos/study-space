@@ -59,3 +59,17 @@ test("guidance moves to the next unconfirmed source without confirming, hiding, 
   expect(nextSourceDecision(plan)?.source.id).toBe("b");expect(nextSourceDecision(plan,"b")?.source.id).toBe("c");expect(nextSourceDecision(plan,"c")?.source.id).toBe("b");
   expect(sourceProgress(plan)).toEqual({reviewed:3,total:6,open:2});expect(plan.sources.length).toBe(6);
 });
+
+
+test("a late response from a previous editor cannot clear the next editor's newer recovery draft",async()=>{
+  const saved=storage(), pending=deferred<PipelineState>();
+  const previous=new StructureAutosave(state(),()=>pending.promise,saved,100000);
+  previous.update(current=>current.map(unit=>({...unit,customTitle:"Earlier edit"})));
+  const write=previous.flush();
+  const next=new StructureAutosave(state(),async units=>state(units,5),saved,100000);
+  next.start();next.update(current=>current.map(unit=>({...unit,customTitle:"Newer edit"})));
+  pending.resolve(state([{...unit,customTitle:"Earlier edit"}],5));await write;
+  const recovered=new StructureAutosave(state([{...unit,customTitle:"Earlier edit"}],5),async units=>state(units,6),saved,100000);
+  expect(recovered.getSnapshot().units[0].customTitle).toBe("Newer edit");expect(recovered.getSnapshot().status).toBe("conflict");
+  next.accept(state([{...unit,customTitle:"Earlier edit"}],5));previous.stop();next.stop();recovered.stop();
+});

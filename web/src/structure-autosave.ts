@@ -28,6 +28,8 @@ export class StructureAutosave {
   private key: string;
   private scope: string[];
   private lastAttempt?: string;
+  private readonly writer = crypto.randomUUID();
+  private hasWrittenDraft = false;
 
   constructor(state: PipelineState, private save: StructureSave, private storage?: DraftStorage, private delay = 650) {
     this.revision = state.revision;
@@ -55,9 +57,18 @@ export class StructureAutosave {
   get dirty() { return structureKey(this.snapshot.units) !== this.acknowledged; }
   private emit(status: SaveStatus, error = "") { this.snapshot = { ...this.snapshot, status, error }; for (const listener of this.listeners) listener(); }
   private remember() {
-    try { this.storage?.setItem(this.key, JSON.stringify({ revision: this.revision, scope: this.scope, units: this.snapshot.units })); } catch { /* Best effort recovery; failures remain visible until the server acknowledges. */ }
+    try {
+      const current = this.storage?.getItem(this.key);
+      // A late response from an unmounted editor must not replace the next editor's recovery draft.
+      if (this.hasWrittenDraft && current && JSON.parse(current).writer !== this.writer) return;
+      this.storage?.setItem(this.key, JSON.stringify({ revision: this.revision, scope: this.scope, units: this.snapshot.units, writer: this.writer }));
+      this.hasWrittenDraft = true;
+    } catch { /* Best effort recovery; failures remain visible until the server acknowledges. */ }
   }
-  private clearDraft() { try { this.storage?.removeItem(this.key); } catch { /* No authority changes. */ } }
+  private clearDraft() {
+    try { const current = this.storage?.getItem(this.key); if (current && JSON.parse(current).writer === this.writer) this.storage?.removeItem(this.key); }
+    catch { /* No authority changes. */ }
+  }
   update = (value: PipelineUnit[] | ((units: PipelineUnit[]) => PipelineUnit[])) => {
     const units = typeof value === "function" ? value(this.snapshot.units) : value;
     if (structureKey(units) === structureKey(this.snapshot.units)) return;
@@ -67,7 +78,7 @@ export class StructureAutosave {
     this.emit(blocked ? "conflict" : !valid(units) ? "invalid" : this.dirty ? "pending" : this.confirmed ? "saved" : "proposal");
     this.schedule();
   };
-  start() { this.schedule(); }
+  start() { if (this.dirty) this.remember(); this.schedule(); }
   private schedule() {
     clearTimeout(this.timer);
     if (this.snapshot.status === "pending" && !this.request) this.timer = setTimeout(() => { void this.flush(); }, this.delay);
