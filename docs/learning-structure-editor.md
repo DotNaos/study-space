@@ -1,6 +1,6 @@
 # Learning structure editor
 
-Implemented in v0.2.24; compact visibility and options controls updated in v0.2.26; guided automatic saving in v0.2.28. Open **Course → Aufbereitung → Struktur bearbeiten**.
+Implemented in v0.2.24; compact visibility and options controls updated in v0.2.26; guided automatic saving in v0.2.28; hierarchical source mapping in v0.2.29. Open **Course → Aufbereitung → Struktur bearbeiten**.
 
 The editor keeps the observed Moodle hierarchy separate from a user-owned learning structure. It edits one level at a time, with separate **Skript** and **Aufgaben** lists. Task groups link to one or more script units rather than becoming their child chapters. Name-based starting suggestions are not confirmed source-use decisions.
 
@@ -41,7 +41,7 @@ Backend regressions cover separate hierarchy types, original-name preservation, 
 
 ## Guided preparation and automatic saves (v0.2.28)
 
-The visual step bar separates **Struktur → Quellen → Erstellen**. Normal editing uses an inline icon/status, not a modal confirmation for every edit. The structure footer leads to the next unconfirmed source (or creation when no source-use decisions remain). The source comparison still opens the original and preserves the full inventory; explicit **Bestätigen & weiter** records that source's use and opens the next undecided source. **Später** leaves the current source pending, never excluded or confirmed. Source-use progress counts decisions only, not extraction or semantic completeness.
+The visual step bar separates **Struktur → Quellen → Erstellen**. Normal editing uses an inline icon/status, not a modal confirmation for every edit. The structure footer leads into the source-mapping overview. Exact source comparison remains available as a deeper drill-down for ambiguous cases. Source-use progress counts actionable decisions only, not extraction or semantic completeness.
 
 Only user-owned learning structure is autosaved. Viewing an unconfirmed suggestion does not persist it, approve sources, import materials or start a model. First edits are saved after a brief debounce; continuing without edits explicitly adopts the suggested structure. Names, drag ordering, visibility and task links retain their existing server validation and revision checks. The original Moodle hierarchy remains read-only. Generation and partial-publication consent remain explicit at the existing creation screen.
 
@@ -49,6 +49,17 @@ One serial write queue handles edits made while a previous request is still runn
 
 Unsaved structure drafts are recovered from per-course session storage when available. A draft against a different server revision enters conflict rather than being silently replayed. Navigation within preparation flushes the queue first; leaving/unloading retains the local recovery draft and warns when changes are outstanding. Storage contains only learning structure, not tokens, source bytes or student answers. This browser-session recovery is not a replacement for server storage or a backup.
 
-Source role choices remain proposed until the user presses the explicit confirmation action. The confirmation's default audit rationale describes the actual chosen role/target rather than inventing a reason; exclusions still require the user's reason. No automatic source approval or generation occurs on navigation. Acquisition problems, outdated references and partial mappings remain visible and independent of the use-decision progress.
+Source role choices remain proposals until the user explicitly accepts a row mapping or a batch of safe proposals. No automatic source approval or generation occurs on navigation. Acquisition problems, outdated references and partial mappings remain visible and independent of the use-decision progress.
 
 Regression tests cover initial read-only suggestions, debounce/serial writes, typing during a slow request, offline recovery, a lost server response, invalid names, concurrent editors, and source queue behavior. Browser tests exercise the complete structure-to-source-to-creation path against isolated real API handlers, including source confirmations, mobile selection and actual revision conflicts. Production checks do not edit or confirm course data.
+
+
+## Hierarchical source mapping board
+
+The second preparation step mirrors the reviewed structure instead of presenting one global source queue. Its overview shows each visible script root, linked task groups, and unresolved mapping count. Opening a root drills into all sources from its Moodle-backed structure plus sources explicitly mapped into that learning unit. Sources inherited from hidden structure remain traceable but are outside the actionable workload until the structure is restored.
+
+On desktop, the normal mapping surface is a two-column **source → target** board; mobile keeps the same relationship in stacked rows. The target value opens a compact role/target editor. The eye excludes/restores a source, the drag handle orders sources already mapped to the same target, and the overflow action opens exact source comparison for advanced many-to-many, range, and solution relationships. This keeps the common path in one overview while preserving full provenance.
+
+Deterministic containment and the stored source-role hint may produce a visible proposal. Ambiguous roles and solution-to-task relationships are not auto-confirmed. **Vorschläge** is an explicit batch action for safe proposals in the current drill-down. Batch writes are atomic and revision-checked; local pending edits are serialized and recoverable on network errors or conflicts. `SourceUse.order` is optional for backwards compatibility and, when present, controls source order within the confirmed learning-unit order during generation.
+
+A source with no explicit decision inside a hidden reviewed unit has status `structure-hidden`: it does not count as pending and does not block generation, but the original source stays in inventory. An explicit decision can map that source to a visible unit. A decision whose target later becomes hidden is stale until reviewed.

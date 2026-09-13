@@ -66,6 +66,61 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
         ValidateReason(request.Reason, request.Actor);
         var observed = await Observe(courseId, ct);
         if (observed.Problem is not null) throw new ApiFailure("pipeline_upstream", observed.Problem, 502);
+        await store.WithCourse(courseId, async state =>
+        {
+            var plan = state.Pipeline;
+            CheckRevision(plan, request.ExpectedRevision);
+            var item = new PlanMappingItem(request.SourceId, request.SourceVersion, request.Disposition, request.Uses);
+            var decision = await BuildDecision(plan, observed, item, request.Reason, request.Actor, ct);
+            Capture(plan, observed);
+            var previous = plan.Decisions.SingleOrDefault(value => value.SourceId == decision.SourceId);
+            plan.Decisions = plan.Decisions.Where(value => value.SourceId != decision.SourceId).Append(decision).ToArray();
+            AddEvent(plan, "decision", request.Actor, request.Reason, decision.SourceId, previous);
+            await store.Save(state, ct); return true;
+        }, ct);
+        return await SavedView(courseId, observed, ct);
+    }
+
+    public async Task<PipelineView> Map(long courseId, PlanMappingRequest request, CancellationToken ct)
+    {
+        ValidateReason(request.Reason, request.Actor);
+        if (request.Items is null || request.Items.Length is < 1 or > 250 ||
+            request.Items.Any(item => item is null) || request.Items.Select(item => item.SourceId).Distinct().Count() != request.Items.Length)
+            throw Invalid("Die Zuordnungen sind ungültig.");
+        var observed = await Observe(courseId, ct);
+        if (observed.Problem is not null) throw new ApiFailure("pipeline_upstream", observed.Problem, 502);
+        await store.WithCourse(courseId, async state =>
+        {
+            var plan = state.Pipeline;
+            CheckRevision(plan, request.ExpectedRevision);
+            var decisions = new List<SourceDecision>(request.Items.Length);
+            foreach (var item in request.Items) decisions.Add(await BuildDecision(plan, observed, item, request.Reason, request.Actor, ct));
+            Capture(plan, observed);
+            var previous = decisions.ToDictionary(decision => decision.SourceId, decision => plan.Decisions.SingleOrDefault(value => value.SourceId == decision.SourceId));
+            var final = decisions.Select(decision => EquivalentMapping(previous[decision.SourceId], decision) ? previous[decision.SourceId]! : decision).ToArray();
+            var changed = final.Where(decision => !ReferenceEquals(previous[decision.SourceId], decision)).ToArray();
+            if (changed.Length == 0) return true;
+            var ids = final.Select(decision => decision.SourceId).ToHashSet();
+            plan.Decisions = plan.Decisions.Where(decision => !ids.Contains(decision.SourceId)).Concat(final).ToArray();
+            plan.Revision++;
+            var at = clock.GetUtcNow();
+            foreach (var decision in changed)
+                plan.History = plan.History.Append(new(plan.Revision, "mapping", request.Actor.Trim(), request.Reason.Trim(), at, decision.SourceId, previous[decision.SourceId])).ToArray();
+            await store.Save(state, ct); return true;
+        }, ct);
+        return await SavedView(courseId, observed, ct);
+    }
+
+    private static bool EquivalentMapping(SourceDecision? left, SourceDecision right)
+    {
+        if (left is null || left.SourceVersion != right.SourceVersion || left.Disposition != right.Disposition || !left.Uses.SequenceEqual(right.Uses)) return false;
+        var a = left.DependencyVersions ?? []; var b = right.DependencyVersions ?? [];
+        return a.Count == b.Count && a.All(item => b.TryGetValue(item.Key, out var value) && value == item.Value);
+    }
+
+    private async Task<SourceDecision> BuildDecision(PipelinePlan plan, PipelineObservation observed, PlanMappingItem request,
+        string reason, string actor, CancellationToken ct)
+    {
         var source = observed.Sources.SingleOrDefault(source => source.Id == request.SourceId && source.Present)
             ?? throw Invalid("Diese Quelle ist im aktuellen Bestand nicht verfügbar.");
         if (source.SourceVersion != request.SourceVersion)
@@ -75,7 +130,7 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
             throw Invalid("Wähle eine Verwendung oder einen begründeten Ausschluss.");
         foreach (var use in request.Uses)
         {
-            if (use.Role is not ("teaching" or "task" or "solution" or "support" or "reference") || use.UnitId is null)
+            if (use.Role is not ("teaching" or "task" or "solution" or "support" or "reference") || use.UnitId is null || use.Order is < 0 or > 1000000)
                 throw Invalid("Unbekannte Verwendung.");
             if ((use.FirstPage is null) != (use.LastPage is null) || use.FirstPage <= 0 || use.LastPage < use.FirstPage)
                 throw Invalid("Der Seitenbereich ist ungültig.");
@@ -89,25 +144,20 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
             if (use.Role == "solution" && (string.IsNullOrWhiteSpace(use.RelatedSourceId) || use.RelatedSourceId == source.Id ||
                 !observed.Sources.Any(item => item.Id == use.RelatedSourceId && item.Present)))
                 throw Invalid("Ordne die Lösung ausdrücklich ihrer Aufgabenquelle zu.");
+            if (use.UnitId.Length > 0)
+            {
+                var unit = plan.Units.SingleOrDefault(unit => unit.Id == use.UnitId) ?? throw Invalid("Wähle eine bestätigte Lerneinheit.");
+                if (LearningStructure.IsHidden(unit, plan.Units)) throw Invalid("Ausgeblendete Lerneinheiten können keine neue Quellenzuordnung erhalten.");
+                if (use.Role == "teaching" && LearningStructure.Kind(unit) == "tasks")
+                    throw Invalid("Skriptinhalte gehören in eine Skript-Lerneinheit, nicht in eine Aufgabengruppe.");
+            }
+            else if (use.Role is "teaching" or "task" or "solution") throw Invalid("Wähle eine bestätigte Lerneinheit.");
         }
-        if (request.Uses.Distinct().Count() != request.Uses.Length) throw Invalid("Die Verwendung wurde doppelt angegeben.");
-        await store.WithCourse(courseId, async state =>
-        {
-            var plan = state.Pipeline;
-            CheckRevision(plan, request.ExpectedRevision);
-            if (request.Uses.Any(use => use.UnitId.Length > 0 ? !plan.Units.Any(unit => unit.Id == use.UnitId) : use.Role is "teaching" or "task" or "solution"))
-                throw Invalid("Wähle eine bestätigte Lerneinheit.");
-            if (request.Uses.Any(use => use.Role == "teaching" && plan.Units.Any(unit => unit.Id == use.UnitId && LearningStructure.Kind(unit) == "tasks")))
-                throw Invalid("Skriptinhalte gehören in eine Skript-Lerneinheit, nicht in eine Aufgabengruppe.");
-            Capture(plan, observed);
-            var previous = plan.Decisions.SingleOrDefault(decision => decision.SourceId == source.Id);
-            var decision = new SourceDecision(source.Id, source.SourceVersion, request.Disposition, request.Uses,
-                request.Reason.Trim(), request.Actor.Trim(), clock.GetUtcNow(), request.Uses.Where(use => use.Role == "solution").Select(use => use.RelatedSourceId!).Distinct().ToDictionary(id => id, id => observed.Sources.Single(item => item.Id == id).SourceVersion));
-            plan.Decisions = plan.Decisions.Where(item => item.SourceId != source.Id).Append(decision).ToArray();
-            AddEvent(plan, "decision", request.Actor, request.Reason, source.Id, previous);
-            await store.Save(state, ct); return true;
-        }, ct);
-        return await SavedView(courseId, observed, ct);
+        if (request.Uses.GroupBy(use => new { use.UnitId, use.Role, use.FirstPage, use.LastPage, use.RelatedSourceId }).Any(group => group.Count() > 1))
+            throw Invalid("Die Verwendung wurde doppelt angegeben.");
+        var dependencies = request.Uses.Where(use => use.Role == "solution").Select(use => use.RelatedSourceId!).Distinct()
+            .ToDictionary(id => id, id => observed.Sources.Single(item => item.Id == id).SourceVersion);
+        return new(source.Id, source.SourceVersion, request.Disposition, request.Uses, reason.Trim(), actor.Trim(), clock.GetUtcNow(), dependencies);
     }
 
     // Called before a job is queued. Freeze exact reviewed inputs; never approve by model confidence.
@@ -123,11 +173,12 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
             CheckRevision(plan, expectedRevision.Value);
             var view = Project(courseId, plan, observed, null);
             var visibleUnits = view.Units.Where(unit => !LearningStructure.IsHidden(unit, view.Units)).ToDictionary(unit => unit.Id);
-            var inputs = new List<LearningInput>(); var warnings = new List<string>();
+            var inputs = new List<(LearningInput Input, int? UseOrder, int SourceIndex)>(); var warnings = new List<string>();
+            var sourceIndexes = view.Sources.Select((item, index) => (item.Source.Id, index)).ToDictionary(item => item.Id, item => item.index);
             foreach (var item in view.Sources)
             {
                 if (item.Status is "pending" or "stale" or "not-returned") { warnings.Add(item.Source.Name + ": Zuordnung offen oder erneut zu prüfen."); continue; }
-                if (item.Status == "excluded") continue;
+                if (item.Status is "excluded" or "structure-hidden") continue;
                 if (item.Status == "partial") warnings.Add(item.Source.Name + ": Nur ausgewählte Seiten zugeordnet; der übrige Quelleninhalt bleibt ungeklärt.");
                 var uses = item.Decision!.Uses.Where(use => visibleUnits.ContainsKey(use.UnitId) && use.Role is "teaching" or "task" or "solution");
                 var material = snapshot.Materials.SingleOrDefault(source => source.Id == item.Source.Id && source.Status == "ready" && source.Revision is not null);
@@ -144,8 +195,10 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
                 foreach (var group in uses.GroupBy(use => new { use.UnitId, use.FirstPage, use.LastPage, use.RelatedSourceId }))
                 {
                     var unit = visibleUnits[group.Key.UnitId];
-                    inputs.Add(new(material!.Id, material.Revision!, material.Name, LearningStructure.DisplayTitle(unit), unit.Id,
-                        group.Select(use => use.Role).Distinct().Order().ToArray(), group.Key.FirstPage, group.Key.LastPage, group.Key.RelatedSourceId));
+                    var input = new LearningInput(material!.Id, material.Revision!, material.Name, LearningStructure.DisplayTitle(unit), unit.Id,
+                        group.Select(use => use.Role).Distinct().Order().ToArray(), group.Key.FirstPage, group.Key.LastPage, group.Key.RelatedSourceId);
+                    var useOrder = group.Where(use => use.Order is not null).Select(use => use.Order).DefaultIfEmpty().Min();
+                    inputs.Add((input, useOrder, sourceIndexes[item.Source.Id]));
                 }
                 if (uses.Any()) warnings.AddRange(item.Source.Warnings.Select(warning => item.Source.Name + ": " + warning));
             }
@@ -153,7 +206,9 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
                 throw new ApiFailure("pipeline_incomplete", "Es gibt offene Zuordnungen oder nicht aufbereitete Quellen. Prüfe sie oder wähle ausdrücklich eine Teilfassung.", 409);
             if (inputs.Count == 0) throw new ApiFailure("pipeline_no_inputs", "Keine bestätigten, lesbaren Lernquellen vorhanden.", 409);
             var order = OrderedUnits(plan.Units).Select((unit, index) => (unit.Id, index)).ToDictionary(item => item.Id, item => item.index);
-            var ordered = inputs.OrderBy(input => order[input.UnitId!]).ToArray();
+            var ordered = inputs.OrderBy(item => order[item.Input.UnitId!])
+                .ThenBy(item => item.UseOrder is null ? 1 : 0).ThenBy(item => item.UseOrder ?? int.MaxValue).ThenBy(item => item.SourceIndex)
+                .Select(item => item.Input).ToArray();
             return Task.FromResult(new PipelineRunSelection(plan.Revision, ordered, warnings.Distinct().ToArray(), warnings.Count > 0));
         }, ct);
     }
@@ -169,9 +224,13 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
         var views = sources.Select(source =>
         {
             var decision = plan.Decisions.SingleOrDefault(item => item.SourceId == source.Id);
-            var status = !source.Present ? "not-returned" : decision is null ? "pending" :
+            var sourceUnit = units.FirstOrDefault(unit => unit.SourceGroupId == source.SectionId);
+            var inheritedHidden = decision is null && sourceUnit is not null && LearningStructure.IsHidden(sourceUnit, units);
+            var status = inheritedHidden ? "structure-hidden" : !source.Present ? "not-returned" : decision is null ? "pending" :
                 decision.SourceVersion != source.SourceVersion || decision.Uses.Any(use => use.Role == "solution" && (decision.DependencyVersions?.GetValueOrDefault(use.RelatedSourceId!) is not { } pinned || !sources.Any(other => other.Id == use.RelatedSourceId && other.Present && other.SourceVersion == pinned))) ? "stale" : decision.Disposition == "exclude" ? "excluded" : decision.Uses.All(use => use.FirstPage is not null) ? "partial" : "reviewed";
-            if (status is "reviewed" or "partial" && decision!.Uses.Any(use => use.Role == "teaching" && units.Any(unit => unit.Id == use.UnitId && LearningStructure.Kind(unit) == "tasks"))) status = "stale";
+            if (status is "reviewed" or "partial" && decision!.Uses.Any(use => use.UnitId.Length > 0 &&
+                (!units.Any(unit => unit.Id == use.UnitId) || units.Any(unit => unit.Id == use.UnitId && LearningStructure.IsHidden(unit, units)) ||
+                 use.Role == "teaching" && units.Any(unit => unit.Id == use.UnitId && LearningStructure.Kind(unit) == "tasks")))) status = "stale";
             var sections = version?.Sections.Where(section => section.Sources.Any(reference => reference.MaterialId == source.Id)).Select(section => section.Id).ToArray() ?? [];
             var exercises = version?.Exercises.Where(exercise => exercise.Sources.Any(reference => reference.MaterialId == source.Id)).Select(exercise => exercise.Id).ToArray() ?? [];
             return new PipelineSourceView(source, status, decision, sections, exercises, version?.UnmappedSourceRefs?.Count(reference => reference.MaterialId == source.Id) ?? 0);
@@ -179,7 +238,7 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
         var suggestions = LearningStructure.Suggestions(courseId, groups);
         return new(courseId, plan.Revision, observed.Hash, plan.SyncedAt is not null, observed.Problem, groups, views,
             units, suggestions, plan.History, views.Count(item => item.Status is "pending" or "stale" or "partial" or "not-returned"),
-            views.Count(item => item.Source.Acquisition != "ready" && item.Status != "excluded"),
+            views.Count(item => item.Source.Acquisition != "ready" && item.Status is not ("excluded" or "structure-hidden")),
             version?.Sections.Where(section => section.Sources.Length == 0).Select(section => section.Id).ToArray() ?? []);
     }
 

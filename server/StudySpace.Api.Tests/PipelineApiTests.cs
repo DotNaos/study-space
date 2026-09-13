@@ -52,6 +52,8 @@ public sealed class PipelineApiTests
         using var fixture = new WorkflowApiFixture(); using var client = fixture.Client(); await fixture.Seed();
         client.DefaultRequestHeaders.Remove("Origin"); client.DefaultRequestHeaders.Add("Origin", "https://other.test");
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(Path + "/sync", new PlanSyncRequest(0))).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(Path + "/mapping", new PlanMappingRequest(0,
+            [new(WorkflowApiFixture.Id('a'), WorkflowApiFixture.Id('f'), "exclude", [])]))).StatusCode);
         client.DefaultRequestHeaders.Remove("Origin"); client.DefaultRequestHeaders.Add("Origin", "http://127.0.0.1:18168");
         Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync("/api/learning/courses/7/activate", new ActivateVersionRequest(WorkflowApiFixture.InitialVersion, null, true))).StatusCode);
     }
