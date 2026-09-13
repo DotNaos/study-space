@@ -31,7 +31,8 @@ ARG COMMIT
 ENV DOCS_CONTENT_REVISION=$COMMIT
 RUN bun run build && bun test
 
-FROM oven/bun:1.3.9 AS docs
+FROM node:24-bookworm-slim AS docs
+COPY --from=web /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /source
 COPY apps/docs/package.json apps/docs/bun.lock ./apps/docs/
 RUN cd apps/docs && bun install --frozen-lockfile
