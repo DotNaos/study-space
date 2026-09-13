@@ -1,5 +1,7 @@
 # Script source comparison (#65)
 
+The [accepted content-pipeline design](content-pipeline.md) adds source-level relevance/structure review before this fine-grained comparison. Its hierarchy-first drill-down and review decisions are target behavior; the implementation described below is the existing foundation.
+
 The script reader has Lesen / Quellenvergleich modes. The comparison shows a pinned original page on the left and the existing rendered script on the right. It does not regenerate or migrate course content, answers, or reading positions.
 
 ## One mapping contract
