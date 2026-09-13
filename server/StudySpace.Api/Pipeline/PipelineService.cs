@@ -41,18 +41,20 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
 
     public async Task<PipelineView> Structure(long courseId, PlanStructureRequest request, CancellationToken ct)
     {
-        ValidateUnits(request.Units);
+        if (request.Units is null || request.Units.Length > 250 || request.Units.Any(unit => unit is null || string.IsNullOrWhiteSpace(unit.Id) || string.IsNullOrWhiteSpace(unit.Title)) ||
+            request.Units.Select(unit => unit.Id).Distinct().Count() != request.Units.Length) throw Invalid("Ungültige Lerneinheiten.");
         ValidateReason(request.Reason, request.Actor);
+        var observed = await Observe(courseId, ct);
         await store.WithCourse(courseId, async state =>
         {
             var plan = state.Pipeline;
             CheckRevision(plan, request.ExpectedRevision);
-            var ids = request.Units.Select(unit => unit.Id).ToHashSet();
-            if (plan.Decisions.SelectMany(decision => decision.Uses).Any(use => use.UnitId.Length > 0 && !ids.Contains(use.UnitId)))
-                throw Invalid("Verschiebe zuerst die Quellenzuordnungen der zu entfernenden Lerneinheit.");
-            // Store the prior structure in the event so a reviewer can inspect every change.
+            var groups = observed.Groups.Concat(plan.Groups.Where(old => !observed.Groups.Any(group => group.Id == old.Id))).ToArray();
+            var next = LearningStructure.Apply(courseId, plan.Units, request.Units, groups);
+            ValidateUnits(next);
             var previous = JsonSerializer.Serialize(plan.Units, LearningStore.Json);
-            plan.Units = request.Units.Select(unit => unit with { Title = unit.Title.Trim() }).ToArray();
+            plan.Units = next;
+            if (observed.Problem is null) Capture(plan, observed);
             AddEvent(plan, "structure", request.Actor, request.Reason + "\nVorherige Struktur: " + previous);
             await store.Save(state, ct); return true;
         }, ct);
@@ -95,6 +97,8 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
             CheckRevision(plan, request.ExpectedRevision);
             if (request.Uses.Any(use => use.UnitId.Length > 0 ? !plan.Units.Any(unit => unit.Id == use.UnitId) : use.Role is "teaching" or "task" or "solution"))
                 throw Invalid("Wähle eine bestätigte Lerneinheit.");
+            if (request.Uses.Any(use => use.Role == "teaching" && plan.Units.Any(unit => unit.Id == use.UnitId && LearningStructure.Kind(unit) == "tasks")))
+                throw Invalid("Skriptinhalte gehören in eine Skript-Lerneinheit, nicht in eine Aufgabengruppe.");
             Capture(plan, observed);
             var previous = plan.Decisions.SingleOrDefault(decision => decision.SourceId == source.Id);
             var decision = new SourceDecision(source.Id, source.SourceVersion, request.Disposition, request.Uses,
@@ -118,13 +122,14 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
                 throw new ApiFailure("pipeline_review_required", "Bestätige zuerst die Lerneinheiten und Quellenverwendung unter Aufbereitung.", 409);
             CheckRevision(plan, expectedRevision.Value);
             var view = Project(courseId, plan, observed, null);
+            var visibleUnits = view.Units.Where(unit => !LearningStructure.IsHidden(unit, view.Units)).ToDictionary(unit => unit.Id);
             var inputs = new List<LearningInput>(); var warnings = new List<string>();
             foreach (var item in view.Sources)
             {
                 if (item.Status is "pending" or "stale" or "not-returned") { warnings.Add(item.Source.Name + ": Zuordnung offen oder erneut zu prüfen."); continue; }
                 if (item.Status == "excluded") continue;
                 if (item.Status == "partial") warnings.Add(item.Source.Name + ": Nur ausgewählte Seiten zugeordnet; der übrige Quelleninhalt bleibt ungeklärt.");
-                var uses = item.Decision!.Uses.Where(use => use.Role is "teaching" or "task" or "solution");
+                var uses = item.Decision!.Uses.Where(use => visibleUnits.ContainsKey(use.UnitId) && use.Role is "teaching" or "task" or "solution");
                 var material = snapshot.Materials.SingleOrDefault(source => source.Id == item.Source.Id && source.Status == "ready" && source.Revision is not null);
                 if (uses.Any() && (item.Source.Acquisition != "ready" || material is null || material.Revision != item.Source.MaterialRevision))
                 { warnings.Add(item.Source.Name + ": Bestätigt, aber noch nicht in dieser Fassung aufbereitet."); continue; }
@@ -138,8 +143,8 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
                 }).ToArray();
                 foreach (var group in uses.GroupBy(use => new { use.UnitId, use.FirstPage, use.LastPage, use.RelatedSourceId }))
                 {
-                    var unit = plan.Units.Single(unit => unit.Id == group.Key.UnitId);
-                    inputs.Add(new(material!.Id, material.Revision!, material.Name, unit.Title, unit.Id,
+                    var unit = visibleUnits[group.Key.UnitId];
+                    inputs.Add(new(material!.Id, material.Revision!, material.Name, LearningStructure.DisplayTitle(unit), unit.Id,
                         group.Select(use => use.Role).Distinct().Order().ToArray(), group.Key.FirstPage, group.Key.LastPage, group.Key.RelatedSourceId));
                 }
                 if (uses.Any()) warnings.AddRange(item.Source.Warnings.Select(warning => item.Source.Name + ": " + warning));
@@ -160,18 +165,20 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
     {
         var sources = MergeSources(plan.Sources, observed.Sources, observed.Problem is null);
         var groups = observed.Groups.Concat(plan.Groups.Where(old => !observed.Groups.Any(group => group.Id == old.Id))).ToArray();
+        var units = LearningStructure.Normalize(courseId, plan.Units, groups);
         var views = sources.Select(source =>
         {
             var decision = plan.Decisions.SingleOrDefault(item => item.SourceId == source.Id);
             var status = !source.Present ? "not-returned" : decision is null ? "pending" :
                 decision.SourceVersion != source.SourceVersion || decision.Uses.Any(use => use.Role == "solution" && (decision.DependencyVersions?.GetValueOrDefault(use.RelatedSourceId!) is not { } pinned || !sources.Any(other => other.Id == use.RelatedSourceId && other.Present && other.SourceVersion == pinned))) ? "stale" : decision.Disposition == "exclude" ? "excluded" : decision.Uses.All(use => use.FirstPage is not null) ? "partial" : "reviewed";
+            if (status is "reviewed" or "partial" && decision!.Uses.Any(use => use.Role == "teaching" && units.Any(unit => unit.Id == use.UnitId && LearningStructure.Kind(unit) == "tasks"))) status = "stale";
             var sections = version?.Sections.Where(section => section.Sources.Any(reference => reference.MaterialId == source.Id)).Select(section => section.Id).ToArray() ?? [];
             var exercises = version?.Exercises.Where(exercise => exercise.Sources.Any(reference => reference.MaterialId == source.Id)).Select(exercise => exercise.Id).ToArray() ?? [];
             return new PipelineSourceView(source, status, decision, sections, exercises, version?.UnmappedSourceRefs?.Count(reference => reference.MaterialId == source.Id) ?? 0);
         }).ToArray();
-        var suggestions = groups.Select(group => new PipelineUnit(MaterialStore.Hash($"unit:{courseId}:{group.Id}")[..32], group.Title, null, group.Order)).ToArray();
+        var suggestions = LearningStructure.Suggestions(courseId, groups);
         return new(courseId, plan.Revision, observed.Hash, plan.SyncedAt is not null, observed.Problem, groups, views,
-            plan.Units, suggestions, plan.History, views.Count(item => item.Status is "pending" or "stale" or "partial" or "not-returned"),
+            units, suggestions, plan.History, views.Count(item => item.Status is "pending" or "stale" or "partial" or "not-returned"),
             views.Count(item => item.Source.Acquisition != "ready" && item.Status != "excluded"),
             version?.Sections.Where(section => section.Sources.Length == 0).Select(section => section.Id).ToArray() ?? []);
     }
@@ -198,7 +205,9 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
     public static void ValidateUnits(PipelineUnit[] units)
     {
         if (units is null || units.Length > 250 || units.Any(unit => unit is null || !Regex.IsMatch(unit.Id ?? "", "^[a-f0-9]{32}$") ||
-            string.IsNullOrWhiteSpace(unit.Title) || unit.Title.Length > 250 || unit.Order < 0) || units.Select(unit => unit.Id).Distinct().Count() != units.Length)
+            string.IsNullOrWhiteSpace(unit.Title) || unit.Title.Length > 250 || unit.Title.Any(char.IsControl) || unit.Order < 0 ||
+            unit.CustomTitle is { } label && (label.Length > 250 || string.IsNullOrWhiteSpace(label) || label.Any(char.IsControl)) ||
+            LearningStructure.Kind(unit) is not ("script" or "tasks") || unit.SourceGroupId is <= 0) || units.Select(unit => unit.Id).Distinct().Count() != units.Length)
             throw Invalid("Die Lerneinheiten sind ungültig.");
         var byId = units.ToDictionary(unit => unit.Id);
         foreach (var unit in units)
@@ -206,11 +215,15 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
             var seen = new HashSet<string> { unit.Id }; var parent = unit.ParentId;
             while (parent is not null)
             {
-                if (!seen.Add(parent) || !byId.TryGetValue(parent, out var ancestor)) throw Invalid("Ungültige oder zyklische Gliederung.");
+                if (!seen.Add(parent) || !byId.TryGetValue(parent, out var ancestor) || LearningStructure.Kind(ancestor) != LearningStructure.Kind(unit)) throw Invalid("Ungültige oder zyklische Gliederung.");
                 parent = ancestor.ParentId;
             }
+            var links = unit.ScriptUnitIds ?? [];
+            if (links.Length > 250 || links.Distinct().Count() != links.Length || links.Length > 0 && LearningStructure.Kind(unit) != "tasks" ||
+                links.Any(id => id is null || !byId.TryGetValue(id, out var target) || LearningStructure.Kind(target) != "script"))
+                throw Invalid("Aufgabengruppen können nur vorhandenen Skript-Lerneinheiten zugeordnet werden.");
         }
-        if (units.GroupBy(unit => (unit.ParentId, unit.Order)).Any(group => group.Count() > 1)) throw Invalid("Die Reihenfolge ist nicht eindeutig.");
+        if (units.GroupBy(unit => (LearningStructure.Kind(unit), unit.ParentId, unit.Order)).Any(group => group.Count() > 1)) throw Invalid("Die Reihenfolge ist nicht eindeutig.");
     }
     public static PipelineUnit[] OrderedUnits(PipelineUnit[] units)
     {

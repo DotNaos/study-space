@@ -1,10 +1,9 @@
 import { api } from "./api";
 
 export type PipelineUnit = {
-  id: string;
-  title: string;
-  parentId: string | null;
-  order: number;
+  id: string; title: string; parentId: string | null; order: number;
+  kind?: "script" | "tasks"; hidden?: boolean; customTitle?: string | null;
+  sourceGroupId?: number | null; scriptUnitIds?: string[];
 };
 export type SourceUse = {
   unitId: string;

@@ -2,7 +2,8 @@ using StudySpace.Api.Learning;
 namespace StudySpace.Api.Pipeline;
 
 // Source observations, reviewed intent, and learning content have different lifecycles.
-public sealed record PipelineUnit(string Id, string Title, string? ParentId, int Order);
+public sealed record PipelineUnit(string Id, string Title, string? ParentId, int Order,
+    string? Kind = null, bool? Hidden = null, string? CustomTitle = null, long? SourceGroupId = null, string[]? ScriptUnitIds = null);
 public sealed record SourceUse(string UnitId, string Role, int? FirstPage = null, int? LastPage = null, string? RelatedSourceId = null);
 public sealed record SourceDecision(string SourceId, string SourceVersion, string Disposition, SourceUse[] Uses,
     string Reason, string Actor, DateTimeOffset DecidedAt, Dictionary<string, string>? DependencyVersions = null);
