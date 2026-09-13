@@ -1,0 +1,4 @@
+modules:
+- modules/docs.content.yaml
+name: project-template
+version: 0.1.0

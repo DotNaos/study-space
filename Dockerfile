@@ -24,6 +24,10 @@ WORKDIR /source/web
 COPY web/package.json web/bun.lock ./
 RUN bun install --frozen-lockfile
 COPY web/ ./
+COPY docs/ /source/docs/
+COPY scripts/docs-content.mjs /source/scripts/docs-content.mjs
+ARG COMMIT
+ENV DOCS_CONTENT_REVISION=$COMMIT
 RUN bun run build && bun test
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS server

@@ -28,6 +28,8 @@ class ReleaseSourceTests(unittest.TestCase):
                 ".dockerignore": "**/dist\n**/bin\n",
                 "server/source.txt": "committed server\n",
                 "web/source.txt": "committed web\n",
+                "docs/README.md": "# Committed docs\n",
+                "scripts/docs-content.mjs": "// committed exporter\n",
                 "web/bun.lock": "committed lock\n",
                 "compose.yaml": "services:\n  app:\n    build: ./source\n",
                 "install.sh": "#!/bin/sh\necho committed installer\n",
@@ -67,7 +69,7 @@ class ReleaseSourceTests(unittest.TestCase):
                 files = {member.name: bundle.extractfile(member).read().decode()
                          for member in bundle.getmembers() if member.isfile()}
             expected_source = {f"source/{name}": content for name, content in committed.items()
-                               if name in {"Dockerfile", ".dockerignore"} or name.startswith(("server/", "web/"))}
+                               if name in {"Dockerfile", ".dockerignore"} or name.startswith(("server/", "web/", "docs/")) or name == "scripts/docs-content.mjs"}
             self.assertEqual({name: value for name, value in files.items() if name.startswith("source/")}, expected_source)
             self.assertEqual(files["compose.yaml"], committed["compose.yaml"])
             self.assertEqual((output / "install.sh").read_text(), committed["install.sh"])

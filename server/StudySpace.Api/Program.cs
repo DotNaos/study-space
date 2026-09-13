@@ -116,7 +116,22 @@ app.Use(async (context, next) =>
     catch (Exception)
     { await Failure(context, 500, "server_error", "Study Space could not complete this request. Check server readiness and try again."); }
 });
+var docsOrigin = config["DOCS_CONTENT_ORIGIN"] ?? "https://architecture.os-pc.vpn.os-home.net";
+if (!Uri.TryCreate(docsOrigin, UriKind.Absolute, out var docsReader) || docsReader.Scheme is not ("http" or "https") ||
+    docsReader.UserInfo.Length > 0 || docsReader.GetLeftPart(UriPartial.Authority) != docsOrigin)
+    throw new InvalidOperationException("DOCS_CONTENT_ORIGIN must be an exact HTTP(S) origin.");
 app.UseRateLimiter();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/docs-content"))
+    {
+        await StudySpace.Api.DocumentationContent.Serve(context,
+            app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"),
+            docsOrigin);
+        return;
+    }
+    await next(context);
+});
 app.UseDefaultFiles();
 var staticTypes = new FileExtensionContentTypeProvider();
 staticTypes.Mappings[".bcmap"] = "application/octet-stream";

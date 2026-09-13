@@ -1,0 +1,165 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/DotNaos/project-template/main/schema/template-module.schema.json",
+  "title": "Project Template Module",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "description", "owns"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "default": {
+      "type": "boolean",
+      "default": false
+    },
+    "dependsOn": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "appTarget": {
+      "$ref": "#/$defs/appTarget"
+    },
+    "values": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/value"
+      }
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/fileRules"
+      }
+    },
+    "owns": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  },
+  "$defs": {
+    "appTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "devices", "deviceModules"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]*$"
+        },
+        "devices": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/appDevice"
+          }
+        },
+        "sharedModule": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sharedDevices": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/appDevice"
+          }
+        },
+        "deviceModules": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": false,
+          "properties": {
+            "desktop": { "type": "string", "minLength": 1 },
+            "tablet": { "type": "string", "minLength": 1 },
+            "mobile": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "appDevice": {
+      "type": "string",
+      "enum": ["desktop", "tablet", "mobile"]
+    },
+    "value": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["string", "number", "integer", "boolean"]
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        },
+        "description": {
+          "type": "string"
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "default": {
+          "type": ["string", "number", "integer", "boolean"]
+        },
+        "defaultFrom": {
+          "type": "string",
+          "minLength": 1
+        },
+        "transform": {
+          "type": "string",
+          "enum": ["title", "slug"]
+        }
+      }
+    },
+    "fileRules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["format", "entries"],
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["json"]
+        },
+        "entries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/fileRuleEntry"
+          }
+        }
+      }
+    },
+    "fileRuleEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "kind"],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^/"
+        },
+        "kind": {
+          "type": "string",
+          "enum": ["frozen", "slot", "open", "deny"]
+        },
+        "pattern": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

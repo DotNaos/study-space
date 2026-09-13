@@ -14,7 +14,7 @@ mkdir -p "$staging/cli/bin" "$staging/bundle/source"
 cp cli/target/release/study "$staging/cli/bin/study"
 # The release's build inputs come from its commit, never the checkout or local
 # generated files. This also prevents a dirty compose file or installer leaking.
-git archive "$commit" -- Dockerfile .dockerignore server web | tar -x -C "$staging/bundle/source"
+git archive "$commit" -- Dockerfile .dockerignore server web docs scripts/docs-content.mjs | tar -x -C "$staging/bundle/source"
 git show "$commit:compose.yaml" > "$staging/bundle/compose.yaml"
 git show "$commit:install.sh" > "$out/install.sh"
 printf 'STUDY_IMAGE=%s\nSTUDY_VERSION=v%s\nSTUDY_COMMIT=%s\nSTUDY_SCHEMA_VERSION=1\n' "$image" "$version" "$commit" > "$staging/bundle/release.env"

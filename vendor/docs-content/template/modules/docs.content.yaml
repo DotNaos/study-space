@@ -1,0 +1,5 @@
+default: true
+description: Static project-owned Markdown exports and scoped Vite development routes.
+name: docs.content
+owns:
+- scripts/docs-content.mjs
