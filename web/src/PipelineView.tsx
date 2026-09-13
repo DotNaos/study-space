@@ -1,3 +1,5 @@
+import { PipelineUnits } from "./PipelineUnits";
+import { unitLabel } from "./learning-structure";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Checkbox } from "@dotnaos/ui-base";
 import { ChevronRight, FileText, Folder } from "lucide-react";
@@ -244,7 +246,7 @@ export function PipelineView({
               ? "Quellen und Lernstruktur"
               : (item?.source.name ??
                 group?.title ??
-                unit?.title ??
+                (unit ? unitLabel(unit) : undefined) ??
                 "Lernstruktur")}
           </span>
         </div>
@@ -462,7 +464,7 @@ export function PipelineView({
                 />
               ) : (
                 <>
-                  <h2>{unit?.title ?? "Bestätigte Lernstruktur"}</h2>
+                  <h2>{(unit ? unitLabel(unit) : undefined) ?? "Bestätigte Lernstruktur"}</h2>
                   {!state.units.length ? (
                     <>
                       <p className="pipeline-muted">
@@ -476,39 +478,7 @@ export function PipelineView({
                       />
                     </>
                   ) : (
-                    <ul className="pipeline-list">
-                      {state.units
-                        .filter(
-                          (candidate) =>
-                            candidate.parentId === (unit?.id ?? null),
-                        )
-                        .sort((a, b) => a.order - b.order)
-                        .map((candidate) => (
-                          <li key={candidate.id}>
-                            <button
-                              className="pipeline-row"
-                              onClick={() =>
-                                go({ kind: "unit", id: candidate.id })
-                              }
-                            >
-                              <span>
-                                <strong>{candidate.title}</strong>
-                                <small>
-                                  {
-                                    state.sources.filter((item) =>
-                                      item.decision?.uses.some(
-                                        (use) => use.unitId === candidate.id,
-                                      ),
-                                    ).length
-                                  }{" "}
-                                  Quellen zugeordnet
-                                </small>
-                              </span>
-                              <ChevronRight size={16} aria-hidden="true" />
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
+                    <PipelineUnits state={state} unit={unit} onOpen={id => go({kind:"unit",id})} onEdit={() => go({kind:"structure"})} />
                   )}
                   {unit && (
                     <ul className="pipeline-list">

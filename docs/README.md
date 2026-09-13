@@ -19,3 +19,5 @@ Documentation belongs to this repository. Distinguish accepted target behavior f
 - [Mobile app](../mobile/README.md): native application development and current behavior.
 
 For installation and local commands, start with the [repository README](../README.md). Implementations must update the relevant contract when accepted design becomes runtime behavior; a design document alone is not evidence that a capability is available.
+
+- [Learning structure editor](learning-structure-editor.md): separate script/tasks, drag sorting, reversible hiding and local display names.

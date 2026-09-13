@@ -1,3 +1,5 @@
+import { StructurePicker } from "./StructurePicker";
+import { unitHidden, unitKind } from "./learning-structure";
 import { useState } from "react";
 import {
   Button,
@@ -37,7 +39,7 @@ export function PipelineReview({
       ? item.decision.uses
       : [
           {
-            unitId: state.units[0]?.id ?? "",
+            unitId: "",
             role:
               item.source.suggestedRole === "unresolved"
                 ? "reference"
@@ -75,27 +77,16 @@ export function PipelineReview({
                 onValueChange={(role) =>
                   update(index, {
                     role,
+                    unitId: "",
                     relatedSourceId:
                       role === "solution" ? use.relatedSourceId : null,
                   })
                 }
               />
-              <Select
-                accessibilityLabel={`Lerneinheit ${index + 1}`}
-                size="sm"
-                value={use.unitId}
-                options={[
-                  {
-                    value: "",
-                    label: "Keine Lerneinheit / allgemeine Ressource",
-                  },
-                  ...state.units.map((unit) => ({
-                    value: unit.id,
-                    label: unit.title,
-                  })),
-                ]}
-                onValueChange={(unitId) => update(index, { unitId })}
-              />
+              <StructurePicker label={`Lerneinheit ${index+1}`} emptyLabel="Keine Lerneinheit" selected={use.unitId ? [use.unitId] : []}
+                units={state.units.filter(unit => unit.id === use.unitId || !unitHidden(unit,state.units) &&
+                  (use.role === "teaching" ? unitKind(unit)==="script" : use.role === "task" || use.role === "solution" ? unitKind(unit)==="tasks" : true))}
+                onChange={ids => update(index,{unitId:ids[0]??""})} />
               {use.role === "solution" && (
                 <Select
                   accessibilityLabel="Zugehörige Aufgabenquelle"
@@ -207,124 +198,4 @@ export function PipelineReview({
   );
 }
 
-export function PipelineStructure({
-  state,
-  busy,
-  onSave,
-}: {
-  state: PipelineState;
-  busy: boolean;
-  onSave: (units: PipelineState["units"], reason: string) => Promise<void>;
-}) {
-  const [units, setUnits] = useState(
-    state.units.length ? state.units : state.suggestedUnits,
-  );
-  const [reason, setReason] = useState("");
-  function move(index: number, direction: number) {
-    const target = index + direction;
-    if (target < 0 || target >= units.length) return;
-    const next = [...units];
-    [next[index], next[target]] = [next[target], next[index]];
-    setUnits(next.map((unit, order) => ({ ...unit, order })));
-  }
-  return (
-    <div className="pipeline-structure">
-      <h2>Lernstruktur festlegen</h2>
-      <p className="pipeline-muted">
-        Moodle-Gruppen sind nur der Ausgangsvorschlag. Benenne, gruppiere und
-        sortiere nach dem tatsächlichen Unterricht; die Quellenablage bleibt
-        unverändert.
-      </p>
-      <ol className="pipeline-unit-editor">
-        {units.map((unit, index) => (
-          <li key={unit.id}>
-            <Input
-              accessibilityLabel={`Titel der Lerneinheit ${index + 1}`}
-              value={unit.title}
-              onValueChange={(title) =>
-                setUnits(
-                  units.map((item, i) =>
-                    i === index ? { ...item, title } : item,
-                  ),
-                )
-              }
-            />
-            <Select
-              accessibilityLabel={`Übergeordnete Lerneinheit ${index + 1}`}
-              size="sm"
-              value={unit.parentId ?? ""}
-              options={[
-                { value: "", label: "Oberste Ebene" },
-                ...units
-                  .filter((item) => item.id !== unit.id)
-                  .map((item) => ({ value: item.id, label: item.title })),
-              ]}
-              onValueChange={(value) =>
-                setUnits(
-                  units.map((item, i) =>
-                    i === index ? { ...item, parentId: value || null } : item,
-                  ),
-                )
-              }
-            />
-            <div className="pipeline-inline-actions">
-              <Button
-                size="sm"
-                variant="icon"
-                icon="arrow-up"
-                accessibilityLabel={`${unit.title} nach oben`}
-                disabled={index === 0}
-                onPress={() => move(index, -1)}
-              />
-              <Button
-                size="sm"
-                variant="icon"
-                icon="arrow-down"
-                accessibilityLabel={`${unit.title} nach unten`}
-                disabled={index === units.length - 1}
-                onPress={() => move(index, 1)}
-              />
-              <Button
-                size="sm"
-                variant="icon"
-                icon="trash"
-                accessibilityLabel={`${unit.title} entfernen`}
-                onPress={() => setUnits(units.filter((_, i) => i !== index))}
-              />
-            </div>
-          </li>
-        ))}
-      </ol>
-      <Button
-        size="sm"
-        variant="ghost"
-        icon="plus"
-        label="Lerneinheit hinzufügen"
-        onPress={() =>
-          setUnits([
-            ...units,
-            {
-              id: crypto.randomUUID().replaceAll("-", ""),
-              title: "Neue Lerneinheit",
-              parentId: null,
-              order: units.length,
-            },
-          ])
-        }
-      />
-      <Form.Field label="Begründung der Gliederung">
-        <Textarea rows={2} value={reason} fullWidth onValueChange={setReason} />
-      </Form.Field>
-      <Button
-        label="Struktur bestätigen"
-        disabled={busy || !reason.trim()}
-        onPress={() =>
-          void onSave(
-            units.map((unit, order) => ({ ...unit, order })),
-            reason,
-          )
-        }
-      />
-    </div>
-  );
-}
+export { PipelineStructure } from "./PipelineStructure";

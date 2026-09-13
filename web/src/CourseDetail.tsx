@@ -1,3 +1,4 @@
+import "./structure-editor.css";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { Button } from "@dotnaos/ui-base";
 import { ArrowLeft, CalendarDays, ImagePlus } from "lucide-react";
@@ -221,7 +222,7 @@ export function CourseDetail({
       <div
         role="group"
         aria-label="Kursansicht"
-        className="mt-4 flex flex-wrap items-center gap-1 border-b border-border pb-3"
+        className="course-view-tabs mt-4 flex flex-nowrap items-center gap-1 overflow-x-auto border-b border-border pb-3"
       >
         <Button
           size="sm"
