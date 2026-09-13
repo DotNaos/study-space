@@ -35,8 +35,17 @@ public static class StudyMcpBridge
         await app.RunAsync();
     }
 
+    // This endpoint is for connector/agent backends, not browser-origin RPC.
+    // Reject browser form/fetch requests before parsing, including when opt-in writes are enabled.
+    public static int? TransportFailure(HttpRequest request)
+    {
+        if (request.Headers.ContainsKey("Origin")) return StatusCodes.Status403Forbidden;
+        return request.HasJsonContentType() ? null : StatusCodes.Status415UnsupportedMediaType;
+    }
+
     private static async Task<IResult> Handle(HttpContext context, StudyMcpTools tools, CancellationToken ct)
     {
+        if (TransportFailure(context.Request) is { } failure) return Results.StatusCode(failure);
         JsonDocument request;
         try
         {

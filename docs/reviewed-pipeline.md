@@ -80,6 +80,8 @@ Write tools remain separately disabled by default:
 - `STUDY_MCP_ALLOW_PIPELINE_WRITES=true` exposes `study_pipeline_structure` and `study_pipeline_decide`.
 - `STUDY_MCP_ALLOW_FEEDBACK_WRITES=true` exposes `study_feedback` for appending feedback to an exact submitted attempt.
 
+The MCP RPC transport accepts JSON requests from connector/agent backends and rejects requests carrying a browser Origin header. Browser interaction uses the protected application API, not direct MCP RPC. This prevents browser-origin requests from reaching an opt-in write tool; it does not replace deployment/network access control.
+
 These variables belong to the MCP service's deployment environment. Enabling them does not grant arbitrary host, source, answer or Moodle writes. Disabled tools are absent from discovery and rejected on invocation. Tool clients must refresh discovery after an authorized capability change. Merely viewing a source or asking a question never confirms a mapping or submits an answer.
 
 ## Verification and remaining work
