@@ -1,0 +1,41 @@
+default: true
+dependsOn:
+- docs.content
+description: Standalone Fumadocs site rendered from the same project-owned docs.content export.
+name: docs.fumadocs
+owns:
+- apps/docs/.gitignore
+- apps/docs/app/[...slug]/page.tsx
+- apps/docs/app/global.css
+- apps/docs/app/layout.tsx
+- apps/docs/app/page.tsx
+- apps/docs/bun.lock
+- apps/docs/components/DocumentPage.tsx
+- apps/docs/components/Markdown.tsx
+- apps/docs/lib/content.ts
+- apps/docs/lib/navigation.tsx
+- apps/docs/next-env.d.ts
+- apps/docs/next.config.mjs
+- apps/docs/package.json
+- apps/docs/postcss.config.mjs
+- apps/docs/tsconfig.json
+values:
+  docs.architectureUrl:
+    default: https://architecture.os-pc.vpn.os-home.net/project-docs/{{ project.slug }}
+    required: true
+    type: string
+  docs.repositoryUrl:
+    default: https://github.com/DotNaos/{{ project.slug }}
+    required: true
+    type: string
+  project.displayName:
+    defaultFrom: project.slug
+    description: Product name shown in generated UIs.
+    required: true
+    transform: title
+    type: string
+  project.slug:
+    description: URL, package, Docker, and folder safe project slug.
+    pattern: ^[a-z0-9][a-z0-9-]*[a-z0-9]$
+    required: true
+    type: string

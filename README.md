@@ -4,7 +4,7 @@ Your learning materials, on your own computer. Study Space runs a React app and 
 
 ## Documentation
 
-See the [documentation index](docs/README.md). The [accepted course-content pipeline](docs/content-pipeline.md) describes the target MDX script, separate tasks, reviewed source mappings, and hierarchy-first navigation. Existing runtime contracts and remaining work are explicitly distinguished.
+See the [documentation index](docs/README.md) in the repository or open the deployed [Study Space documentation](https://study.os-pc.vpn.os-home.net/docs/). Both the standalone Fumadocs site and Architecture read the same project-owned README/docs/navigation sources. The [accepted course-content pipeline](docs/content-pipeline.md) describes the target MDX script, separate tasks, reviewed source mappings, and hierarchy-first navigation. Existing runtime contracts and remaining work are explicitly distinguished.
 
 ## Install on os-pc
 

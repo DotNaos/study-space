@@ -4,6 +4,21 @@ This page records the original learning API foundation. The [reviewed workflow e
 
 > This page documents the existing learning API. The [accepted content-pipeline design](content-pipeline.md) defines the next-stage source review, MDX authoring, task reconciliation, and feedback workflow; those capabilities are not implied by this contract. See also the implemented [optional text provenance](source-comparison.md) extension.
 
+
+```mermaid
+flowchart LR
+  Moodle["Observed Moodle course"] --> Prepare["Material preparation"]
+  Prepare --> Materials["Revisioned materials"]
+  Materials --> Version["Learning version"]
+  Version --> Script["Learning script"]
+  Version --> Tasks["Tasks and exercises"]
+  Tasks --> Drafts["Answer drafts / attempts"]
+  Codex["Codex"] -. scoped help .-> Script
+  Codex -. scoped feedback .-> Tasks
+```
+
+The persisted learning version is the ownership boundary between prepared source material and learner-facing script/tasks. Generation or agent assistance does not replace the revision and draft history described by this contract.
+
 ## Learning API (root ownership)
 
 `GET /api/learning/courses/{courseId}` returns:

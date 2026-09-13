@@ -17,6 +17,21 @@ This is an observability and traceability invariant, not a requirement to reprod
 
 ## Three structures, not one forced tree
 
+
+```mermaid
+flowchart LR
+  Observed["Observed source structure"] --> Evidence["Deterministic evidence"]
+  Evidence --> Review["Human / agent review"]
+  Review --> Decisions["Explicit source-use decisions"]
+  Decisions --> Learning["Reviewed learning structure"]
+  Observed -. retained provenance .-> Mapping["Explicit mappings"]
+  Learning -. target ranges .-> Mapping
+  Mapping --> Candidate["Revision-bound script + tasks candidate"]
+  Candidate --> Activation["Explicit activation"]
+```
+
+The observed provider hierarchy, reviewed learning hierarchy, and their mappings stay separate. Review creates explicit decisions; it never turns a filename or folder position into semantic truth by itself.
+
 ### 1. Observed source structure
 
 Retain the provider's identities, order, containment, titles, descriptions, and source occurrences. A Moodle section may describe a week, a subject, an assessment, a toolbox, or an administrative area. Do not rename or reorganize the observed structure to make an inferred learning structure look authoritative.

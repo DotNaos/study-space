@@ -143,9 +143,34 @@ app.MapStudyLearning();
 app.MapStudyPipeline();
 app.MapFallback(async context =>
 {
+    var webRoot = app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot");
+    if (context.Request.Path.StartsWithSegments("/docs"))
+    {
+        if (!HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))
+        { await Failure(context, 405, "method_not_allowed", "Project documentation is read-only."); return; }
+        var relative = context.Request.Path.Value is "/docs" or "/docs/"
+            ? ""
+            : context.Request.Path.Value!["/docs/".Length..].TrimEnd('/');
+        if (relative.Length > 0 && relative.Split('/').Any(part => part is "" or "." or ".."))
+        { await Failure(context, 404, "not_found", "This documentation page does not exist."); return; }
+        if (relative.Length == 0 || !Path.HasExtension(relative))
+        {
+            var docsRoot = Path.GetFullPath(Path.Combine(webRoot, "docs")) + Path.DirectorySeparatorChar;
+            var candidate = Path.GetFullPath(Path.Combine(docsRoot, relative.Replace('/', Path.DirectorySeparatorChar), "index.html"));
+            if (candidate.StartsWith(docsRoot, StringComparison.Ordinal) && File.Exists(candidate))
+            {
+                context.Response.ContentType = "text/html; charset=utf-8";
+                context.Response.ContentLength = new FileInfo(candidate).Length;
+                if (HttpMethods.IsGet(context.Request.Method)) await context.Response.SendFileAsync(candidate, context.RequestAborted);
+                return;
+            }
+        }
+        await Failure(context, 404, "not_found", "This documentation page does not exist.");
+        return;
+    }
     if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/health"))
     { await Failure(context, 404, "not_found", "This endpoint does not exist."); return; }
-    var index = Path.Combine(app.Environment.WebRootPath ?? Path.Combine(app.Environment.ContentRootPath, "wwwroot"), "index.html");
+    var index = Path.Combine(webRoot, "index.html");
     if (File.Exists(index)) { context.Response.ContentType = "text/html"; await context.Response.SendFileAsync(index); }
     else await Failure(context, 503, "frontend_unavailable", "The Study Space web interface is not included in this build.");
 });
