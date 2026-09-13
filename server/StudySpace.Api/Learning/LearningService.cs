@@ -1,9 +1,10 @@
+using StudySpace.Api.Pipeline;
 using System.Collections.Concurrent;
 using StudySpace.Api.Infrastructure;
 using StudySpace.Api.Materials;
 namespace StudySpace.Api.Learning;
 
-public sealed class LearningService(LearningStore store, IMaterialCatalog materials)
+public sealed class LearningService(LearningStore store, IMaterialCatalog materials, PipelineService? pipeline = null)
 {
     private readonly ConcurrentDictionary<long, CancellationTokenSource> running = new();
 
@@ -22,23 +23,30 @@ public sealed class LearningService(LearningStore store, IMaterialCatalog materi
             throw new ApiFailure("material_snapshot_changed", "The prepared materials changed. Review the current coverage before starting.", 409);
         if (snapshot.Coverage.Pending > 0 || snapshot.Job?.Status is "queued" or "running")
             throw new ApiFailure("material_import_running", "Wait for material preparation to finish before generating.", 409);
-        if (!snapshot.Coverage.Complete && !request.AllowPartial)
+        if (pipeline is null && !snapshot.Coverage.Complete && !request.AllowPartial)
             throw new ApiFailure("material_partial", "Some materials are not readable. Explicitly choose a partial learning version to continue.", 409);
-        var inputs = snapshot.Materials.Where(item => item.Status == "ready" && item.Revision is not null)
+        var selection = pipeline is null ? null : await pipeline.SelectRun(courseId, request.PlanRevision, snapshot, request.AllowPartial, ct);
+        var inputs = selection?.Inputs ?? snapshot.Materials.Where(item => item.Status == "ready" && item.Revision is not null)
             .Select(item => new LearningInput(item.Id, item.Revision!, item.Name, item.SectionName)).ToArray();
         if (inputs.Length == 0) throw new ApiFailure("learning_no_material", "Prepare readable course materials first.", 409);
         return await store.WithCourse(courseId, async state =>
         {
             if (state.Job?.Status is "queued" or "running") throw new ApiFailure("learning_busy", "This course is already being processed.", 409);
-            var resume = state.SnapshotId == snapshot.SnapshotId && state.Job?.Status is "failed" or "cancelled";
+            if (selection is not null) PipelineService.CheckRevision(state.Pipeline, selection.PlanRevision);
+            var resume = state.SnapshotId == snapshot.SnapshotId && state.InputPlanRevision == selection?.PlanRevision &&
+                state.AllowExtraExercises == request.ExtraExercises && state.Job?.Status is "failed" or "cancelled";
             var id = Guid.NewGuid().ToString("N");
             state.ChunkJobId = resume ? state.ChunkJobId ?? state.Job!.Id : id;
             state.Job = new(id, "queued", resume ? "Resuming saved work" : "Preparing source chapters", resume ? state.CompletedChunks.Count : 0, 0, null, null);
             if (!resume) state.CompletedChunks = [];
             state.SnapshotId = snapshot.SnapshotId;
             state.Inputs = inputs;
-            state.Partial = !snapshot.Coverage.Complete;
-            state.Warnings = snapshot.Materials.Where(item => item.Status != "ready")
+            state.InputPlanRevision = selection?.PlanRevision;
+            state.InputUnits = selection is null ? [] : state.Pipeline.Units;
+            state.InputDecisions = selection is null ? [] : state.Pipeline.Decisions;
+            state.AllowExtraExercises = request.ExtraExercises;
+            state.Partial = selection?.Partial ?? !snapshot.Coverage.Complete;
+            state.Warnings = selection?.Warnings ?? snapshot.Materials.Where(item => item.Status != "ready")
                 .Select(item => item.Name + ": " + (item.Reason ?? item.Status))
                 .Concat(snapshot.Materials.SelectMany(item => item.Warnings.Select(warning => item.Name + ": " + warning))).Distinct().ToArray();
             await store.Save(state, ct);
@@ -58,8 +66,9 @@ public sealed class LearningService(LearningStore store, IMaterialCatalog materi
         return await View(state, ct);
     }, ct);
 
-    public Task<LearningState> Activate(long courseId, string id, CancellationToken ct) => store.WithCourse(courseId, async state =>
+    public Task<LearningState> Activate(long courseId, string id, CancellationToken ct, string? expectedActiveVersionId = null, bool checkRevision = false) => store.WithCourse(courseId, async state =>
     {
+        if (checkRevision && state.ActiveVersionId != expectedActiveVersionId) throw new ApiFailure("learning_activation_conflict", "Die aktive Fassung hat sich geändert. Prüfe zuerst den aktuellen Stand.", 409);
         if (!state.Versions.Any(version => version.Id == id)) throw Missing();
         await store.Version(courseId, id, ct);
         state.ActiveVersionId = id;

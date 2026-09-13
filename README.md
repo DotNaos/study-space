@@ -20,6 +20,12 @@ Open [Study Space on os-pc](https://study.os-pc.vpn.os-home.net) from a device o
 
 Repeating the command preserves the database, settings, and Moodle connection. Each release includes the source from its exact Git commit and locked application dependencies. Docker reuses its local build cache on later runs. The new image is built before the running release is replaced, so a failed build leaves the current app running. Schema-changing upgrades stop for a dedicated migration procedure; compatible failed updates restore the prior application release.
 
+## Review a course before conversion
+
+Open **Aufbereitung** in a course to inspect Moodle sources alongside the learning structure. Review the suggested units and each source's use or exclusion; titles and folder positions are not silently interpreted as semantic truth. The interface drills down one level at a time and switches panes on a phone.
+
+Generate only after reviewing the intended sources. New reviewed output is an explicit candidate: existing scripts and answers are not replaced until activation. The script supports safe learning-MDX editing/preview; tasks support independent drafts, submitted attempts and feedback. Additional AI exercises are opt-in. See the [reviewed workflow](docs/reviewed-pipeline.md) for exact behavior, limitations and separately enabled MCP review tools.
+
 ## Connect Moodle
 
 1. Open **Quellen** and enter your Moodle address, including any path such as `/moodle`.

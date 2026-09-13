@@ -39,7 +39,7 @@ public sealed class MoodleMaterialSourceProvider(MoodleService moodle, Credentia
                             ? "This linked source has not been retrieved; it may require separate access in Moodle."
                             : "This source does not provide a safely downloadable file through the Moodle connection.";
                         sources.Add(new(MaterialStore.Hash(scope + ":" + courseId + ":" + key), scope, courseId, section.Id, section.Name,
-                            module.Id, resource.Name, kind, resource.MimeType, resource.Id, null, reason));
+                            module.Id, resource.Name, kind, resource.MimeType, resource.Id, null, reason, resource.ModifiedAt, resource.Size, module.Name, module.Type));
                     }
                 }
                 if (sources.Count == before)
@@ -52,7 +52,7 @@ public sealed class MoodleMaterialSourceProvider(MoodleService moodle, Credentia
         // Duplicate filenames in a provider response must never overwrite another source silently.
         if (sources.GroupBy(source => source.Id).Any(group => group.Count() > 1))
             throw new ApiFailure("material_inventory_ambiguous", "Moodle returned duplicate material identities. The previous import is preserved.", 502);
-        return new(scope, sources.ToArray());
+        return new(scope, sources.ToArray(), sections);
     }
 
     public async Task<MaterialInput> Read(MaterialSource source, CancellationToken ct)
@@ -70,8 +70,16 @@ public sealed class MoodleMaterialSourceProvider(MoodleService moodle, Credentia
     {
         if (string.IsNullOrWhiteSpace(html)) return;
         var document = new HtmlParser().ParseDocument(html);
-        foreach (var active in document.QuerySelectorAll("script,style,iframe,object,embed,form")) active.Remove();
         var key = moduleId is null ? $"section:{sectionId}:{part}" : $"module:{moduleId}:{part}";
+        var embeds = document.QuerySelectorAll("iframe,object,embed").ToArray();
+        for (var index = 0; index < embeds.Length; index++)
+        {
+            var title = MoodleText.Plain(embeds[index].GetAttribute("title"));
+            sources.Add(new(MaterialStore.Hash(scope + ":" + courseId + ":" + key + ":embed:" + index), scope, courseId,
+                sectionId, sectionName, moduleId, string.IsNullOrWhiteSpace(title) ? "Eingebetteter Inhalt" : title,
+                "reference", null, null, null, "Der eingebettete Inhalt wurde nicht erfasst. Öffne die ursprüngliche Moodle-Aktivität zur Prüfung."));
+        }
+        foreach (var active in document.QuerySelectorAll("script,style,iframe,object,embed,form")) active.Remove();
         var links = document.QuerySelectorAll("a[href],img[src]").ToArray();
         for (var index = 0; index < links.Length; index++)
         {

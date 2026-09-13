@@ -9,6 +9,7 @@ public sealed record MaterialEntry(string Id, string? Revision, string Name, str
 {
     [System.Text.Json.Serialization.JsonPropertyName("study_url")]
     public string? StudyUrl { get; init; }
+    public string? CapturedSourceHash { get; init; }
 }
 public sealed record MaterialJob(string Id, string Status, int Completed, int Total, DateTimeOffset CreatedAt,
     DateTimeOffset? FinishedAt, string? Error);

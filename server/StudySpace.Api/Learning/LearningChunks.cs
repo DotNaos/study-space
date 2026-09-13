@@ -9,6 +9,10 @@ public sealed record ChunkBlock(SourceRef Source, string Text);
 public sealed record LearningImageSource(string MaterialId, string Revision, string AssetId, int? Page, string Sha256, long ByteLength);
 public sealed record LearningChunk(string Id, string Name, string SectionName, ChunkBlock[] Blocks, LearningImageSource[] Images)
 {
+    public string? UnitId { get; init; }
+    public string[] Roles { get; init; } = ["teaching"];
+    public string? RelatedSourceId { get; init; }
+    public bool ExtraExercises { get; init; }
     public LearningChunk(string id, string name, string sectionName, ChunkBlock[] blocks) : this(id, name, sectionName, blocks, []) { }
 }
 public sealed record ChunkResult(string Title, LearningSection[] Sections, LearningExercise[] Exercises);
@@ -19,7 +23,7 @@ public static class LearningChunks
     public const int MaximumChunks = 128;
     public static string Hash(string text) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
 
-    public static LearningChunk[] Build(IEnumerable<(LearningInput Input, MaterialDocument Document)> documents)
+    public static LearningChunk[] Build(IEnumerable<(LearningInput Input, MaterialDocument Document)> documents, bool extraExercises = false)
     {
         var chunks = new List<LearningChunk>();
         foreach (var (input, document) in documents)
@@ -29,8 +33,9 @@ public static class LearningChunks
             {
                 if (blocks.Count == 0) return;
                 var values = blocks.ToArray(); var visuals = images.ToArray();
-                var identity = JsonSerializer.Serialize(new { profile = "multimodal-span-citations-v3", blocks = values, images = visuals }, LearningStore.Json);
-                chunks.Add(new(Hash(identity), document.Name, input.SectionName, values, visuals));
+                var identity = JsonSerializer.Serialize(new { profile = "reviewed-source-routing-v1", input.UnitId, input.Roles, input.RelatedSourceId, extraExercises, blocks = values, images = visuals }, LearningStore.Json);
+                chunks.Add(new(Hash(identity), document.Name, input.SectionName, values, visuals) { UnitId = input.UnitId,
+                    Roles = input.Roles ?? ["teaching"], RelatedSourceId = input.RelatedSourceId, ExtraExercises = extraExercises });
                 blocks.Clear(); images.Clear(); length = 0;
             }
             LearningImageSource[] ImagesFor(IEnumerable<MaterialBlock> group) => group.SelectMany(block =>
@@ -75,7 +80,7 @@ public static class LearningChunks
                     }
                 }
             }
-            foreach (var group in document.Blocks.OrderBy(block => block.Order).GroupBy(block =>
+            foreach (var group in document.Blocks.Where(block => input.FirstPage is null || (block.Page ?? block.Slide) >= input.FirstPage && (block.Page ?? block.Slide) <= input.LastPage).OrderBy(block => block.Order).GroupBy(block =>
                 block.Page is { } page ? "page:" + page : block.Slide is { } slide ? "slide:" + slide : "block:" + block.Order))
                 AddGroup(group.ToArray());
             Flush();
@@ -99,11 +104,17 @@ public static class LearningChunks
         Organize two to six coherent readable sections where useful; consolidate related blocks instead of
         creating a section or exercise for each tiny block. Do not repeat the same explanation across sections.
         Use only supported claims; explicitly describe missing/unclear information instead of inventing it.
-        Administrative/template material may be a concise clearly labelled section, not invented subject matter.
-        Preserve existing source exercises and their subquestions. Add one to three useful exercises only where
-        needed, with separate hints and solutions. The result must contain at least one exercise.
-        Existing source exercises should preserve wording and subquestions. Additional exercises use origin generated.
-        Use origin source only for an exact extract of contiguous supplied source blocks; otherwise generated.
+        Preserve source order. Do not create content explaining an empty template or separator.
+        Respect the reviewed roles supplied below. A solution-only source produces solution sections,
+        never new exercises or teaching chapters. A task-only source produces exercises, not a second script.
+        Preserve existing source exercises and their subquestions, including those embedded in teaching slides.
+        ZERO exercises and ZERO sections are valid when the source contains none of that kind.
+        Do not invent extra exercises unless extraExercises is explicitly true in the input.
+        Keep task statements out of teaching sections; their source references retain their placement.
+        Existing source exercises should preserve wording, input data and subquestions. For a faithfully transcribed
+        original task use origin source, including necessary layout or notation repair; do not classify that repair
+        as an additional exercise. Only newly invented practice tasks use origin generated. The application checks
+        literal extraction separately; source-derived adaptations remain unreviewed until inspected.
         Existing solutions and generated solution suggestions must be clearly distinguished in the solution text.
         Every section and exercise must cite at least one provided integer citation label in its sources array.
         Choose relevant citations; do not repeatedly cite every source block for an individual claim.
@@ -119,7 +130,7 @@ public static class LearningChunks
         Source blocks follow as JSON:
         """ + JsonSerializer.Serialize(new
         {
-            chunk.Name, chunk.SectionName,
+            chunk.Name, chunk.SectionName, chunk.Roles, chunk.ExtraExercises,
             blocks = chunk.Blocks.Select((block, index) => new { citation = index + 1, block.Source.Page, block.Text }),
             images = chunk.Images.Select((image, index) => new
             {
@@ -131,7 +142,7 @@ public static class LearningChunks
         }, LearningStore.Json);
 
     public static readonly JsonElement Schema = JsonDocument.Parse("""
-        {"type":"object","additionalProperties":false,"required":["title","sections","exercises"],"properties":{"title":{"type":"string"},"sections":{"type":"array","minItems":1,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["title","markdown","sources","mappings"],"properties":{"title":{"type":"string"},"markdown":{"type":"string"},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}},"mappings":{"type":"array","maxItems":200,"items":{"type":"object","additionalProperties":false,"required":["quote","sources","origin"],"properties":{"quote":{"type":"string"},"origin":{"type":"string","enum":["source","agent"]},"sources":{"type":"array","maxItems":100,"items":{"type":"integer","minimum":1}}}}}}}},"exercises":{"type":"array","minItems":1,"maxItems":15,"items":{"type":"object","additionalProperties":false,"required":["title","prompt","hint","solution","origin","sources"],"properties":{"title":{"type":"string"},"prompt":{"type":"string"},"hint":{"type":"string"},"solution":{"type":"string"},"origin":{"type":"string","enum":["source","generated"]},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}}}}}}}
+        {"type":"object","additionalProperties":false,"required":["title","sections","exercises"],"properties":{"title":{"type":"string"},"sections":{"type":"array","minItems":0,"maxItems":20,"items":{"type":"object","additionalProperties":false,"required":["title","markdown","sources","mappings"],"properties":{"title":{"type":"string"},"markdown":{"type":"string"},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}},"mappings":{"type":"array","maxItems":200,"items":{"type":"object","additionalProperties":false,"required":["quote","sources","origin"],"properties":{"quote":{"type":"string"},"origin":{"type":"string","enum":["source","agent"]},"sources":{"type":"array","maxItems":100,"items":{"type":"integer","minimum":1}}}}}}}},"exercises":{"type":"array","minItems":0,"maxItems":15,"items":{"type":"object","additionalProperties":false,"required":["title","prompt","hint","solution","origin","sources"],"properties":{"title":{"type":"string"},"prompt":{"type":"string"},"hint":{"type":"string"},"solution":{"type":"string"},"origin":{"type":"string","enum":["source","generated"]},"sources":{"type":"array","minItems":1,"maxItems":100,"items":{"type":"integer","minimum":1}}}}}}}
         """).RootElement.Clone();
 
     public static ChunkResult Validate(string json, LearningChunk chunk)
@@ -155,10 +166,13 @@ public static class LearningChunks
                 var refs = References(exercise, chunk);
                 var origin = Text(exercise, "origin", 20);
                 if (origin is not ("source" or "generated")) throw new JsonException();
+                if (chunk.UnitId is not null && !chunk.ExtraExercises && origin == "generated") throw new JsonException();
                 return LearningPresentation.Exercise(new LearningExercise(Hash(chunk.Id + "exercise" + index + prompt), Text(exercise, "title", 250), prompt,
-                    Text(exercise, "hint", 10000, true), Text(exercise, "solution", 16000, true), origin, refs), chunk.Blocks);
+                    Text(exercise, "hint", 10000, true), Text(exercise, "solution", 16000, true), origin, refs, Derivation: chunk.UnitId is null ? "legacy" : origin == "source" ? "source-adaptation" : "additional"), chunk.Blocks);
             }).ToArray();
-            if (sections.Length is < 1 or > 20 || exercises.Length is < 1 or > 15) throw new JsonException();
+            if (sections.Length > 20 || exercises.Length > 15) throw new JsonException();
+            if (chunk.UnitId is not null && (chunk.Roles.Contains("solution") && exercises.Length > 0 ||
+                !chunk.Roles.Contains("teaching") && !chunk.Roles.Contains("solution") && sections.Length > 0)) throw new JsonException();
             return new(title, sections, exercises);
         }
         catch (Exception error) when (error is JsonException or InvalidOperationException or KeyNotFoundException)

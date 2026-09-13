@@ -241,8 +241,8 @@ test("graph uses shared controls, lazy loading, tokens and no dashboard extras o
   expect(view).toContain("erwartete, nie erstellte Kapitel");
   expect(view).not.toContain('method: "POST"');
   expect(view).not.toContain('method: "PUT"');
-  expect(read("CourseDetail.tsx")).toContain(
-    'lazy(() => import("./ContentGraphView")',
+  expect(read("CourseDetail.tsx")).toMatch(
+    /lazy\(\(\)\s*=>\s*import\("\.\/ContentGraphView"\)/,
   );
   expect(read("content-graph.css")).toContain("var(--color-accent)");
 });

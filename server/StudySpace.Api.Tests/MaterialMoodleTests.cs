@@ -45,6 +45,16 @@ public sealed class MaterialMoodleTests : IDisposable
         Assert.Equal("moodle_connection_changed", (await Assert.ThrowsAsync<ApiFailure>(() => provider.Read(summary, default))).Code);
     }
 
+    [Fact] public async Task UnreadableEmbedsRemainVisibleWithoutExposingSourceUrls()
+    {
+        metadata.Embed = "<iframe title='Recorded lesson' src='https://external.example.test/?token=upstreamSecret'></iframe>";
+        await Connect(); var inventory = await provider.Inventory(7, default);
+        var embedded = Assert.Single(inventory.Sources, source => source.Name == "Recorded lesson");
+        Assert.Equal("reference", embedded.Kind); Assert.NotNull(embedded.UnavailableReason);
+        Assert.DoesNotContain("upstreamSecret", JsonSerializer.Serialize(inventory));
+        Assert.DoesNotContain("<iframe", JsonSerializer.Serialize(inventory));
+    }
+
     [MaterialToolsFact] public async Task RealMixedCourseImportPersistsReadableSourcesAndReusesExtractionAfterReconnect()
     {
         await Connect(); var extractor = new MaterialExtractor(store, new());
@@ -76,6 +86,7 @@ public sealed class MaterialMoodleTests : IDisposable
     private sealed class Metadata : IMoodleTransport
     {
         public int Modified { get; set; } = 1;
+        public string Embed { get; set; } = "";
         public Task<JsonElement> Public(Uri site, string method, object args, CancellationToken ct) => throw new InvalidOperationException();
         public Task<JsonElement> Authenticated(Uri site, string token, string method, Dictionary<string, string>? args, CancellationToken ct)
         {
@@ -87,7 +98,7 @@ public sealed class MaterialMoodleTests : IDisposable
             object[] contents = [File("lecture.pdf"), File("slides.pptx"), File("index.html"), File("scan.png"),
                 new { type = "url", filename = "Reading", fileurl = "https://external.example.test/?token=upstreamSecret" }];
             return Task.FromResult(JsonSerializer.SerializeToElement(new[] { new { id = 11, name = "Week 1",
-                summary = "<h2>Water</h2><p>H<sub>2</sub>O <a href='https://external.example.test/?token=upstreamSecret'>Reading</a><img src='/tokenpluginfile.php/upstreamSecret/diagram.png' alt='Diagram'></p>",
+                summary = "<h2>Water</h2><p>H<sub>2</sub>O <a href='https://external.example.test/?token=upstreamSecret'>Reading</a><img src='/tokenpluginfile.php/upstreamSecret/diagram.png' alt='Diagram'></p>" + Embed,
                 modules = new[] { new { id = 99, name = "Biology", modname = "resource", contents } } } }));
         }
     }
