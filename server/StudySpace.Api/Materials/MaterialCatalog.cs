@@ -227,7 +227,7 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
         var entries = state.Items.Select(item => new MaterialEntry(item.Source.Id, item.Revision, item.Source.Name, item.Source.Kind,
             item.Source.MimeType, item.Source.SectionId, item.Source.SectionName, item.Source.ModuleId, item.Status, item.Reason,
             item.Revision is null ? null : DocumentUrl(item.Source.Id, item.Revision),
-            item.Revision is null ? null : DocumentUrl(item.Source.Id, item.Revision) + "/assets/original", item.Warnings)).ToArray();
+            item.Revision is null ? null : DocumentUrl(item.Source.Id, item.Revision) + "/assets/original", item.Warnings) { CapturedSourceHash = item.Status == "ready" ? item.Source.AcquisitionHash() : null }).ToArray();
         var coverage = new MaterialCoverage(entries.Length, entries.Count(item => item.Status == "ready"), entries.Count(item => item.Status is "failed" or "cancelled"),
             entries.Count(item => item.Status == "unsupported"), entries.Count(item => item.Status is "pending" or "downloading" or "extracting"), state.Status == "ready");
         return new(state.CourseId, state.SnapshotId, state.Status, coverage, entries, state.Job, state.UpdatedAt);

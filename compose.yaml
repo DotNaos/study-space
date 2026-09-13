@@ -61,6 +61,8 @@ services:
     environment:
       STUDY_ROLE: mcp
       STUDY_MCP_UPSTREAM_URL: http://app:8080
+      STUDY_MCP_ALLOW_FEEDBACK_WRITES: ${STUDY_MCP_ALLOW_FEEDBACK_WRITES:-false}
+      STUDY_MCP_ALLOW_PIPELINE_WRITES: ${STUDY_MCP_ALLOW_PIPELINE_WRITES:-false}
     networks: [default]
     depends_on:
       app:

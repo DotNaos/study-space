@@ -13,8 +13,19 @@ import { useLearningCourse, type LearningTarget } from "./learning-api";
 import { useMaterialSnapshot } from "./material-api";
 import { MaterialPreparation } from "./MaterialPreparation";
 import type { SourceSelection } from "./SourceViewer";
-const ContentGraphView = lazy(() => import("./ContentGraphView").then((module) => ({ default: module.ContentGraphView })));
-const CourseArtworkEditor = lazy(() => import("./CourseArtworkEditor").then((module) => ({ default: module.CourseArtworkEditor })));
+const PipelineView = lazy(() =>
+  import("./PipelineView").then((module) => ({ default: module.PipelineView })),
+);
+const ContentGraphView = lazy(() =>
+  import("./ContentGraphView").then((module) => ({
+    default: module.ContentGraphView,
+  })),
+);
+const CourseArtworkEditor = lazy(() =>
+  import("./CourseArtworkEditor").then((module) => ({
+    default: module.CourseArtworkEditor,
+  })),
+);
 const LearningPanel = lazy(() =>
   import("./LearningPanel").then((module) => ({
     default: module.LearningPanel,
@@ -47,46 +58,87 @@ export function CourseDetail({
   const [preview, setPreview] = useState<ResourcePreview>();
   const [source, setSource] = useState<SourceSelection>();
   const [learningTarget, setLearningTarget] = useState<LearningTarget>();
-  const [tab, setTab] = useState<"materials" | "learning" | "graph">(() => typeof window !== "undefined" && window.location.hash.startsWith("#graph") ? "graph" : "materials");
+  const [tab, setTab] = useState<
+    "materials" | "learning" | "graph" | "pipeline"
+  >(() =>
+    typeof window !== "undefined" && window.location.hash.startsWith("#prepare")
+      ? "pipeline"
+      : typeof window !== "undefined" &&
+          window.location.hash.startsWith("#graph")
+        ? "graph"
+        : "materials",
+  );
   const [tabChosen, setTabChosen] = useState(
     () =>
       typeof window !== "undefined" &&
-      (window.location.hash.startsWith("#section-") || window.location.hash.startsWith("#graph")),
+      (window.location.hash.startsWith("#section-") ||
+        window.location.hash.startsWith("#graph") ||
+        window.location.hash.startsWith("#prepare")),
   );
   const learning = useLearningCourse(course.id);
   const materials = useMaterialSnapshot(course.id);
   useEffect(() => {
     if (!tabChosen && !learning.loading)
-      setTab(learning.state?.activeVersion || learning.state?.job ? "learning" : "materials");
-  }, [learning.loading, learning.state?.activeVersionId, learning.state?.job?.id, tabChosen]);
+      setTab(
+        learning.state?.activeVersion || learning.state?.job
+          ? "learning"
+          : "materials",
+      );
+  }, [
+    learning.loading,
+    learning.state?.activeVersionId,
+    learning.state?.job?.id,
+    tabChosen,
+  ]);
   useEffect(() => {
     const followGraph = () => {
-      if (window.location.hash.startsWith("#graph")) { setTab("graph"); setTabChosen(true); }
+      if (window.location.hash.startsWith("#graph")) {
+        setTab("graph");
+        setTabChosen(true);
+      }
+      if (window.location.hash.startsWith("#prepare")) {
+        setTab("pipeline");
+        setTabChosen(true);
+      }
     };
     window.addEventListener("hashchange", followGraph);
     return () => window.removeEventListener("hashchange", followGraph);
   }, []);
-  function chooseTab(next: "materials" | "learning" | "graph") {
-    setTab(next); setTabChosen(true); setLearningTarget(undefined);
-    if (next === "graph" || window.location.hash.startsWith("#graph"))
-      window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}${next === "graph" ? "#graph" : ""}`);
+  function chooseTab(next: "materials" | "learning" | "graph" | "pipeline") {
+    setTab(next);
+    setTabChosen(true);
+    setLearningTarget(undefined);
+    if (
+      next === "graph" ||
+      next === "pipeline" ||
+      window.location.hash.startsWith("#graph") ||
+      window.location.hash.startsWith("#prepare")
+    )
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}${next === "graph" ? "#graph" : next === "pipeline" ? "#prepare" : ""}`,
+      );
   }
   const semester = courseSemester(course);
   const subtitle = courseSubtitle(course);
-  const load = useCallback(async (preserve = false) => {
-    setError("");
-    if (!preserve) setSections(undefined);
-    if (!moodleConnected) return;
-    try {
-      setSections(
-        await api<CourseSection[]>(
-          `/api/providers/moodle/courses/${course.id}/contents`,
-        ),
-      );
-    } catch (error) {
-      setError(message(error));
-    }
-  }, [course.id, moodleConnected]);
+  const load = useCallback(
+    async (preserve = false) => {
+      setError("");
+      if (!preserve) setSections(undefined);
+      if (!moodleConnected) return;
+      try {
+        setSections(
+          await api<CourseSection[]>(
+            `/api/providers/moodle/courses/${course.id}/contents`,
+          ),
+        );
+      } catch (error) {
+        setError(message(error));
+      }
+    },
+    [course.id, moodleConnected],
+  );
   useEffect(() => {
     void load();
   }, [load]);
@@ -107,7 +159,12 @@ export function CourseDetail({
   const sectionName = (section: CourseSection, index: number) =>
     cleanCourseText(section.name) || `Abschnitt ${index + 1}`;
   return (
-    <div data-learning-course className={tab === "graph" ? "min-w-0" : "max-w-5xl"}>
+    <div
+      data-learning-course
+      className={
+        tab === "graph" || tab === "pipeline" ? "min-w-0" : "max-w-5xl"
+      }
+    >
       <AppLink
         navigate={navigate}
         href="/courses"
@@ -132,20 +189,39 @@ export function CourseDetail({
             </p>
           )}
         </div>
-        <button type="button" onClick={() => setArtworkOpen(true)} disabled={!moodleConnected || !onCourseChanged}
-          aria-label="Kursbild ändern" title="Kursbild ändern"
-          className="group relative mt-1 shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default sm:mt-0">
-          <CourseArtwork course={course} eager className="size-14 sm:h-20 sm:w-28" />
-          {moodleConnected && onCourseChanged && <span className="absolute bottom-0 right-0 rounded-tl-md rounded-br-lg bg-bg-0/90 p-1.5 text-text-muted"><ImagePlus size={14} aria-hidden="true" /></span>}
+        <button
+          type="button"
+          onClick={() => setArtworkOpen(true)}
+          disabled={!moodleConnected || !onCourseChanged}
+          aria-label="Kursbild ändern"
+          title="Kursbild ändern"
+          className="group relative mt-1 shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default sm:mt-0"
+        >
+          <CourseArtwork
+            course={course}
+            eager
+            className="size-14 sm:h-20 sm:w-28"
+          />
+          {moodleConnected && onCourseChanged && (
+            <span className="absolute bottom-0 right-0 rounded-tl-md rounded-br-lg bg-bg-0/90 p-1.5 text-text-muted">
+              <ImagePlus size={14} aria-hidden="true" />
+            </span>
+          )}
         </button>
       </header>
-      {artworkOpen && onCourseChanged && <Suspense fallback={<Loading label="Bildeditor wird geöffnet …" />}>
-        <CourseArtworkEditor course={course} onChanged={onCourseChanged} onClose={() => setArtworkOpen(false)} />
-      </Suspense>}
+      {artworkOpen && onCourseChanged && (
+        <Suspense fallback={<Loading label="Bildeditor wird geöffnet …" />}>
+          <CourseArtworkEditor
+            course={course}
+            onChanged={onCourseChanged}
+            onClose={() => setArtworkOpen(false)}
+          />
+        </Suspense>
+      )}
       <div
         role="group"
         aria-label="Kursansicht"
-        className="mt-4 flex items-center gap-1 border-b border-border pb-3"
+        className="mt-4 flex flex-wrap items-center gap-1 border-b border-border pb-3"
       >
         <Button
           size="sm"
@@ -167,18 +243,66 @@ export function CourseDetail({
             chooseTab("materials");
           }}
         />
-        <Button size="sm" variant="ghost" icon="git-branch" label="Graph" pressed={tab === "graph"} onPress={() => chooseTab("graph")} />
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="list-filter"
+          label="Aufbereitung"
+          pressed={tab === "pipeline"}
+          onPress={() => chooseTab("pipeline")}
+        />
+        <Button
+          size="sm"
+          variant="ghost"
+          icon="git-branch"
+          label="Graph"
+          pressed={tab === "graph"}
+          onPress={() => chooseTab("graph")}
+        />
       </div>
       {!tabChosen && learning.loading ? (
         <div className="py-6">
           <Loading label="Kurs wird geöffnet …" />
         </div>
+      ) : tab === "pipeline" ? (
+        <Suspense fallback={<Loading label="Aufbereitung wird geöffnet …" />}>
+          <PipelineView
+            courseId={course.id}
+            version={learning.state?.activeVersion}
+            onSource={setSource}
+            onOpenLearning={(target) => {
+              chooseTab("learning");
+              setLearningTarget(target);
+            }}
+          />
+        </Suspense>
       ) : tab === "graph" ? (
-        <Suspense fallback={<div className="py-6"><Loading label="Graph wird geöffnet …" /></div>}>
-          <ContentGraphView learning={learning} materials={materials} sections={sections} onSource={setSource}
-            sectionsError={error} sectionsLoading={moodleConnected && !sections && !error} moodleConnected={moodleConnected} onRefresh={() => void load(true)}
-            onOpenLearning={(target) => { chooseTab("learning"); setLearningTarget(target); }}
-            onOpenActivity={(moduleId, resourceId) => navigate(`/courses/${course.id}/activities/${moduleId}${resourceId ? `?resource=${encodeURIComponent(resourceId)}` : ""}`)} />
+        <Suspense
+          fallback={
+            <div className="py-6">
+              <Loading label="Graph wird geöffnet …" />
+            </div>
+          }
+        >
+          <ContentGraphView
+            learning={learning}
+            materials={materials}
+            sections={sections}
+            onSource={setSource}
+            sectionsError={error}
+            sectionsLoading={moodleConnected && !sections && !error}
+            moodleConnected={moodleConnected}
+            onRefresh={() => void load(true)}
+            onOpenLearning={(target) => {
+              chooseTab("learning");
+              setLearningTarget(target);
+            }}
+            onOpenActivity={(moduleId, resourceId) =>
+              navigate(
+                `/courses/${course.id}/activities/${moduleId}${resourceId ? `?resource=${encodeURIComponent(resourceId)}` : ""}`,
+              )
+            }
+          />
         </Suspense>
       ) : tab === "learning" ? (
         <Suspense

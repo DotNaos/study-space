@@ -1,5 +1,7 @@
 # Study MCP
 
+The [reviewed workflow](reviewed-pipeline.md#agent-access) adds read-only `study_pipeline` / `study_attempts` and separately opt-in source-review and feedback tools. Existing read tools and file transport remain unchanged.
+
 Study Space exposes a dedicated read-only MCP server for assistants that need the canonical course and learning context without using the in-app Codex runtime.
 
 ## Runtime

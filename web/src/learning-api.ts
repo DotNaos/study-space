@@ -2,7 +2,11 @@ import { useCallback, useEffect, useState } from "react";
 import type { ScriptProvenance } from "./script-provenance";
 import { api, message } from "./api";
 
-export type LearningTarget = { kind: "chapter" | "exercise"; id: string; mode?: "comparison" };
+export type LearningTarget = {
+  kind: "chapter" | "exercise";
+  id: string;
+  mode?: "comparison";
+};
 
 export type SourceRef = {
   materialId: string;
@@ -21,6 +25,8 @@ export type LearningSection = {
   markdown: string;
   sources: SourceRef[];
   provenance?: ScriptProvenance | null;
+  format?: "markdown" | "mdx";
+  unitId?: string | null;
 };
 export type LearningExercise = {
   id: string;
@@ -29,6 +35,10 @@ export type LearningExercise = {
   hint: string;
   solution: string;
   origin: "generated" | "source";
+  solutionOrigin?: string;
+  derivation?: string;
+  unitIds?: string[] | null;
+  solutionSources?: SourceRef[] | null;
   sources: SourceRef[];
 };
 export type LearningVersion = {
@@ -41,6 +51,26 @@ export type LearningVersion = {
   sections: LearningSection[];
   exercises: LearningExercise[];
   sources: LearningSource[];
+  parentVersionId?: string | null;
+  edit?: {
+    parentVersionId: string;
+    sectionId: string;
+    actor: string;
+    reason: string;
+    at: string;
+  } | null;
+  planRevision?: number | null;
+  pendingSolutions?:
+    | {
+        id: string;
+        materialId: string;
+        relatedSourceId: string;
+        title: string;
+        text: string;
+        sources: SourceRef[];
+      }[]
+    | null;
+  taskAliases?: Record<string, string> | null;
 };
 export type VersionSummary = Pick<
   LearningVersion,

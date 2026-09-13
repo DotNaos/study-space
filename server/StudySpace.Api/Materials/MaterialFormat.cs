@@ -1,11 +1,12 @@
 using System.Text;
+using System.Text.Json;
 using StudySpace.Api.Infrastructure;
 namespace StudySpace.Api.Materials;
 
 public static class MaterialFormat
 {
     public const int MaximumBytes = 32 * 1024 * 1024;
-    public const string Profile = "local-structured-v1";
+    public const string Profile = "local-structured-notebook-v2";
     public static string Detect(byte[] bytes, string name, string? declared)
     {
         if (bytes.AsSpan().StartsWith("%PDF-"u8)) return "application/pdf";
@@ -20,6 +21,20 @@ public static class MaterialFormat
             ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             _ => "application/zip"
         };
+        if (extension == ".ipynb")
+        {
+            try
+            {
+                using var notebook = JsonDocument.Parse(bytes);
+                if (notebook.RootElement.ValueKind == JsonValueKind.Object && notebook.RootElement.TryGetProperty("cells", out var cells) && cells.ValueKind == JsonValueKind.Array)
+                    return "application/x-ipynb+json";
+            }
+            catch (JsonException) { }
+            var prefix = Encoding.UTF8.GetString(bytes.AsSpan(0, Math.Min(bytes.Length, 512))).TrimStart();
+            return prefix.StartsWith("<!doctype html", StringComparison.OrdinalIgnoreCase) || prefix.StartsWith("<html", StringComparison.OrdinalIgnoreCase) ? "text/html" : "application/octet-stream";
+        }
+        if (extension == ".py") { Text(bytes); return "text/x-python"; }
+        if (extension is ".csv" or ".ttl" or ".json") { Text(bytes); return "text/plain"; }
         if (extension is ".html" or ".htm" || declared?.Split(';')[0] == "text/html") return "text/html";
         if (extension is ".txt" or ".md" || declared?.Split(';')[0] == "text/plain") return "text/plain";
         return "application/octet-stream";

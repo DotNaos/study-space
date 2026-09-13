@@ -5,9 +5,11 @@ Documentation belongs to this repository. Distinguish accepted target behavior f
 ## Accepted design
 
 - [Reviewed course-content pipeline](content-pipeline.md): source inventory versus learning structure, deterministic evidence, human/agent review, MDX script, separate tasks, precise mapping, drill-down, and update safety. Includes the implementation boundary and sequence.
-- [Cross-course acceptance cases](content-pipeline-cases.md): eight observed course patterns expressed as specifications for synthetic regression fixtures. These are not yet an executable test suite.
+- [Cross-course acceptance cases](content-pipeline-cases.md): eight observed course patterns expressed as specifications for synthetic regression fixtures. Representative cases now have synthetic service/API/UI regressions; the case catalogue remains broader than those executable tests.
 
 ## Implemented contracts
+
+- [Reviewed pipeline workflow](reviewed-pipeline.md): source-level review/drill-down, generation routing, restricted MDX editing, task reconciliation, submissions and scoped agent feedback.
 
 - [Implementation contract](implementation-contract.md): installation, runtime, and API boundaries.
 - [Learning contract](learning-contract.md): existing materials, generation, versions, answer drafts, and Codex integration.

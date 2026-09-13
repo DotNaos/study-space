@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { Button, Checkbox, Select } from "@dotnaos/ui-base";
 import { ChevronDown } from "lucide-react";
 import { api, message } from "./api";
+import { readPipeline } from "./pipeline-api";
 import {
   learningPath,
   runningJob,
@@ -14,6 +15,7 @@ import type { MaterialState } from "./material-api";
 import { useCodexConnection } from "./codex-api";
 import { CodexConnectionControl } from "./CodexConnection";
 import { MaterialPreparation } from "./MaterialPreparation";
+import { TaskReconciliation } from "./TaskReconciliation";
 import { LearningArtifact } from "./LearningArtifact";
 import type { SourceSelection } from "./SourceViewer";
 import { Loading, Notice } from "./shared";
@@ -38,6 +40,7 @@ export function LearningPanel({
 }) {
   const codex = useCodexConnection();
   const [allowPartial, setAllowPartial] = useState(false);
+  const [extraExercises, setExtraExercises] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [previewVersion, setPreviewVersion] = useState<LearningVersion>();
@@ -51,13 +54,13 @@ export function LearningPanel({
     !!materials.snapshot?.snapshotId &&
     !!coverage?.ready &&
     !runningJob(materials.snapshot?.job) &&
-    (coverage.complete || allowPartial) &&
     codex.connection?.status === "connected";
   async function generate() {
     if (!canGenerate || !materials.snapshot?.snapshotId) return;
     setBusy(true);
     setError("");
     try {
+      const plan = await readPipeline(courseId);
       learning.setState(
         await api<LearningState>(`${learningPath(courseId)}/generate`, {
           method: "POST",
@@ -65,6 +68,8 @@ export function LearningPanel({
             snapshotId: materials.snapshot.snapshotId,
             allowPartial,
             consentToCodex: true,
+            planRevision: plan.revision,
+            extraExercises,
           }),
         }),
       );
@@ -118,7 +123,11 @@ export function LearningPanel({
       learning.setState(
         await api<LearningState>(`${learningPath(courseId)}/activate`, {
           method: "POST",
-          body: JSON.stringify({ versionId: previewVersion.id }),
+          body: JSON.stringify({
+            versionId: previewVersion.id,
+            expectedActiveVersionId: state?.activeVersionId ?? null,
+            checkRevision: true,
+          }),
         }),
       );
       setPreviewVersion(undefined);
@@ -130,6 +139,19 @@ export function LearningPanel({
   }
   return (
     <div className="min-w-0">
+      {version && (
+        <TaskReconciliation
+          key={version.id}
+          courseId={courseId}
+          version={version}
+          activeVersionId={state?.activeVersionId ?? null}
+          onSource={onSource}
+          onCandidate={(next) => {
+            setPreviewVersion(next);
+            void learning.refresh();
+          }}
+        />
+      )}
       <details
         open={
           !version || generating || !!error || !!learning.error || undefined
@@ -181,18 +203,32 @@ export function LearningPanel({
             </>
           ) : (
             <>
-              {!coverage?.complete && !!coverage?.ready && (
+              {!!coverage?.ready && (
                 <Checkbox
                   checked={allowPartial}
                   onCheckedChange={setAllowPartial}
-                  label={`Lernbereich aus den ${coverage.ready} erfassten Materialien erstellen`}
+                  label="Bestätigte Quellen trotz offener Einordnungen verarbeiten"
                   description="Fehlende Inhalte bleiben ausdrücklich gekennzeichnet."
                 />
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                label="Quellen und Gliederung prüfen"
+                onPress={() => {
+                  window.location.hash = "prepare";
+                }}
+              />
+              <Checkbox
+                checked={extraExercises}
+                onCheckedChange={setExtraExercises}
+                label="Zusätzliche KI-Übungen erstellen"
+                description="Ohne Auswahl werden nur vorhandene Aufgaben übernommen."
+              />
               <p className="max-w-2xl text-xs leading-5 text-text-muted">
-                Beim Erstellen werden die erfassten Texte und Quellenbilder über dein
-                verbundenes Codex-Konto an OpenAI übermittelt. Daraus entstehen
-                ein Lernskript und passende Übungen mit Quellen.
+                Beim Erstellen werden die erfassten Texte und Quellenbilder über
+                dein verbundenes Codex-Konto an OpenAI übermittelt. Daraus
+                entstehen ein Lernskript und passende Übungen mit Quellen.
               </p>
               <Button
                 variant={version ? "secondary" : "primary"}
@@ -312,6 +348,11 @@ export function LearningPanel({
             </details>
           )}
           <LearningArtifact
+            activeVersionId={state?.activeVersionId ?? null}
+            onCandidate={(next) => {
+              setPreviewVersion(next);
+              void learning.refresh();
+            }}
             key={version.id}
             initialTarget={initialTarget}
             courseId={courseId}

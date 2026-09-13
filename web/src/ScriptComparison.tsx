@@ -38,9 +38,11 @@ export function comparisonLocation(hash: string) {
 export function ScriptComparison({
   version,
   initialSectionId,
+  onTask,
 }: {
   version: LearningVersion;
   initialSectionId?: string | null;
+  onTask?: (id: string) => void;
 }) {
   const initial =
     typeof window === "undefined"
@@ -471,6 +473,7 @@ export function ScriptComparison({
               </p>
             )}
             <SafeMarkdown
+              mdx={chapter.format === "mdx" ? { version, onTask } : undefined}
               provenance={{
                 markdown: chapter.markdown,
                 ranges,

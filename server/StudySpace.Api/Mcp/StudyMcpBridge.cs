@@ -21,7 +21,7 @@ public static class StudyMcpBridge
         {
             BaseAddress = upstream,
             Timeout = TimeSpan.FromSeconds(30),
-        }));
+        }, Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_FEEDBACK_WRITES") == "true", Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_PIPELINE_WRITES") == "true"));
         var app = builder.Build();
         app.Use(async (context, next) =>
         {
@@ -70,7 +70,7 @@ public static class StudyMcpBridge
                     result = new { };
                     break;
                 case "tools/list":
-                    result = new { tools = StudyMcpTools.ToolDefinitions };
+                    result = new { tools = tools.Definitions };
                     break;
                 case "tools/call":
                     try
@@ -127,7 +127,7 @@ public static class StudyMcpBridge
         IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
 }
 
-public sealed class StudyMcpTools(HttpClient client)
+public sealed partial class StudyMcpTools(HttpClient client, bool allowFeedbackWrites = false, bool allowPipelineWrites = false)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const int DefaultItems = 20;
@@ -261,6 +261,11 @@ public sealed class StudyMcpTools(HttpClient client)
         if (name == "study_file") return await File(arguments, ct);
         object value = name switch
         {
+            "study_pipeline" => await PipelineRead(arguments, ct),
+            "study_attempts" => await AttemptsRead(arguments, ct),
+            "study_feedback" => await FeedbackWrite(arguments, ct),
+            "study_pipeline_decide" => await PipelineWrite(arguments, false, ct),
+            "study_pipeline_structure" => await PipelineWrite(arguments, true, ct),
             "study_status" => await Status(ct),
             "study_courses" => await Courses(arguments, ct),
             "study_course" => await Course(arguments, ct),

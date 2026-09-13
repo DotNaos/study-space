@@ -160,20 +160,18 @@ Respect authenticated access, source restrictions, and privacy. Viewing a link d
 
 ## Implementation status
 
-As reviewed at the baseline commit above:
+The initial reviewed workflow is implemented as described in [Reviewed source preparation and learning workflow](reviewed-pipeline.md). It is additive to the baseline and does not automatically migrate or regenerate existing courses.
 
-| Area | Existing foundation | Remaining target work |
+| Area | Implemented now | Remaining target work |
 | --- | --- | --- |
-| Inventory/extraction | Durable source revisions, structured blocks/assets, processing outcomes, original viewing. | Complete summary/activity coverage and source-type-specific acquisition where missing; reviewed source-use decisions. |
-| Graph | Whole-course React Flow view with section clusters and list nodes; saved provenance and live source inventory. | Hierarchy-first source/learning reconciliation and persistent review actions. |
-| Source comparison | Pinned originals, optional exact text provenance, reverse lookup, unknown/legacy/stale states, responsive comparison. | Source-level planning before fine-grained comparison; reviewed decisions and explicit legacy backfill. |
-| Script | Immutable learning versions containing Markdown sections. | Restricted MDX authoring, stable reviewed learning units, durable editing and incremental reconciliation. |
-| Tasks | Saved exercises, answer drafts, optional hints/solutions and chat. | Cross-source reconciliation, separate definition/solution/attempt/feedback records, scoped feedback writes. |
-| Generation | Resumable bounded source chunks and validated citations. | Remove mandatory task generation per chunk; do not derive visible chapters from chunks; preserve confirmed chronology. |
+| Inventory/extraction | Live source inventory, inline summaries/descriptions, nested/empty groups, unsupported embedded inputs, captured-metadata freshness and persistent source-use review. | Acquisition for further external/activity/archive types; large-source processing beyond current limits. |
+| Hierarchy and graph | Source-first Aufbereitung drill-down with responsive source/learning panes, unit editor, per-source roles/ranges, review reasons/history/CAS; existing graph and comparator retained. | Richer internal chapter proposals and graph visualization of the reviewed plan. |
+| Source comparison | Existing pinned originals/exact spans, shared provenance and links from preparation to current output. | Explicit legacy attribution backfill and richer range-level omission decisions. |
+| Script | Restricted inert MDX with Figure/TaskRef, reviewed unit order, source editing/preview/export and immutable candidates. | Automatic figure insertion, finer task-reference placement, incremental reconciliation of independently edited content. |
+| Tasks | Explicit duplicate/solution reconciliation, aliases, version-bound draft/submitted attempts, append-only human/agent feedback and consented Codex review. | General task-definition editing and richer task asset-bundle authoring. |
+| Generation | No mandatory task per chunk, reviewed input routing, zero-task results, source-specific gaps, explicit partial runs and candidate activation. | Full semantic completeness checks and incremental content rebase; structural validation alone does not provide these. |
 
-Current [LearningChunks](../server/StudySpace.Api/Learning/LearningChunks.cs) still requires at least one exercise per chunk. [LearningWorker](../server/StudySpace.Api/Learning/LearningWorker.cs) deduplicates exercises by generated ID, not semantic task identity. These are known gaps against the accepted design, not behavior endorsed by this document.
-
-The current API remains documented in [learning-contract.md](learning-contract.md), the existing graph in [content-graph.md](content-graph.md), and the exact mapping implementation in [source-comparison.md](source-comparison.md). No automatic regeneration, migration, or release is implied by accepting this design.
+The [runtime extension](reviewed-pipeline.md) documents request fields, safe MDX syntax and separately opt-in MCP writes. Existing scripts/drafts are left intact. All heuristic source-use proposals still require an explicit decision; enabling the workflow is not approving any real course structure.
 
 ## Implementation sequence and acceptance
 

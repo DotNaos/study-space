@@ -18,8 +18,10 @@ public sealed class MaterialExtractor(MaterialStore store, MaterialToolRunner to
                 "image/png" or "image/jpeg" or "image/gif" or "image/webp" => await new MaterialPdfExtractor(tools).Image(input, directory, timeout.Token),
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation" => MaterialOfficeExtractor.Presentation(input.Bytes),
                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document" => MaterialOfficeExtractor.Document(input.Bytes),
+                "application/x-ipynb+json" => MaterialNotebookExtractor.Extract(input.Bytes),
                 "text/html" => MaterialHtmlExtractor.Extract(MaterialFormat.Text(input.Bytes)),
                 "text/plain" => Plain(input.Bytes),
+                "text/x-python" => new MaterialExtraction([new("code-00001", "code", MaterialFormat.Text(input.Bytes), 0, null, null, null)], [], [new("code-text", "1", 0, MaterialStore.Hash(input.Bytes))], [], true),
                 _ => throw new ApiFailure("material_unsupported", "This file format does not yet have a local extraction adapter. Its original copy is preserved; open it in Moodle for now.", 415)
             };
             timeout.Token.ThrowIfCancellationRequested();

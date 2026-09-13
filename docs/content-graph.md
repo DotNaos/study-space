@@ -1,6 +1,6 @@
 # Course-wide provenance graph (#63)
 
-For the accepted hierarchy-first source/learning reconciliation and review workflow, see [Reviewed course-content pipeline](content-pipeline.md). This page describes the currently implemented graph, not that full target.
+For the accepted hierarchy-first source/learning reconciliation and review workflow, see [Reviewed course-content pipeline](content-pipeline.md). The initial review workflow is implemented separately as [Aufbereitung](reviewed-pipeline.md); this page describes the retained whole-course graph.
 
 The Graph tab shows the **entire course**, not a selected source's neighbourhood. The raw graph keeps every Moodle entry, saved source revision, chapter and exercise. Its presentation groups related entries into larger React Flow nodes with scrollable lists. Search and selection move the camera and reveal a row; they never remove other entries. There is no item pagination, automatic first-PDF selection, or coverage percentage.
 

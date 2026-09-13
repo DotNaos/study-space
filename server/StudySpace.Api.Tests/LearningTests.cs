@@ -56,13 +56,13 @@ public sealed class LearningTests : IDisposable
         Assert.Equal("generated", result.Exercises[0].Origin);
     }
 
-    [Fact] public void EmptyExerciseOutputIsRejectedBeforeItCanPoisonResumeCache()
+    [Fact] public void TeachingSourceCanLegitimatelyProduceNoExercises()
     {
         var chunk = LearningChunks.Build([(Catalog.Input, Catalog.Document)])[0];
         var value = JsonSerializer.Serialize(new { title = "Cells", sections = new[] {
             new { title = "Membrane", markdown = "A membrane bounds a cell.", sources = new[] { 1 } }
         }, exercises = Array.Empty<object>() }, LearningStore.Json);
-        Assert.Throws<ApiFailure>(() => LearningChunks.Validate(value, chunk));
+        Assert.Empty(LearningChunks.Validate(value, chunk).Exercises);
     }
 
     [Fact] public async Task SourceImagesReachTheModelBeforeVersionPublication()

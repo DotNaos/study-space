@@ -1,0 +1,222 @@
+.pipeline-view {
+  min-width: 0;
+  padding-top: 1rem;
+}
+.pipeline-view h2 {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+.pipeline-view h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 1rem 0 0.5rem;
+}
+.pipeline-muted {
+  font-size: 0.75rem;
+  line-height: 1.7;
+  color: var(--color-text-muted);
+  margin: 0.75rem 0;
+}
+.pipeline-toolbar,
+.pipeline-breadcrumb,
+.pipeline-inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.pipeline-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.75rem;
+  margin-bottom: 1rem;
+}
+.pipeline-breadcrumb {
+  min-width: 0;
+  flex: 1;
+}
+.pipeline-breadcrumb > span {
+  font-size: 0.8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pipeline-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 2rem;
+}
+.pipeline-source-pane,
+.pipeline-output-pane {
+  min-width: 0;
+}
+.pipeline-output-pane {
+  border-left: 1px solid var(--color-border);
+  padding-left: 2rem;
+}
+.pipeline-list {
+  list-style: none;
+  margin: 1rem 0;
+  padding: 0;
+}
+.pipeline-list > li {
+  border-bottom: 1px solid var(--color-border);
+}
+.pipeline-row {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: left;
+  padding: 1rem 0.25rem;
+  cursor: pointer;
+  color: inherit;
+  background: none;
+  border: 0;
+  min-height: 3.25rem;
+}
+.pipeline-row:hover {
+  background: var(--color-bg-1);
+}
+.pipeline-row:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+.pipeline-row > span {
+  min-width: 0;
+  flex: 1;
+}
+.pipeline-row strong {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.pipeline-row small {
+  display: block;
+  font-size: 0.7rem;
+  line-height: 1.6;
+  color: var(--color-text-muted);
+  margin-top: 0.3rem;
+}
+.pipeline-row svg {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+}
+.pipeline-review {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.pipeline-review h3 {
+  margin-top: 0;
+}
+.pipeline-use {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.pipeline-range-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+.pipeline-view summary {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  line-height: 1.75;
+}
+.pipeline-existing {
+  margin-top: 1.5rem;
+  border-top: 1px solid var(--color-border);
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+}
+.pipeline-source-text {
+  margin-top: 1.25rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--color-border);
+}
+.pipeline-original-link {
+  display: inline-block;
+  font-size: 0.8rem;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  padding: 0.5rem 0;
+  color: var(--color-accent);
+}
+.pipeline-history {
+  border-top: 1px solid var(--color-border);
+  margin-top: 2rem;
+  padding-top: 1rem;
+}
+.pipeline-history ol {
+  list-style: none;
+  padding: 0;
+}
+.pipeline-history li {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.75rem 0;
+  font-size: 0.75rem;
+  border-bottom: 1px solid var(--color-border);
+}
+.pipeline-history small {
+  color: var(--color-text-muted);
+}
+.pipeline-unit-editor {
+  list-style: none;
+  padding: 0;
+}
+.pipeline-unit-editor li {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+.pipeline-structure {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  max-width: 60rem;
+}
+.pipeline-mobile-switch {
+  display: none;
+}
+@media (max-width: 850px) {
+  .pipeline-split {
+    display: block;
+  }
+  .pipeline-output-pane {
+    border: 0;
+    padding: 0;
+  }
+  .pipeline-mobile-switch {
+    display: flex;
+    gap: 0.25rem;
+    margin-bottom: 1rem;
+  }
+  .pipeline-split[data-pane="source"] .pipeline-output-pane,
+  .pipeline-split[data-pane="output"] .pipeline-source-pane {
+    display: none;
+  }
+  .pipeline-unit-editor li {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .pipeline-unit-editor li > div:nth-child(2) {
+    grid-row: 2;
+    grid-column: 1/-1;
+  }
+  .pipeline-breadcrumb > span {
+    max-width: 45vw;
+  }
+}

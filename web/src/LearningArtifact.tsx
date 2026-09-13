@@ -10,24 +10,32 @@ import {
 } from "./learning-api";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { SourceChips, type SourceSelection } from "./SourceViewer";
-import { ExerciseAnswer } from "./ExerciseAnswer";
+import { TaskAnswer } from "./TaskAnswer";
+import { SectionEditor } from "./SectionEditor";
 import { ChapterNavigation } from "./ChapterNavigation";
 import { useCurrentChapter } from "./useCurrentChapter";
 import { Loading, Notice } from "./shared";
 
-const ScriptComparison = lazy(() => import("./ScriptComparison").then(module => ({ default: module.ScriptComparison })));
+const ScriptComparison = lazy(() =>
+  import("./ScriptComparison").then((module) => ({
+    default: module.ScriptComparison,
+  })),
+);
 
 export function LearningArtifact({
   courseId,
   version,
   drafts,
   readingSectionId,
-  onDraft,
   onPosition,
   onSource,
   initialTarget,
+  onCandidate,
+  activeVersionId,
 }: {
   courseId: number;
+  onCandidate?: (version: LearningVersion) => void;
+  activeVersionId?: string | null;
   initialTarget?: LearningTarget;
   version: LearningVersion;
   drafts: Record<string, string>;
@@ -36,16 +44,34 @@ export function LearningArtifact({
   onPosition: (id: string) => void;
   onSource: (source: SourceSelection) => void;
 }) {
-  const [view, setView] = useState<"script" | "exercises">(initialTarget?.kind === "exercise" ? "exercises" : "script");
-  const [compare, setCompare] = useState(() => initialTarget?.mode === "comparison" || (typeof window !== "undefined" && window.location.hash.startsWith("#compare/")));
-  const [compareSection, setCompareSection] = useState<string | null | undefined>(initialTarget?.id);
+  const [view, setView] = useState<"script" | "exercises">(
+    initialTarget?.kind === "exercise" ? "exercises" : "script",
+  );
+  const [compare, setCompare] = useState(
+    () =>
+      initialTarget?.mode === "comparison" ||
+      (typeof window !== "undefined" &&
+        window.location.hash.startsWith("#compare/")),
+  );
+  const [compareSection, setCompareSection] = useState<
+    string | null | undefined
+  >(initialTarget?.id);
   function setReaderMode(value: boolean) {
     setCompare(value);
     if (value) setCompareSection(currentSectionId || readingSectionId);
-    else if (window.location.hash.startsWith("#compare/")) window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    else if (window.location.hash.startsWith("#compare/"))
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
   }
+  const [editing, setEditing] = useState<string>();
   const [error, setError] = useState("");
-  const { contentRef, currentSectionId } = useCurrentChapter(version.sections, view === "script" && !compare);
+  const { contentRef, currentSectionId } = useCurrentChapter(
+    version.sections,
+    view === "script" && !compare,
+  );
   useEffect(() => {
     if (initialTarget) {
       setView(initialTarget.kind === "chapter" ? "script" : "exercises");
@@ -58,7 +84,10 @@ export function LearningArtifact({
     const wanted = initialTarget.kind === "chapter" ? "script" : "exercises";
     if (view !== wanted || compare) return;
     const frame = requestAnimationFrame(() => {
-      const id = initialTarget.kind === "chapter" ? `learning-heading-${initialTarget.id}` : `exercise-heading-${initialTarget.id}`;
+      const id =
+        initialTarget.kind === "chapter"
+          ? `learning-heading-${initialTarget.id}`
+          : `exercise-heading-${initialTarget.id}`;
       const target = document.getElementById(id);
       target?.focus({ preventScroll: true });
       target?.scrollIntoView({ block: "start", behavior: "instant" });
@@ -127,20 +156,60 @@ export function LearningArtifact({
           <Notice>{error}</Notice>
         </div>
       )}
-      {view === "script" && <div className="flex items-center gap-1 pt-3" role="group" aria-label="Skriptansicht">
-        <Button size="sm" variant="ghost" label="Lesen" pressed={!compare} onPress={() => setReaderMode(false)} />
-        <Button size="sm" variant="ghost" label="Quellenvergleich" pressed={compare} onPress={() => setReaderMode(true)} />
-      </div>}
-      {view === "script" && compare ? <Suspense fallback={<Loading label="Quellenvergleich wird geöffnet …" />}>
-        <ScriptComparison key={`${version.id}:${compareSection || ""}`} version={version} initialSectionId={compareSection} />
-      </Suspense> : view === "script" ? (
-        <div className={`grid min-w-0 items-start gap-6 pt-5 ${version.sections.length > 1 ? "lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-8" : ""}`}>
+      {view === "script" && (
+        <div
+          className="flex items-center gap-1 pt-3"
+          role="group"
+          aria-label="Skriptansicht"
+        >
+          <Button
+            size="sm"
+            variant="ghost"
+            label="Lesen"
+            pressed={!compare}
+            onPress={() => setReaderMode(false)}
+          />
+          <Button
+            size="sm"
+            variant="ghost"
+            label="Quellenvergleich"
+            pressed={compare}
+            onPress={() => setReaderMode(true)}
+          />
+        </div>
+      )}
+      {view === "script" && compare ? (
+        <Suspense
+          fallback={<Loading label="Quellenvergleich wird geöffnet …" />}
+        >
+          <ScriptComparison
+            key={`${version.id}:${compareSection || ""}`}
+            version={version}
+            initialSectionId={compareSection}
+            onTask={(id) => {
+              setReaderMode(false);
+              setView("exercises");
+              requestAnimationFrame(() =>
+                document
+                  .getElementById(`exercise-heading-${id}`)
+                  ?.scrollIntoView({ block: "start" }),
+              );
+            }}
+          />
+        </Suspense>
+      ) : view === "script" ? (
+        <div
+          className={`grid min-w-0 items-start gap-6 pt-5 ${version.sections.length > 1 ? "lg:grid-cols-[minmax(0,1fr)_14rem] lg:gap-8" : ""}`}
+        >
           <ChapterNavigation
             sections={version.sections}
             currentSectionId={currentSectionId}
             onSelect={(id) => void goToSection(id)}
           />
-          <div ref={contentRef} className="min-w-0 space-y-7 sm:space-y-9 lg:col-start-1 lg:row-start-1">
+          <div
+            ref={contentRef}
+            className="min-w-0 space-y-7 sm:space-y-9 lg:col-start-1 lg:row-start-1"
+          >
             {version.sections.map((section, index) => (
               <section
                 key={section.id}
@@ -158,7 +227,50 @@ export function LearningArtifact({
                   </span>
                   <span className="min-w-0 break-words">{section.title}</span>
                 </h3>
-                <SafeMarkdown>{section.markdown}</SafeMarkdown>
+                {editing === section.id ? (
+                  <SectionEditor
+                    courseId={courseId}
+                    version={version}
+                    section={section}
+                    activeVersionId={activeVersionId ?? null}
+                    onCancel={() => setEditing(undefined)}
+                    onSaved={(next) => {
+                      setEditing(undefined);
+                      onCandidate?.(next);
+                    }}
+                  />
+                ) : (
+                  <>
+                    <SafeMarkdown
+                      mdx={
+                        section.format === "mdx"
+                          ? {
+                              version,
+                              onTask: (id) => {
+                                setView("exercises");
+                                requestAnimationFrame(() =>
+                                  document
+                                    .getElementById(`exercise-heading-${id}`)
+                                    ?.scrollIntoView({ block: "start" }),
+                                );
+                              },
+                            }
+                          : undefined
+                      }
+                    >
+                      {section.markdown}
+                    </SafeMarkdown>
+                    {onCandidate && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        icon="pencil-line"
+                        label="Abschnitt bearbeiten"
+                        onPress={() => setEditing(section.id)}
+                      />
+                    )}
+                  </>
+                )}
                 <SourceChips
                   references={section.sources}
                   sources={version.sources}
@@ -171,18 +283,28 @@ export function LearningArtifact({
       ) : (
         <ol className="divide-y divide-border">
           {version.exercises.map((exercise, index) => (
-            <li key={exercise.id} id={`learning-exercise-${exercise.id}`} className="py-6">
+            <li
+              key={exercise.id}
+              id={`learning-exercise-${exercise.id}`}
+              className="py-6"
+            >
               <div className="mb-2 flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-3">
-                <h3 tabIndex={-1} id={`exercise-heading-${exercise.id}`} className="scroll-mt-24 text-base font-medium">
+                <h3
+                  tabIndex={-1}
+                  id={`exercise-heading-${exercise.id}`}
+                  className="scroll-mt-24 text-base font-medium"
+                >
                   <span className="mr-2 text-sm text-text-muted/60">
                     {index + 1}
                   </span>
                   {exercise.title}
                 </h3>
                 <span className="shrink-0 text-xs text-text-muted">
-                  {exercise.origin === "source"
-                    ? "Aus dem Kursmaterial"
-                    : "Erstellte Übung"}
+                  {exercise.derivation === "source-adaptation"
+                    ? "Quellaufgabe · Übertragung ungeprüft"
+                    : exercise.origin === "source"
+                      ? "Aus dem Kursmaterial"
+                      : "Erstellte Übung"}
                 </span>
               </div>
               <SafeMarkdown>{exercise.prompt}</SafeMarkdown>
@@ -191,11 +313,21 @@ export function LearningArtifact({
                 sources={version.sources}
                 onOpen={onSource}
               />
-              <ExerciseAnswer
+              <TaskAnswer
+                key={version.id + exercise.id}
                 courseId={courseId}
+                versionId={version.id}
                 exerciseId={exercise.id}
-                answer={drafts[exercise.id] || ""}
-                onSaved={(answer) => onDraft(exercise.id, answer)}
+                aliasDrafts={Object.entries(version.taskAliases ?? {})
+                  .filter(
+                    ([alias, canonical]) =>
+                      canonical === exercise.id && !!drafts[alias],
+                  )
+                  .map(([id]) => ({ id, answer: drafts[id] }))}
+                aliases={Object.entries(version.taskAliases ?? {})
+                  .filter(([, canonical]) => canonical === exercise.id)
+                  .map(([alias]) => alias)}
+                legacyAnswer={drafts[exercise.id] || ""}
               />
               {!!exercise.hint && (
                 <details className="group mt-4">
@@ -209,7 +341,11 @@ export function LearningArtifact({
               <details className="group mt-4">
                 <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-text-muted">
                   <ChevronDown size={14} className="group-open:rotate-180" />
-                  Lösung anzeigen
+                  {exercise.solutionOrigin === "source"
+                    ? "Zugeordnete Musterlösung anzeigen"
+                    : exercise.solutionOrigin === "agent"
+                      ? "KI-Lösungsvorschlag anzeigen"
+                      : "Gespeicherte Lösung anzeigen"}
                 </summary>
                 <div className="mt-2 border-l-2 border-border pl-4">
                   <SafeMarkdown>{exercise.solution}</SafeMarkdown>

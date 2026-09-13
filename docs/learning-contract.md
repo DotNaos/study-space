@@ -1,6 +1,6 @@
 # First course learning flow (#12, #13, #14, #15)
 
-This milestone adds durable local material processing, Codex connection, and source-linked script/exercises. Full agent editing (#16), nested learning (#1), and Drive backups (#9) remain later stages.
+This page records the original learning API foundation. The [reviewed workflow extension](reviewed-pipeline.md) now adds mandatory source-use review for new app-generated courses, inert MDX editing, task reconciliation, separate submissions/feedback and opt-in MCP writes. Full agent editing (#16), nested learning (#1), incremental content rebase and Drive backups (#9) remain broader follow-ups.
 
 > This page documents the existing learning API. The [accepted content-pipeline design](content-pipeline.md) defines the next-stage source review, MDX authoring, task reconciliation, and feedback workflow; those capabilities are not implied by this contract. See also the implemented [optional text provenance](source-comparison.md) extension.
 
@@ -13,7 +13,7 @@ This milestone adds durable local material processing, Codex connection, and sou
  drafts: {[exerciseId]:string}, readingSectionId:string|null, messages:ChatMessage[]}
 ```
 LearningVersion = `{id,createdAt,snapshotId,title,partial,warnings:string[],sections:LearningSection[],exercises:LearningExercise[],sources:LearningSource[]}`.
-LearningSection = `{id,title,markdown,sources:SourceRef[]}`.
+LearningSection = `{id,title,markdown,sources:SourceRef[],provenance?,format?,unitId?}`. `format` is `markdown` for legacy sections or `mdx` for the restricted learning profile. Other optional version/task fields are defined in the [reviewed workflow](reviewed-pipeline.md).
 LearningExercise = `{id,title,prompt,hint,solution,origin:"generated"|"source",sources:SourceRef[]}`.
 SourceRef = `{materialId,revision,blockId,page:number|null}`; all references validated against imported document blocks, never arbitrary model URLs.
 LearningSource = `{materialId,revision,name}`.
@@ -23,7 +23,7 @@ ChatMessage = `{id,role:"user"|"assistant",content,status:"completed"|"interrupt
 - `POST /api/learning/courses/{courseId}/generate` `{snapshotId,allowPartial:boolean,consentToCodex:true}` returns state (202). The UI states that extracted course text and supported source images are sent to OpenAI through the connected Codex account. Require explicit action after showing coverage; do not auto-start on import/login. Only approved snapshot material is sent, no credential/auth context. No readable material = reject. Incomplete snapshot requires allowPartial true and visible partial label. One job per course, one Codex generation at a time.
 - `POST /api/learning/courses/{courseId}/cancel` `{jobId}` returns state. Cancellation preserves all completed chunks and existing versions.
 - `GET /api/learning/courses/{courseId}/versions/{versionId}` returns a version.
-- `POST /api/learning/courses/{courseId}/activate` `{versionId}` selects a validated immutable version. First successful version becomes active automatically; later generations produce a candidate for explicit activation. Previous versions and answer drafts persist.
+- `POST /api/learning/courses/{courseId}/activate` `{versionId}` selects a validated immutable version. Legacy first versions could become active automatically. Reviewed generations always produce a candidate for explicit activation. Previous versions and answer drafts persist.
 - `PUT /api/learning/courses/{courseId}/drafts/{exerciseId}` `{answer}` returns state. Drafts max 12000 characters, retained across version switches and reload.
 - `PUT /api/learning/courses/{courseId}/position` `{sectionId}` returns state.
 - `POST /api/learning/courses/{courseId}/chat` `{versionId,message,consentToCodex:true}` returns text/event-stream: `event: delta` + `data: {text}`, final `event: completed` + `{message:ChatMessage}`, failure `event: error` + `{message}`. Input max4000 characters; one stream per course, cancel by aborting request. Persist user message and final/interrupted response; reload GET recovers conversation. Chat answers questions but does not edit script/exercises in this milestone. Context limited to selected version and its validated source references; no tools/host access.

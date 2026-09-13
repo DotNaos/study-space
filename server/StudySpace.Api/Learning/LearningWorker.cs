@@ -39,7 +39,7 @@ public sealed class LearningWorker(LearningStore store, LearningService service,
             var documents = new List<(LearningInput, MaterialDocument)>();
             foreach (var input in state.Inputs)
                 documents.Add((input, await materials.GetDocument(input.MaterialId, input.Revision, cancellation.Token)));
-            var chunks = LearningChunks.Build(documents);
+            var chunks = LearningChunks.Build(documents, state.AllowExtraExercises);
             var results = new List<ChunkResult>();
             for (var index = 0; index < chunks.Length; index++)
             {
@@ -73,6 +73,18 @@ public sealed class LearningWorker(LearningStore store, LearningService service,
             }
             await Progress(courseId, jobId, chunks.Length, chunks.Length + 1, cancellation.Token);
             CourseOutline outline;
+            LearningSection[] sections;
+            LearningExercise[] exercises;
+            if (state.InputPlanRevision is not null)
+            {
+                (sections, exercises) = ReviewedGeneration.Assemble(chunks, results);
+                outline = new("Kursskript", "Bestätigte Reihenfolge der Lerneinheiten", chunks.Select(chunk => chunk.Id).Distinct().ToArray());
+                state.Warnings = state.Warnings.Concat(ReviewedGeneration.Warnings(chunks, results)).Distinct().ToArray();
+                state.Partial |= state.Warnings.Length > 0;
+            }
+            else
+            {
+
             using (var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellation.Token))
             {
                 deadline.CancelAfter(TimeSpan.FromMinutes(4));
@@ -83,19 +95,21 @@ public sealed class LearningWorker(LearningStore store, LearningService service,
             var ordered = outline.ChapterOrder.Select(id => results[Array.FindIndex(chunks, chunk => chunk.Id == id)]).ToArray();
             var introduction = new LearningSection(LearningChunks.Hash(jobId + "overview"), "Überblick", outline.Introduction,
                 ordered.SelectMany(result => result.Sections).SelectMany(section => section.Sources).Distinct().Take(12).ToArray());
-            var sections = new[] { introduction }.Concat(ordered.SelectMany(result => result.Sections)).DistinctBy(section => section.Id).ToArray();
-            var exercises = ordered.SelectMany(result => result.Exercises).DistinctBy(exercise => exercise.Id).ToArray();
-            if (exercises.Length == 0) throw new ApiFailure("learning_exercises_missing", "The result contained no exercises. Completed chapters are saved, and your existing version is unchanged.", 502);
+            sections = new[] { introduction }.Concat(ordered.SelectMany(result => result.Sections)).DistinctBy(section => section.Id).ToArray();
+            exercises = ordered.SelectMany(result => result.Exercises).DistinctBy(exercise => exercise.Id).ToArray();
+            }
             var version = new LearningVersion(jobId, DateTimeOffset.UtcNow, state.SnapshotId!,
                 outline.Title, state.Partial || documents.Any(document => !document.Item2.Complete), state.Warnings,
-                sections, exercises, state.Inputs.Select(input => new LearningSource(input.MaterialId, input.Revision, input.Name)).ToArray());
+                sections, exercises, state.Inputs.Select(input => new LearningSource(input.MaterialId, input.Revision, input.Name)).Distinct().ToArray(),
+                ParentVersionId: state.ActiveVersionId, PlanRevision: state.InputPlanRevision, Units: state.InputUnits, UseDecisions: state.InputDecisions, PendingSolutions: state.InputPlanRevision is null ? null : ReviewedGeneration.Solutions(chunks, results),
+                UnmappedSourceRefs: state.InputPlanRevision is null ? null : ReviewedGeneration.Unmapped(chunks, results));
             await store.WithCourse(courseId, async current =>
             {
                 EnsureCurrent(current, jobId);
                 await store.WriteVersion(courseId, version, cancellation.Token);
                 if (!current.Versions.Any(item => item.Id == version.Id))
                     current.Versions.Add(new(version.Id, version.CreatedAt, version.SnapshotId, version.Title, version.Partial, sections.Length, exercises.Length));
-                current.ActiveVersionId ??= version.Id;
+                if (state.InputPlanRevision is null) current.ActiveVersionId ??= version.Id;
                 current.Job = current.Job! with { Status = "completed", Stage = "Learning version ready", CompletedSteps = chunks.Length + 1, TotalSteps = chunks.Length + 1, CandidateVersionId = version.Id };
                 await store.Save(current, cancellation.Token);
                 return true;

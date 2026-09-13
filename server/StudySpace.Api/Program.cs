@@ -11,6 +11,7 @@ using StudySpace.Api.Codex;
 using StudySpace.Api.Learning;
 using StudySpace.Api.Materials;
 using StudySpace.Api.Mcp;
+using StudySpace.Api.Pipeline;
 
 if (args.Contains("--codex-health", StringComparer.Ordinal))
 {
@@ -45,6 +46,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddStudyCodex(config);
 builder.Services.AddStudyMaterials();
 builder.Services.AddStudyLearning();
+builder.Services.AddStudyPipeline();
 builder.Services.AddSingleton<IMoodleTransport, MoodleTransport>();
 builder.Services.AddHttpClient("moodle", client =>
 {
@@ -85,6 +87,12 @@ app.Use(async (context, next) =>
     {
         var artworkUpload = HttpMethods.IsPut(context.Request.Method) &&
             System.Text.RegularExpressions.Regex.IsMatch(context.Request.Path.Value ?? "", @"^/api/providers/moodle/courses/[1-9][0-9]*/artwork$");
+        var sectionEdit = HttpMethods.IsPut(context.Request.Method) &&
+            System.Text.RegularExpressions.Regex.IsMatch(context.Request.Path.Value ?? "", @"^/api/learning/courses/[1-9][0-9]*/sections/[a-f0-9]{32,64}$");
+        if (context.Request.Path.StartsWithSegments("/api/pipeline") && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } planLimit)
+            planLimit.MaxRequestBodySize = 128 * 1024;
+        if (sectionEdit && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } editLimit)
+            editLimit.MaxRequestBodySize = 128 * 1024;
         if (artworkUpload && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodyLimit)
             bodyLimit.MaxRequestBodySize = MoodleCourseImages.MaximumBytes;
         if (context.Request.Path.StartsWithSegments("/api") && !HttpMethods.IsGet(context.Request.Method) && !HttpMethods.IsHead(context.Request.Method))
@@ -117,6 +125,7 @@ app.MapStudyApi();
 app.MapStudyCodex();
 app.MapStudyMaterials();
 app.MapStudyLearning();
+app.MapStudyPipeline();
 app.MapFallback(async context =>
 {
     if (context.Request.Path.StartsWithSegments("/api") || context.Request.Path.StartsWithSegments("/health"))
