@@ -23,6 +23,7 @@ services:
       PGUSER: study
       PGPASSWORD_FILE: /run/secrets/postgres_password
       STUDY_PUBLIC_URL: ${STUDY_PUBLIC_URL:?installation URL is required}
+      DOCS_CONTENT_ORIGIN: ${DOCS_CONTENT_ORIGIN:-https://architecture.os-pc.vpn.os-home.net}
       STUDY_HOSTNAME: ${STUDY_HOSTNAME:-os-pc}
       STUDY_DATA_DIR: /var/lib/study-space
       STUDY_PRIVATE_DIR: /var/lib/study-space-private

@@ -1,0 +1,7 @@
+{
+  "source": "vendor/docs-content",
+  "modules": [
+    "docs.content"
+  ],
+  "revision": "sha256:b8b63372ac98bc469dc29bf1221022dd45e8affccd089c163ad2ab9a5e64e518"
+}

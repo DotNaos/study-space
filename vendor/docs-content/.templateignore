@@ -1,0 +1,6 @@
+.templateignore
+template/**
+.slot.yaml
+**/.slot.yaml
+schema/template-manifest.schema.json
+schema/template-module.schema.json

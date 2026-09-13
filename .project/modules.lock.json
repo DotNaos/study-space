@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "revision": "sha256:b8b63372ac98bc469dc29bf1221022dd45e8affccd089c163ad2ab9a5e64e518",
+  "modules": [
+    "docs.content"
+  ],
+  "files": {
+    "scripts/docs-content.mjs": {
+      "digest": "0fe0a77b16ae430ec88cd089d103b97c5070a6521faa4d93f4d5c5143e7913c0",
+      "mode": 420
+    }
+  },
+  "projectOwned": {}
+}
