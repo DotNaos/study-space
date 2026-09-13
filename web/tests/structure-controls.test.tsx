@@ -44,11 +44,12 @@ test("parent picker uses a controlled styled button, not a native disclosure", (
   expect(html).not.toMatch(/<(details|summary)\b/);
 });
 
-test("structure footer keeps optional notes collapsed behind an ordinary app button", () => {
-  const state = { units: [unit], suggestedUnits: [] } as unknown as PipelineState;
-  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => {}} />);
-  expect(html).toContain("Notiz hinzufügen");
-  expect(html).toContain("Struktur speichern");
+test("structure footer leads to sources instead of requiring a manual save", () => {
+  const state = { units: [unit], suggestedUnits: [], sources: [], history: [] } as unknown as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} />);
+  expect(html).not.toContain("Notiz hinzufügen");
+  expect(html).not.toContain("Struktur speichern");
+  expect(html).toContain("Zur Erstellung");
   expect(html).not.toMatch(/<(details|summary)\b/);
   expect(html).not.toContain("Optionale Begründung");
 });

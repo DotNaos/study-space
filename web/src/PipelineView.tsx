@@ -1,3 +1,7 @@
+import { PreparationSteps } from "./PreparationSteps";
+import { nextSourceDecision, sourceProgress } from "./preparation-flow";
+import type { PipelineUnit } from "./pipeline-api";
+import "./preparation-flow.css";
 import { PipelineUnits } from "./PipelineUnits";
 import { unitLabel } from "./learning-structure";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -29,11 +33,13 @@ export function PipelineView({
   version,
   onSource,
   onOpenLearning,
+  onCreate,
 }: {
   courseId: number;
   version?: LearningVersion | null;
   onSource: (source: SourceSelection) => void;
   onOpenLearning: (target: LearningTarget) => void;
+  onCreate: () => void;
 }) {
   const [state, setState] = useState<PipelineState>();
   const [error, setError] = useState("");
@@ -43,6 +49,21 @@ export function PipelineView({
   );
   const [openOnly, setOpenOnly] = useState(false);
   const [pane, setPane] = useState<"source" | "output">("source");
+  const navigationGuard = useRef<(() => Promise<boolean>) | null>(null);
+  const registerGuard = useCallback((guard: (() => Promise<boolean>) | null) => { navigationGuard.current = guard; }, []);
+  const saveStructure = useCallback(async (units: PipelineUnit[], expectedRevision: number) => {
+    const next = await api<PipelineState>(pipelinePath(courseId) + "/structure", {
+      method: "PUT", body: JSON.stringify({ units, expectedRevision, actor: "user", reason: "Gliederung automatisch gespeichert: lokale Reihenfolge, Anzeigenamen und Sichtbarkeit." }),
+    });
+    setState(next);
+    return next;
+  }, [courseId]);
+  async function advance(next: PipelineState, after?: string) {
+    setState(next);
+    const source = nextSourceDecision(next, after);
+    if (source) await go({ kind: "source", id: source.source.id });
+    else onCreate();
+  }
   const positions = useRef(new Map<string, number>());
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -79,7 +100,8 @@ export function PipelineView({
     );
     return () => cancelAnimationFrame(frame);
   }, [route]);
-  function go(next: PipelineRoute) {
+  async function go(next: PipelineRoute) {
+    if (navigationGuard.current && !await navigationGuard.current()) return;
     positions.current.set(pipelineHash(route), window.scrollY);
     window.history.pushState(
       null,
@@ -95,12 +117,11 @@ export function PipelineView({
     setBusy(true);
     setError("");
     try {
-      setState(
-        await api<PipelineState>(pipelinePath(courseId) + path, {
-          method,
-          body: JSON.stringify({ expectedRevision: state.revision, ...body }),
-        }),
-      );
+      const next = await api<PipelineState>(pipelinePath(courseId) + path, {
+        method, body: JSON.stringify({ expectedRevision: state.revision, ...body }),
+      });
+      setState(next);
+      return next;
     } catch (error) {
       setError(message(error));
       throw error;
@@ -230,7 +251,11 @@ export function PipelineView({
     ) ?? [];
   return (
     <section className="pipeline-view" aria-label="Kursaufbereitung">
-      <div className="pipeline-toolbar">
+      {state && <PreparationSteps step={route.kind === "structure" ? "structure" : "sources"} structured={state.units.length > 0} open={state.pending} disabled={busy}
+        onStructure={()=>void go({kind:"structure"})}
+        onSources={()=>{const next=nextSourceDecision(state);void go(next?{kind:"source",id:next.source.id}:{kind:"overview"});}}
+        onCreate={()=>{void (async()=>{if(navigationGuard.current && !await navigationGuard.current()) return; onCreate();})().catch(error=>setError(message(error)));}} />}
+      {route.kind !== "structure" && <div className="pipeline-toolbar">
         <div className="pipeline-breadcrumb">
           {route.kind !== "overview" && (
             <Button
@@ -243,7 +268,7 @@ export function PipelineView({
           )}
           <span>
             {route.kind === "overview"
-              ? "Quellen und Lernstruktur"
+              ? "Aufbereitung"
               : (item?.source.name ??
                 group?.title ??
                 (unit ? unitLabel(unit) : undefined) ??
@@ -259,16 +284,9 @@ export function PipelineView({
             disabled={busy || !state}
             onPress={() => void change("/sync", "POST", {}).catch(() => {})}
           />
-          {route.kind !== "structure" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              label="Struktur bearbeiten"
-              onPress={() => go({ kind: "structure" })}
-            />
-          )}
+
         </div>
-      </div>
+      </div>}
       {error && (
         <>
           <Notice>{error}</Notice>
@@ -289,21 +307,17 @@ export function PipelineView({
         <PipelineStructure
           state={state}
           busy={busy}
-          onSave={async (units, reason) => {
-            try {
-              await change("/structure", "PUT", {
-                units,
-                reason,
-                actor: "user",
-              });
-              go({ kind: "overview" });
-            } catch {
-              /* Keep the editor and its unsaved changes. */
-            }
-          }}
+          onSave={saveStructure}
+          onGuard={registerGuard}
+          onContinue={next => void advance(next)}
         />
       ) : (
         <>
+          {item && <div className="prepare-source-progress" aria-label="Bestätigte Quellenverwendung">
+            <span>{sourceProgress(state).reviewed} / {sourceProgress(state).total}</span>
+            <progress max={Math.max(1,sourceProgress(state).total)} value={sourceProgress(state).reviewed}/>
+            <Button size="sm" variant="ghost" label="Später" disabled={busy} onPress={()=>{const next=nextSourceDecision(state,item.source.id);void go(next?{kind:"source",id:next.source.id}:{kind:"overview"});}}/>
+          </div>}
           <div
             className="pipeline-mobile-switch"
             role="group"
@@ -319,11 +333,12 @@ export function PipelineView({
             <Button
               size="sm"
               variant="ghost"
-              label="Lernstruktur"
+              label={item ? "Zuordnung" : "Lernstruktur"}
               pressed={pane === "output"}
               onPress={() => setPane("output")}
             />
           </div>
+          {item && pane === "source" && <div className="prepare-mobile-next"><Button label="Zuordnen" iconAfter="arrow-right" onPress={()=>setPane("output")}/></div>}
           <div className="pipeline-split" data-pane={pane}>
             <div className="pipeline-source-pane">
               {item ? (
@@ -428,13 +443,7 @@ export function PipelineView({
                         ),
                       ),
                     )}
-                  {route.kind === "overview" && (
-                    <p className="pipeline-muted">
-                      Alle gelieferten Gruppen bleiben erreichbar.
-                      Abschnittstexte, Aktivitäten und Dateien werden getrennt
-                      von ihrer Lernverwendung erfasst.
-                    </p>
-                  )}
+
                 </>
               )}
             </div>
@@ -449,14 +458,16 @@ export function PipelineView({
                   state={state}
                   item={item}
                   busy={busy}
+                  continueAfterSave
                   onSave={async (body) => {
                     try {
-                      await change("/decisions", "POST", {
+                      const next = await change("/decisions", "POST", {
                         ...body,
                         sourceId: item.source.id,
                         sourceVersion: item.source.sourceVersion,
                         actor: "user",
                       });
+                      if (next) await advance(next, item.source.id);
                     } catch {
                       /* Error shown above; leave the draft intact. */
                     }
@@ -578,6 +589,11 @@ export function PipelineView({
           )}
         </>
       )}
+      {state && !item && route.kind !== "structure" && <footer className="prepare-next prepare-overview-next">
+        <span className="prepare-next-count">{state.units.length ? `${sourceProgress(state).open} Quellen offen` : ""}</span>
+        <Button label={!state.units.length ? "Struktur festlegen" : nextSourceDecision(state) ? "Quellen zuordnen" : "Zur Erstellung"} iconAfter="arrow-right" disabled={busy || !!state.problem}
+          onPress={()=>{if(!state.units.length)void go({kind:"structure"});else void advance(state);}}/>
+      </footer>}
     </section>
   );
 }
