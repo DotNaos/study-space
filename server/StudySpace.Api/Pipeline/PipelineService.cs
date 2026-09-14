@@ -93,19 +93,31 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
         {
             var plan = state.Pipeline;
             CheckRevision(plan, request.ExpectedRevision);
-            var decisions = new List<SourceDecision>(request.Items.Length);
-            foreach (var item in request.Items) decisions.Add(await BuildDecision(plan, observed, item, request.Reason, request.Actor, ct));
+            var previous = request.Items.ToDictionary(item => item.SourceId, item => plan.Decisions.SingleOrDefault(value => value.SourceId == item.SourceId));
+            var next = new Dictionary<string, SourceDecision?>();
+            foreach (var item in request.Items)
+            {
+                if (item.Disposition == "clear")
+                {
+                    var source = observed.Sources.SingleOrDefault(source => source.Id == item.SourceId && source.Present)
+                        ?? throw Invalid("Diese Quelle ist im aktuellen Bestand nicht verfügbar.");
+                    if (source.SourceVersion != item.SourceVersion)
+                        throw new ApiFailure("pipeline_source_changed", "Die Quelle hat sich geändert. Prüfe die aktuelle Fassung erneut.", 409);
+                    if (item.Uses is null || item.Uses.Length != 0) throw Invalid("Zurücksetzen enthält keine Verwendung.");
+                    next[item.SourceId] = null;
+                }
+                else next[item.SourceId] = await BuildDecision(plan, observed, item, request.Reason, request.Actor, ct);
+            }
             Capture(plan, observed);
-            var previous = decisions.ToDictionary(decision => decision.SourceId, decision => plan.Decisions.SingleOrDefault(value => value.SourceId == decision.SourceId));
-            var final = decisions.Select(decision => EquivalentMapping(previous[decision.SourceId], decision) ? previous[decision.SourceId]! : decision).ToArray();
-            var changed = final.Where(decision => !ReferenceEquals(previous[decision.SourceId], decision)).ToArray();
+            var changed = request.Items.Select(item => item.SourceId).Where(id =>
+                next[id] is null ? previous[id] is not null : !EquivalentMapping(previous[id], next[id]!)).ToArray();
             if (changed.Length == 0) return true;
-            var ids = final.Select(decision => decision.SourceId).ToHashSet();
-            plan.Decisions = plan.Decisions.Where(decision => !ids.Contains(decision.SourceId)).Concat(final).ToArray();
+            var ids = request.Items.Select(item => item.SourceId).ToHashSet();
+            plan.Decisions = plan.Decisions.Where(decision => !ids.Contains(decision.SourceId)).Concat(next.Values.OfType<SourceDecision>()).ToArray();
             plan.Revision++;
             var at = clock.GetUtcNow();
-            foreach (var decision in changed)
-                plan.History = plan.History.Append(new(plan.Revision, "mapping", request.Actor.Trim(), request.Reason.Trim(), at, decision.SourceId, previous[decision.SourceId])).ToArray();
+            foreach (var id in changed)
+                plan.History = plan.History.Append(new(plan.Revision, "mapping", request.Actor.Trim(), request.Reason.Trim(), at, id, previous[id])).ToArray();
             await store.Save(state, ct); return true;
         }, ct);
         return await SavedView(courseId, observed, ct);

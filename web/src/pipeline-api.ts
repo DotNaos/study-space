@@ -16,7 +16,7 @@ export type SourceUse = {
 export type SourceDecision = {
   sourceId: string;
   sourceVersion: string;
-  disposition: "use" | "exclude";
+  disposition: "use" | "exclude" | "clear";
   uses: SourceUse[];
   reason: string;
   actor: string;
@@ -79,7 +79,7 @@ export type PipelineState = {
 export type MappingItem = {
   sourceId: string;
   sourceVersion: string;
-  disposition: "use" | "exclude";
+  disposition: "use" | "exclude" | "clear";
   uses: SourceUse[];
 };
 export const pipelinePath = (courseId: number) =>

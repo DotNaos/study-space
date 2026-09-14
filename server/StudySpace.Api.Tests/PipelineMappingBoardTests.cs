@@ -76,6 +76,27 @@ public sealed class PipelineMappingBoardTests
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
     }
 
+    [Fact] public async Task ExcludedSourceCanBeRestoredToPendingWithoutInventingAMapping()
+    {
+        using var fixture = new WorkflowApiFixture(); using var client = fixture.Client();
+        var initial = (await client.GetFromJsonAsync<PipelineView>(Path))!;
+        var unit = initial.SuggestedUnits.Single(value => value.SourceGroupId == 20);
+        var response = await client.PutAsJsonAsync(Path + "/structure", new PlanStructureRequest(0, [unit], "Week"));
+        response.EnsureSuccessStatusCode(); var plan = (await response.Content.ReadFromJsonAsync<PipelineView>())!;
+        var sourceId = WorkflowApiFixture.Id('b');
+        response = await client.PostAsJsonAsync(Path + "/mapping", new PlanMappingRequest(plan.Revision,
+            [new(sourceId, WorkflowApiFixture.Id('f'), "exclude", [])]));
+        response.EnsureSuccessStatusCode(); plan = (await response.Content.ReadFromJsonAsync<PipelineView>())!;
+        Assert.Equal("excluded", plan.Sources.Single(item => item.Source.Id == sourceId).Status);
+        var excludedRevision = plan.Revision;
+
+        response = await client.PostAsJsonAsync(Path + "/mapping", new PlanMappingRequest(plan.Revision,
+            [new(sourceId, WorkflowApiFixture.Id('f'), "clear", [])]));
+        response.EnsureSuccessStatusCode(); plan = (await response.Content.ReadFromJsonAsync<PipelineView>())!;
+        var restored = plan.Sources.Single(item => item.Source.Id == sourceId);
+        Assert.Equal("pending", restored.Status); Assert.Null(restored.Decision); Assert.Equal(excludedRevision + 1, plan.Revision);
+    }
+
     [Fact] public async Task ReviewedSourceOrderControlsGenerationWithinAUnit()
     {
         using var fixture = new WorkflowApiFixture(); using var client = fixture.Client();

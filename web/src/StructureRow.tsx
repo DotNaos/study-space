@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
 import { Button, Form, Input } from "@dotnaos/ui-base";
-import { ChevronRight, Eye, EyeOff, GripVertical, MoreHorizontal } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, MoreHorizontal } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { PipelineUnit } from "./pipeline-api";
@@ -7,13 +8,14 @@ import { descendants, unitHidden, unitKind, unitLabel } from "./learning-structu
 import { DialogShell } from "./DialogShell";
 import { StructurePicker } from "./StructurePicker";
 
-export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onHide,onOpen,onParent,onKind}:{
+export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onHide,onOpen,onParent,onKind,inlineChildren=false,nestedOpen=false,nestedCount=0,onToggleNested,children}:{
   unit:PipelineUnit;units:PipelineUnit[];disabled:boolean;expanded:boolean;onToggle:()=>void;
   onChange:(patch:Partial<PipelineUnit>)=>void;onHide:(hidden:boolean)=>void;onOpen:()=>void;
-  onParent:(id:string|null)=>void;onKind:()=>void;
+  onParent:(id:string|null)=>void;onKind:()=>void;inlineChildren?:boolean;nestedOpen?:boolean;nestedCount?:number;
+  onToggleNested?:()=>void;children?:ReactNode;
 }) {
   const {attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:unit.id,disabled});
-  const children=units.filter(child=>child.parentId===unit.id);
+  const childUnits=units.filter(child=>child.parentId===unit.id);
   const hidden=unitHidden(unit,units),kind=unitKind(unit),excluded=descendants(units,unit.id);
   const inheritedHidden = hidden && !unit.hidden;
   const script=units.filter(item=>unitKind(item)==="script");
@@ -32,13 +34,15 @@ export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onH
             {links.length?links.map(unitLabel).join(" · "):"Skript zuordnen"}
           </button>}
         </div>
-        {children.length>0 && <button type="button" className="structure-icon" onClick={onOpen} disabled={disabled} aria-label={`${unitLabel(unit)} öffnen`} title={`${children.length} Untereinträge`}><span>{children.length}</span><ChevronRight size={16} aria-hidden="true"/></button>}
+        {!inlineChildren && childUnits.length>0 && <button type="button" className="structure-icon" onClick={onOpen} disabled={disabled} aria-label={`${unitLabel(unit)} öffnen`} title={`${childUnits.length} Untereinträge`}><span>{childUnits.length}</span><ChevronRight size={16} aria-hidden="true"/></button>}
+        {inlineChildren && nestedCount>0 && <button type="button" className="structure-icon structure-nested-toggle" onClick={onToggleNested} disabled={disabled} aria-expanded={nestedOpen} aria-label={`${unitLabel(unit)} ${nestedOpen?"einklappen":"ausklappen"}`} title={`${nestedCount} Inhalte`}><span>{nestedCount}</span><ChevronDown size={16} aria-hidden="true" className={nestedOpen?"structure-chevron-open":undefined}/></button>}
         <button type="button" className="structure-icon structure-visibility" onClick={()=>onHide(!unit.hidden)} disabled={disabled||inheritedHidden}
           aria-label={`${visibilityAction}: ${unitLabel(unit)}`} title={inheritedHidden?"Zuerst den übergeordneten Eintrag einblenden":visibilityAction}>
           {hidden?<EyeOff size={17} aria-hidden="true"/>:<Eye size={17} aria-hidden="true"/>}
         </button>
         <button type="button" className="structure-icon" onClick={onToggle} disabled={disabled} aria-haspopup="dialog" aria-expanded={expanded} aria-label={`Optionen: ${unitLabel(unit)}`}><MoreHorizontal size={18} aria-hidden="true"/></button>
       </div>
+      {inlineChildren && nestedOpen && children && <div className="structure-inline-children">{children}</div>}
     </li>
     {expanded && <DialogShell title="Eintrag bearbeiten" onClose={onToggle}>
       <div className="structure-options">

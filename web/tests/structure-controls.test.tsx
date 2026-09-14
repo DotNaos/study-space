@@ -36,6 +36,16 @@ test("visibility controls respect read-only saving and inherited hidden parents"
   expect(html).toContain("Zuerst den übergeordneten Eintrag einblenden");
 });
 
+test("nested structure rows keep content inline instead of forcing drill-down", () => {
+  const html = renderToStaticMarkup(<ul><StructureRow unit={unit} units={[unit]} disabled={false} expanded={false} onToggle={noop}
+    onChange={noop} onHide={noop} onOpen={noop} onParent={noop} onKind={noop} inlineChildren nestedOpen nestedCount={3} onToggleNested={noop}>
+    <div data-testid="nested-source">Quelle → Ziel</div>
+  </StructureRow></ul>);
+  expect(html).toContain('aria-label="Block 1 einklappen"');
+  expect(html).toContain('class="structure-inline-children"');
+  expect(html).toContain("Quelle → Ziel");
+});
+
 test("parent picker uses a controlled styled button, not a native disclosure", () => {
   const html = renderToStaticMarkup(<StructurePicker label="Übergeordneter Eintrag" units={[unit]} selected={[unit.id]} onChange={noop} />);
   expect(html).toContain('aria-expanded="false"');
@@ -44,12 +54,14 @@ test("parent picker uses a controlled styled button, not a native disclosure", (
   expect(html).not.toMatch(/<(details|summary)\b/);
 });
 
-test("structure footer leads to sources instead of requiring a manual save", () => {
-  const state = { units: [unit], suggestedUnits: [], sources: [], history: [] } as unknown as PipelineState;
-  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} />);
-  expect(html).not.toContain("Notiz hinzufügen");
+test("combined structure surface exposes content next and optional focus mode", () => {
+  const state = { courseId: 7, revision: 1, units: [unit], suggestedUnits: [], sources: [], history: [], pending: 0, blocked: 0, groups: [], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
+    onOpenSource={noop} onFocus={noop} onContent={noop} />);
   expect(html).not.toContain("Struktur speichern");
-  expect(html).toContain("Zur Erstellung");
+  expect(html).toContain("Verschachtelt");
+  expect(html).toContain('aria-label="Strukturansicht"');
+  expect(html).toContain(">Fokus<");
+  expect(html).toContain("Inhalt");
   expect(html).not.toMatch(/<(details|summary)\b/);
-  expect(html).not.toContain("Optionale Begründung");
 });
