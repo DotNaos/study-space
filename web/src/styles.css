@@ -81,3 +81,15 @@
     }
   }
 }
+
+/* iOS Safari zooms focused form controls whose computed text size is below
+   16px. Apply the minimum to touch-first devices globally so every editable
+   Study Space surface behaves consistently, including landscape phones. */
+@media (hover: none) and (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]),
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
