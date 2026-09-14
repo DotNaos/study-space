@@ -21,26 +21,31 @@ export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onH
   const script=units.filter(item=>unitKind(item)==="script");
   const links=(unit.scriptUnitIds??[]).map(id=>script.find(item=>item.id===id)).filter((item):item is PipelineUnit=>!!item);
   const visibilityAction = hidden ? "Einblenden" : "Ausblenden";
+  const nestedToggle=inlineChildren&&nestedCount>0;
+  const childToggle=!inlineChildren&&childUnits.length>0;
   return <>
     <li ref={setNodeRef} data-unit-id={unit.id} data-hidden={hidden||undefined} data-dragging={isDragging||undefined}
       style={{transform:CSS.Transform.toString(transform),transition}}>
       <div className="structure-line">
-        <button type="button" className="structure-handle" ref={setActivatorNodeRef} {...attributes} {...listeners} disabled={disabled}
-          aria-label={`${unitLabel(unit)} verschieben`} title="Ziehen zum Sortieren"><GripVertical size={16} aria-hidden="true"/></button>
+        {nestedToggle?<button type="button" className="structure-icon structure-leading structure-nested-toggle" ref={setActivatorNodeRef} {...attributes} {...listeners}
+          onClick={onToggleNested} disabled={disabled} aria-expanded={nestedOpen} aria-label={`${unitLabel(unit)} ${nestedOpen?"einklappen":"ausklappen"}`} title={nestedOpen?"Einklappen":"Ausklappen"}>
+          <ChevronDown size={16} aria-hidden="true" className={nestedOpen?"structure-chevron-open":undefined}/>
+        </button>:childToggle?<button type="button" className="structure-icon structure-leading" ref={setActivatorNodeRef} {...attributes} {...listeners}
+          onClick={onOpen} disabled={disabled} aria-label={`${unitLabel(unit)} öffnen`} title="Öffnen"><ChevronRight size={16} aria-hidden="true"/></button>:
+        <button type="button" className="structure-handle structure-drag-only" ref={setActivatorNodeRef} {...attributes} {...listeners} disabled={disabled}
+          aria-label={`${unitLabel(unit)} verschieben`} title="Ziehen zum Sortieren"><GripVertical size={15} aria-hidden="true"/></button>}
         <div className="structure-name">
           <Input size="sm" fullWidth accessibilityLabel={`Anzeigename: ${unit.title}`} value={unitLabel(unit)}
             onValueChange={value=>onChange({customTitle:value===unit.title?null:value})} disabled={disabled}/>
-          {kind==="tasks" && <button type="button" className="structure-links" onClick={onToggle} disabled={disabled} title={links.map(unitLabel).join(", ")||"Skript zuordnen"}>
+          {kind==="tasks" && !inlineChildren && <button type="button" className="structure-links" onClick={onToggle} disabled={disabled} title={links.map(unitLabel).join(", ")||"Skript zuordnen"}>
             {links.length?links.map(unitLabel).join(" · "):"Skript zuordnen"}
           </button>}
         </div>
-        {!inlineChildren && childUnits.length>0 && <button type="button" className="structure-icon" onClick={onOpen} disabled={disabled} aria-label={`${unitLabel(unit)} öffnen`} title={`${childUnits.length} Untereinträge`}><span>{childUnits.length}</span><ChevronRight size={16} aria-hidden="true"/></button>}
-        {inlineChildren && nestedCount>0 && <button type="button" className="structure-icon structure-nested-toggle" onClick={onToggleNested} disabled={disabled} aria-expanded={nestedOpen} aria-label={`${unitLabel(unit)} ${nestedOpen?"einklappen":"ausklappen"}`} title={`${nestedCount} Inhalte`}><span>{nestedCount}</span><ChevronDown size={16} aria-hidden="true" className={nestedOpen?"structure-chevron-open":undefined}/></button>}
         <button type="button" className="structure-icon structure-visibility" onClick={()=>onHide(!unit.hidden)} disabled={disabled||inheritedHidden}
           aria-label={`${visibilityAction}: ${unitLabel(unit)}`} title={inheritedHidden?"Zuerst den übergeordneten Eintrag einblenden":visibilityAction}>
           {hidden?<EyeOff size={17} aria-hidden="true"/>:<Eye size={17} aria-hidden="true"/>}
         </button>
-        <button type="button" className="structure-icon" onClick={onToggle} disabled={disabled} aria-haspopup="dialog" aria-expanded={expanded} aria-label={`Optionen: ${unitLabel(unit)}`}><MoreHorizontal size={18} aria-hidden="true"/></button>
+        <button type="button" className="structure-icon structure-more" onClick={onToggle} disabled={disabled} aria-haspopup="dialog" aria-expanded={expanded} aria-label={`Optionen: ${unitLabel(unit)}`}><MoreHorizontal size={18} aria-hidden="true"/></button>
       </div>
       {inlineChildren && nestedOpen && children && <div className="structure-inline-children">{children}</div>}
     </li>
