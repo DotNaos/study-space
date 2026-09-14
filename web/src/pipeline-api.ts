@@ -110,9 +110,11 @@ export type PipelineRoute =
   | { kind: "overview" }
   | { kind: "group" | "source" | "unit" | "mapping-unit"; id: string }
   | { kind: "structure" }
+  | { kind: "content" }
   | { kind: "mapping" };
 export function parsePipelineRoute(hash: string): PipelineRoute {
   if (hash === "#prepare/structure") return { kind: "structure" };
+  if (hash === "#prepare/content") return { kind: "content" };
   if (hash === "#prepare/mapping") return { kind: "mapping" };
   const mapping = /^#prepare\/mapping\/([a-f0-9]{32})$/.exec(hash);
   if (mapping) return { kind: "mapping-unit", id: mapping[1] };
@@ -122,16 +124,14 @@ export function parsePipelineRoute(hash: string): PipelineRoute {
     : { kind: "overview" };
 }
 export function pipelineHash(route: PipelineRoute) {
-  return route.kind === "overview"
-    ? "#prepare"
-    : route.kind === "structure"
-      ? "#prepare/structure"
-      : route.kind === "mapping"
-        ? "#prepare/mapping"
-        : route.kind === "mapping-unit"
-          ? `#prepare/mapping/${route.id}`
-          : `#prepare/${route.kind}/${route.id}`;
+  if (route.kind === "overview") return "#prepare";
+  if (route.kind === "structure") return "#prepare/structure";
+  if (route.kind === "content") return "#prepare/content";
+  if (route.kind === "mapping") return "#prepare/mapping";
+  if (route.kind === "mapping-unit") return `#prepare/mapping/${route.id}`;
+  return `#prepare/${route.kind}/${route.id}`;
 }
+
 export function groupSources(
   state: PipelineState,
   groupId: number,

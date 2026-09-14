@@ -31,10 +31,12 @@ export function LearningPanel({
   onSource,
   initialTarget,
   preparationOpen = false,
+  preparationHeader = true,
 }: {
   courseId: number;
   initialTarget?: LearningTarget;
   preparationOpen?: boolean;
+  preparationHeader?: boolean;
   learning: LearningCourse;
   materials: MaterialState;
   moodleConnected: boolean;
@@ -141,7 +143,7 @@ export function LearningPanel({
   }
   return (
     <div className="min-w-0">
-      {preparationOpen && <div className="prepare-section-heading"><Button variant="ghost" size="sm" icon="arrow-left" label="Quellen" onPress={()=>{window.location.hash="prepare";}}/><h2>Lerninhalte erstellen</h2></div>}
+      {preparationOpen && preparationHeader && <div className="prepare-section-heading"><Button variant="ghost" size="sm" icon="arrow-left" label="Quellen" onPress={()=>{window.location.hash="prepare";}}/><h2>Lerninhalte erstellen</h2></div>}
       {version && !preparationOpen && (
         <TaskReconciliation
           key={version.id}

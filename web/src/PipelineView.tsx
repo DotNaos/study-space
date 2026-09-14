@@ -4,7 +4,7 @@ import type { PipelineUnit } from "./pipeline-api";
 import "./preparation-flow.css";
 import { PipelineUnits } from "./PipelineUnits";
 import { unitLabel } from "./learning-structure";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Button, Checkbox } from "@dotnaos/ui-base";
 import { ChevronRight, FileText, Folder } from "lucide-react";
 import { api, message } from "./api";
@@ -33,13 +33,13 @@ export function PipelineView({
   version,
   onSource,
   onOpenLearning,
-  onCreate,
+  content,
 }: {
   courseId: number;
   version?: LearningVersion | null;
   onSource: (source: SourceSelection) => void;
   onOpenLearning: (target: LearningTarget) => void;
-  onCreate: () => void;
+  content: ReactNode;
 }) {
   const [state, setState] = useState<PipelineState>();
   const [error, setError] = useState("");
@@ -248,10 +248,10 @@ export function PipelineView({
     ) ?? [];
   return (
     <section className="pipeline-view" aria-label="Kursaufbereitung">
-      {state && <PreparationSteps open={state.pending} disabled={busy}
+      {state && <PreparationSteps tab={route.kind === "content" ? "content" : "structure"} open={state.pending} disabled={busy}
         onStructure={()=>void go({kind:"structure"})}
-        onCreate={()=>{void (async()=>{if(navigationGuard.current && !await navigationGuard.current()) return; onCreate();})().catch(error=>setError(message(error)));}} />}
-      {!combinedStructure && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
+        onContent={()=>void go({kind:"content"})} />}
+      {!combinedStructure && route.kind !== "content" && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
         <div className="pipeline-breadcrumb">
           <Button
             variant="ghost"
@@ -290,6 +290,8 @@ export function PipelineView({
       {state?.problem && <Notice>{state.problem}</Notice>}
       {!state ? (
         !error && <Loading label="Quellenstruktur wird gelesen …" />
+      ) : route.kind === "content" ? (
+        <>{content}</>
       ) : combinedStructure ? (
         <PipelineStructure
           state={state}
@@ -298,7 +300,7 @@ export function PipelineView({
           onState={setState}
           onOpenSource={(source,unitId)=>{ mappingReturn.current=unitId; void go({kind:"source",id:source.source.id}); }}
           onFocus={()=>void go({kind:"mapping"})}
-          onContent={onCreate}
+          onContent={()=>void go({kind:"content"})}
           onGuard={registerGuard}
         />
       ) : route.kind === "mapping" || route.kind === "mapping-unit" ? (
@@ -312,7 +314,7 @@ export function PipelineView({
             onOpenRoot={id => void go({kind:"mapping-unit",id})}
             onOverview={()=>void go({kind:"mapping"})}
             onOpenSource={source => { mappingReturn.current = currentMappingRoot; void go({kind:"source",id:source.source.id}); }}
-            onCreate={onCreate}
+            onCreate={()=>void go({kind:"content"})}
           />
         </>
       ) : (

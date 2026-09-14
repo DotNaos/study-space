@@ -40,6 +40,7 @@ test("drill down has one explicit level and round-trips source and unit identiti
   for (const route of [
     { kind: "overview" },
     { kind: "structure" },
+    { kind: "content" },
     { kind: "mapping" },
     { kind: "mapping-unit", id: "a".repeat(32) },
     { kind: "group", id: "7" },
