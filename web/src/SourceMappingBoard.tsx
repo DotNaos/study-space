@@ -1,6 +1,6 @@
 import "./source-mapping.css";
 import { useEffect, useMemo, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
+import { Button, Icon } from "@dotnaos/ui-base";
 import { closestCenter, DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -47,7 +47,7 @@ function MappingEditor({item,state,rootId,index,disabled,onMap,onAdvanced,onClos
   }
   return <DialogShell title="Zuordnung" onClose={onClose}>
     <div className="mapping-editor">
-      <div className="mapping-editor-source"><FileText size={17}/><span>{item.source.name}</span></div>
+      <div className="mapping-editor-source"><Icon.File filename={item.source.name} size={17}/><span>{item.source.name}</span></div>
       <div className="mapping-role-grid">{roleOptions.map(({id,label,Icon})=><button key={id} type="button" data-selected={role===id||undefined} onClick={()=>changeRole(id)} disabled={disabled}><Icon size={18}/><span>{label}</span></button>)}</div>
       {role!=="reference"&&<StructurePicker label="Ziel" units={targets} selected={target?[target]:[]} emptyLabel="Ziel wählen" disabled={disabled} onChange={ids=>setTarget(ids[0]??"")}/>} 
       <div className="mapping-editor-actions">
@@ -61,16 +61,16 @@ function MappingEditor({item,state,rootId,index,disabled,onMap,onAdvanced,onClos
 export function MappingRow({item,state,rootId,index,disabled,onMap,onExclude,onOpen,compact=false}:{item:PipelineSourceView;state:PipelineState;rootId:string;index:number;disabled:boolean;onMap:(item:MappingItem)=>void;onExclude:(item:PipelineSourceView)=>void;onOpen:(item:PipelineSourceView)=>void;compact?:boolean}){
   const [editing,setEditing]=useState(false);const current=mappingItem(item);const display=displayMapping(state,item,rootId,index);const use=primaryUse(item);const draggable=!!current&&current.disposition==="use"&&!!use?.unitId;
   const {attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:item.source.id,disabled:disabled||!draggable});
-  const Icon=display.kind==="excluded"?EyeOff:display.kind==="open"?CircleAlert:roleIcon("role" in display?display.role:undefined);
+  const MappingIcon=display.kind==="excluded"?EyeOff:display.kind==="open"?CircleAlert:roleIcon("role" in display?display.role:undefined);
   return <>
     <li ref={setNodeRef} data-source-id={item.source.id} data-status={item.status} data-mapping={display.kind} data-compact={compact||undefined} data-dragging={isDragging||undefined} style={{transform:CSS.Transform.toString(transform),transition}}>
       {!compact&&<button ref={setActivatorNodeRef} className="mapping-handle" type="button" disabled={!draggable||disabled} aria-label={`${item.source.name} sortieren`} {...attributes} {...listeners}><GripVertical size={15}/></button>}
       <button ref={compact?setActivatorNodeRef:undefined} className="mapping-source" type="button" onClick={()=>onOpen(item)} title={item.source.name} {...(compact?attributes:{})} {...(compact?listeners:{})}>
-        <span className="mapping-source-icon"><FileText size={16}/></span><span><strong>{item.source.name}</strong></span>
+        <span className="mapping-source-icon"><Icon.File filename={item.source.name} size={16}/></span><span><strong>{item.source.name}</strong></span>
       </button>
       {!compact&&<><span className="mapping-arrow" aria-hidden="true">→</span>
         <button className="mapping-value" type="button" onClick={()=>setEditing(true)} disabled={disabled} data-role={("role" in display&&display.role)||undefined} title={display.label}>
-          <span className="mapping-value-icon"><Icon size={17}/></span><span><strong>{display.label}</strong>{display.kind==="proposal"&&<small>Vorschlag</small>}{item.status==="stale"&&<small>Erneut prüfen</small>}</span>
+          <span className="mapping-value-icon"><MappingIcon size={17}/></span><span><strong>{display.label}</strong>{display.kind==="proposal"&&<small>Vorschlag</small>}{item.status==="stale"&&<small>Erneut prüfen</small>}</span>
         </button></>}
       <button className="mapping-eye" type="button" disabled={disabled} onClick={()=>onExclude(item)} aria-label={display.kind==="excluded"?`${item.source.name} wieder zuordnen`:`${item.source.name} ausblenden`} title={display.kind==="excluded"?"Wieder zuordnen":"Ausblenden"}>{display.kind==="excluded"?<Eye size={17}/>:<EyeOff size={17}/>}</button>
       <button className="mapping-more" type="button" onClick={()=>onOpen(item)} aria-label={`${item.source.name} Details`} title="Details"><MoreHorizontal size={18}/></button>

@@ -41,14 +41,27 @@ test("visibility controls respect read-only saving and inherited hidden parents"
   expect(html).toContain("Zuerst den übergeordneten Eintrag einblenden");
 });
 
-test("nested structure rows keep content inline instead of forcing drill-down", () => {
+test("nested structure rows keep content inline with the chevron in the leading drag slot", () => {
   const html = renderToStaticMarkup(<ul><StructureRow unit={unit} units={[unit]} disabled={false} expanded={false} onToggle={noop}
     onChange={noop} onHide={noop} onOpen={noop} onParent={noop} onKind={noop} inlineChildren nestedOpen nestedCount={3} onToggleNested={noop}>
     <div data-testid="nested-source">Quelle → Ziel</div>
   </StructureRow></ul>);
   expect(html).toContain('aria-label="Block 1 einklappen"');
+  expect(html).toContain('class="structure-icon structure-leading structure-nested-toggle"');
+  expect(html).not.toContain('class="structure-handle structure-drag-only"');
+  expect(html).not.toContain('title="3 Inhalte"');
   expect(html).toContain('class="structure-inline-children"');
   expect(html).toContain("Quelle → Ziel");
+});
+
+test("nested task rows do not repeat their implicit script assignment", () => {
+  const task: PipelineUnit = { id: "b".repeat(32), title: "Aufgabe 1", parentId: null, order: 0, kind: "tasks", hidden: false, scriptUnitIds: [unit.id] };
+  const html = renderToStaticMarkup(<ul><StructureRow unit={task} units={[unit, task]} disabled={false} expanded={false} onToggle={noop}
+    onChange={noop} onHide={noop} onOpen={noop} onParent={noop} onKind={noop} inlineChildren /></ul>);
+  expect(html).not.toContain('class="structure-links"');
+  expect(html).not.toContain("Block 1</button>");
+  expect(html).toContain('aria-label="Ausblenden: Aufgabe 1"');
+  expect(html).toContain('aria-label="Optionen: Aufgabe 1"');
 });
 
 test("parent picker uses a controlled styled button, not a native disclosure", () => {
@@ -72,13 +85,14 @@ test("combined structure surface exposes content next and optional focus mode", 
 });
 
 
-test("nested sources use their containing section instead of repeating a target picker", () => {
+test("nested sources use their containing section and component-library file icon", () => {
   const nestedUnit = { ...unit, sourceGroupId: 10 };
   const state = { courseId: 7, revision: 1, units: [nestedUnit], suggestedUnits: [], sources: [nestedSource], history: [], pending: 1, blocked: 0, groups: [{ id: 10, title: "Block 1", order: 0, parentId: null }], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
   const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
     onOpenSource={noop} onFocus={noop} onContent={noop} />);
   expect(html).toContain('data-compact="true"');
   expect(html).toContain("2026_CDS303_Block1_1.pdf");
+  expect(html).toContain('data-ui-component="Icon.File"');
   expect(html).not.toContain('class="mapping-handle"');
   expect(html).not.toContain('class="mapping-value"');
 });
