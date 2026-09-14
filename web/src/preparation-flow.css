@@ -52,3 +52,11 @@
 .prepare-source-progress progress::-webkit-progress-bar { background:var(--color-bg-1); }
 .prepare-source-progress progress::-webkit-progress-value { background:var(--color-accent); border-radius:.25rem; }
 .prepare-source-progress progress::-moz-progress-bar { background:var(--color-accent); }
+
+.prepare-tabs { display:flex; align-items:center; gap:.35rem; margin:0 0 1.25rem; border-bottom:1px solid var(--color-border); }
+.prepare-tabs button { position:relative; display:flex; align-items:center; justify-content:center; gap:.5rem; min-width:8.5rem; min-height:3rem; padding:.65rem 1rem; border:0; border-bottom:2px solid transparent; background:none; color:var(--color-text-muted); font-size:.8rem; cursor:pointer; }
+.prepare-tabs button[aria-current=page] { color:var(--color-text); border-bottom-color:var(--color-accent); }
+.prepare-tabs button:hover:not(:disabled) { color:var(--color-text); background:var(--color-bg-1); }
+.prepare-tabs button:disabled { opacity:.45; cursor:not-allowed; }
+.prepare-tabs small { display:grid; place-items:center; min-width:1.25rem; height:1.25rem; padding:0 .3rem; border-radius:99px; background:var(--color-bg-1); color:var(--color-warning); font-size:.65rem; }
+@media(max-width:600px){.prepare-tabs button{flex:1;min-width:0}.prepare-tabs{gap:0}}

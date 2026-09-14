@@ -7,5 +7,5 @@ export function useMappingAutosave(courseId:number,state:PipelineState,onState:(
   const snapshot=useSyncExternalStore(autosave.subscribe,autosave.getSnapshot,autosave.getSnapshot);
   useEffect(()=>{autosave.start();return()=>autosave.stop();},[autosave]);
   useEffect(()=>autosave.accept(state),[autosave,state]);
-  return {snapshot,enqueue:(items:MappingItem[])=>autosave.enqueue(items),flush:()=>autosave.flush(),retry:()=>autosave.retry(),resolve:(next:PipelineState,keepLocal:boolean)=>autosave.resolve(next,keepLocal)};
+  return {snapshot,enqueue:(items:MappingItem[])=>autosave.enqueue(items),flush:()=>autosave.flush(),accept:(next:PipelineState)=>autosave.accept(next),retry:()=>autosave.retry(),resolve:(next:PipelineState,keepLocal:boolean)=>autosave.resolve(next,keepLocal)};
 }

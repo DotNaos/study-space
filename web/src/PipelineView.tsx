@@ -59,10 +59,6 @@ export function PipelineView({
     setState(next);
     return next;
   }, [courseId]);
-  async function advance(next: PipelineState) {
-    setState(next);
-    await go(next.pending > 0 ? { kind: "mapping" } : { kind: "mapping" });
-  }
   const positions = useRef(new Map<string, number>());
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -243,8 +239,7 @@ export function PipelineView({
     );
   }
   const currentMappingRoot = route.kind === "mapping-unit" ? route.id : undefined;
-  const preparingStructure = route.kind === "structure" ||
-    (route.kind === "overview" && !!state && state.units.length === 0);
+  const combinedStructure = route.kind === "overview" || route.kind === "structure";
   const groups =
     state?.groups.filter(
       (candidate) =>
@@ -253,29 +248,19 @@ export function PipelineView({
     ) ?? [];
   return (
     <section className="pipeline-view" aria-label="Kursaufbereitung">
-      {state && <PreparationSteps step={preparingStructure ? "structure" : "sources"} structured={state.units.length > 0} open={state.pending} disabled={busy}
+      {state && <PreparationSteps open={state.pending} disabled={busy}
         onStructure={()=>void go({kind:"structure"})}
-        onSources={()=>void go({kind:"mapping"})}
         onCreate={()=>{void (async()=>{if(navigationGuard.current && !await navigationGuard.current()) return; onCreate();})().catch(error=>setError(message(error)));}} />}
-      {!preparingStructure && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
+      {!combinedStructure && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
         <div className="pipeline-breadcrumb">
-          {route.kind !== "overview" && (
-            <Button
-              variant="ghost"
-              size="sm"
-              icon="arrow-left"
-              label="Zurück"
-              onPress={back}
-            />
-          )}
-          <span>
-            {route.kind === "overview"
-              ? "Aufbereitung"
-              : (item?.source.name ??
-                group?.title ??
-                (unit ? unitLabel(unit) : undefined) ??
-                "Lernstruktur")}
-          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            icon="arrow-left"
+            label="Zurück"
+            onPress={back}
+          />
+          <span>{item?.source.name ?? group?.title ?? (unit ? unitLabel(unit) : undefined) ?? "Struktur"}</span>
         </div>
         <div className="pipeline-inline-actions">
           <Button
@@ -305,25 +290,31 @@ export function PipelineView({
       {state?.problem && <Notice>{state.problem}</Notice>}
       {!state ? (
         !error && <Loading label="Quellenstruktur wird gelesen …" />
-      ) : preparingStructure ? (
+      ) : combinedStructure ? (
         <PipelineStructure
           state={state}
           busy={busy}
           onSave={saveStructure}
-          onGuard={registerGuard}
-          onContinue={next => void advance(next)}
-        />
-      ) : route.kind === "mapping" || route.kind === "overview" || route.kind === "mapping-unit" ? (
-        <SourceMappingBoard
-          courseId={courseId}
-          state={state}
-          rootId={currentMappingRoot}
           onState={setState}
-          onOpenRoot={id => void go({kind:"mapping-unit",id})}
-          onOverview={()=>void go({kind:"mapping"})}
-          onOpenSource={source => { mappingReturn.current = currentMappingRoot; void go({kind:"source",id:source.source.id}); }}
-          onCreate={onCreate}
+          onOpenSource={(source,unitId)=>{ mappingReturn.current=unitId; void go({kind:"source",id:source.source.id}); }}
+          onFocus={()=>void go({kind:"mapping"})}
+          onContent={onCreate}
+          onGuard={registerGuard}
         />
+      ) : route.kind === "mapping" || route.kind === "mapping-unit" ? (
+        <>
+          <div className="prepare-focus-toolbar"><Button size="sm" variant="ghost" icon="arrow-left" label="Verschachtelt" onPress={()=>void go({kind:"structure"})}/></div>
+          <SourceMappingBoard
+            courseId={courseId}
+            state={state}
+            rootId={currentMappingRoot}
+            onState={setState}
+            onOpenRoot={id => void go({kind:"mapping-unit",id})}
+            onOverview={()=>void go({kind:"mapping"})}
+            onOpenSource={source => { mappingReturn.current = currentMappingRoot; void go({kind:"source",id:source.source.id}); }}
+            onCreate={onCreate}
+          />
+        </>
       ) : (
         <>
           <div
