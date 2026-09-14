@@ -1,7 +1,7 @@
 import "./structure-editor.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@dotnaos/ui-base";
-import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { closestCenter, DndContext, KeyboardSensor, MouseSensor, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { Focus, ListTree } from "lucide-react";
 import type { MappingItem, PipelineSourceView, PipelineState, PipelineUnit } from "./pipeline-api";
@@ -46,7 +46,10 @@ function NestedSources({state,unit,units,actions}:{state:PipelineState;unit:Pipe
   const [order,setOrder]=useState(()=>base.map(item=>item.source.id));
   useEffect(()=>setOrder(base.map(item=>item.source.id)),[base.map(item=>item.source.id).join("|")]);
   const items=order.map(id=>base.find(item=>item.source.id===id)).filter((item):item is PipelineSourceView=>!!item);
-  const sensors=useSensors(useSensor(PointerSensor,{activationConstraint:{distance:6}}));
+  const sensors=useSensors(
+    useSensor(MouseSensor,{activationConstraint:{distance:6}}),
+    useSensor(TouchSensor,{activationConstraint:{delay:180,tolerance:6}}),
+  );
   const proposals=items.map((item,index)=>batchProposalFor(state,item,unit.id,index)).filter((item):item is NonNullable<typeof item>=>!!item);
 
   async function map(item:MappingItem){ if(await actions.before()) actions.enqueue([item]); }
@@ -77,7 +80,7 @@ function NestedSources({state,unit,units,actions}:{state:PipelineState;unit:Pipe
     <div className="structure-source-head"><span>{items.length} Quellen{open?` · ${open} offen`:""}</span>{proposals.length>0&&<Button size="sm" variant="ghost" icon="sparkles" label={`Vorschläge ${proposals.length}`} disabled={actions.disabled} onPress={()=>void acceptProposals()}/>}</div>
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={event=>void dragEnd(event)}>
       <SortableContext items={items.map(item=>item.source.id)} strategy={verticalListSortingStrategy}>
-        <ul className="mapping-rows structure-mapping-rows">{items.map((item,index)=><MappingRow key={item.source.id} item={item} state={state} rootId={unit.id} index={index} disabled={actions.disabled}
+        <ul className="mapping-rows structure-mapping-rows">{items.map((item,index)=><MappingRow key={item.source.id} item={item} state={state} rootId={unit.id} index={index} disabled={actions.disabled} compact
           onMap={value=>void map(value)} onExclude={value=>void exclude(value)} onOpen={value=>actions.onOpen(value,unit.id)}/>)}</ul>
       </SortableContext>
     </DndContext>

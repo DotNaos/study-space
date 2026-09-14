@@ -3,10 +3,15 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { StructureRow } from "../src/StructureRow";
 import { StructurePicker } from "../src/StructurePicker";
 import { PipelineStructure } from "../src/PipelineStructure";
-import type { PipelineState, PipelineUnit } from "../src/pipeline-api";
+import type { PipelineSourceView, PipelineState, PipelineUnit } from "../src/pipeline-api";
 
 const unit: PipelineUnit = { id: "a".repeat(32), title: "Block 1", parentId: null, order: 0, kind: "script", hidden: false };
 const noop = () => {};
+
+const nestedSource: PipelineSourceView = {
+  source: { id: "1".repeat(64), sectionId: 10, moduleId: null, name: "2026_CDS303_Block1_1.pdf", kind: "file", mimeType: "application/pdf", sourceVersion: "f".repeat(64), materialRevision: null, acquisition: "not-imported", problem: null, warnings: [], text: "", studyUrl: null, present: true, suggestedRole: "teaching" },
+  status: "pending", decision: null, sectionIds: [], exerciseIds: [],
+};
 const renderRow = (item: PipelineUnit, units = [item], disabled = false) => renderToStaticMarkup(
   <ul><StructureRow unit={item} units={units} disabled={disabled} expanded={false} onToggle={noop}
     onChange={noop} onHide={noop} onOpen={noop} onParent={noop} onKind={noop} /></ul>,
@@ -64,4 +69,16 @@ test("combined structure surface exposes content next and optional focus mode", 
   expect(html).toContain(">Fokus<");
   expect(html).toContain("Inhalt");
   expect(html).not.toMatch(/<(details|summary)\b/);
+});
+
+
+test("nested sources use their containing section instead of repeating a target picker", () => {
+  const nestedUnit = { ...unit, sourceGroupId: 10 };
+  const state = { courseId: 7, revision: 1, units: [nestedUnit], suggestedUnits: [], sources: [nestedSource], history: [], pending: 1, blocked: 0, groups: [{ id: 10, title: "Block 1", order: 0, parentId: null }], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
+    onOpenSource={noop} onFocus={noop} onContent={noop} />);
+  expect(html).toContain('data-compact="true"');
+  expect(html).toContain("2026_CDS303_Block1_1.pdf");
+  expect(html).not.toContain('class="mapping-handle"');
+  expect(html).not.toContain('class="mapping-value"');
 });
