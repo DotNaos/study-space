@@ -36,21 +36,20 @@ public static class ReviewedGeneration
         var visible = PipelineService.OrderedUnits(units)
             .Where(unit => LearningStructure.Kind(unit) == "script" && !LearningStructure.IsHidden(unit, units)).ToArray();
         var visibleIds = visible.Select(unit => unit.Id).ToHashSet();
+        var knownIds = units.Select(unit => unit.Id).ToHashSet();
         var roots = visible.Where(unit => unit.ParentId is null || !visibleIds.Contains(unit.ParentId)).ToArray();
         var output = new List<LearningSection>();
-        var included = new HashSet<string>();
 
         foreach (var root in roots)
         {
             var descendants = visible.Where(unit => Root(unit, units)?.Id == root.Id).ToArray();
             var section = AssembleRoot(root, descendants, items, tasks);
             if (section is not null) output.Add(section);
-            foreach (var unit in descendants) included.Add(unit.Id);
         }
 
         // Frozen reviewed inputs should always point at a frozen structure unit. Preserve content rather than
         // silently dropping it if an older or partially migrated version violates that invariant.
-        var unmatched = items.Where(item => item.Chunk.UnitId is null || !included.Contains(item.Chunk.UnitId))
+        var unmatched = items.Where(item => item.Chunk.UnitId is null || !knownIds.Contains(item.Chunk.UnitId))
             .GroupBy(item => item.Chunk.UnitId);
         output.AddRange(AssembleFlatGroups(unmatched, tasks));
         return output.ToArray();
