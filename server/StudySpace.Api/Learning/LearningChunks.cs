@@ -101,6 +101,9 @@ public static class LearningChunks
         The app resolves these short labels to the exact immutable original source; never invent or expand a label.
         If a visual cannot be read confidently, explicitly mark that part unclear; never invent its values or solution.
         Preserve important definitions, explanations, equations (LaTeX), tables and distinctions.
+        SectionName is the reviewed learning unit chosen by the user. Treat that unit as a fixed high-level container.
+        Generate only coherent subsections within this unit; do not rename, split, merge or reorder high-level learning
+        units. The application assembles the course outline from the reviewed structure after source processing.
         Organize two to six coherent readable sections where useful; consolidate related blocks instead of
         creating a section or exercise for each tiny block. Do not repeat the same explanation across sections.
         Use only supported claims; explicitly describe missing/unclear information instead of inventing it.
