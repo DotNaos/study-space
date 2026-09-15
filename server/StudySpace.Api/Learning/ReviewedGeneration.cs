@@ -76,13 +76,14 @@ public static class ReviewedGeneration
         var spans = new List<ScriptSpan>();
         var refs = new List<SourceRef>();
         var depths = orderedUnits.ToDictionary(unit => unit.Id, unit => Depth(unit, root.Id, orderedUnits));
+        var contentUnits = items.Where(HasTeachingContent).Select(item => item.Chunk.UnitId).OfType<string>().ToHashSet();
 
         foreach (var unit in orderedUnits)
         {
             var unitItems = items.Where(item => item.Chunk.UnitId == unit.Id).ToArray();
-            if (unitItems.Length == 0) continue;
             var depth = depths[unit.Id];
-            if (depth > 0 && unitItems.Any(HasTeachingContent))
+            var subtreeHasContent = orderedUnits.Any(candidate => contentUnits.Contains(candidate.Id) && IsWithin(candidate, unit.Id, orderedUnits));
+            if (depth > 0 && subtreeHasContent)
                 AppendHeading(text, Math.Min(6, depth + 1), LearningStructure.DisplayTitle(unit));
             AppendUnit(text, spans, refs, unitItems, tasks, Math.Min(6, depth + 2));
         }
@@ -107,6 +108,21 @@ public static class ReviewedGeneration
             current = parent;
         }
         return depth;
+    }
+
+    private static bool IsWithin(PipelineUnit unit, string ancestorId, PipelineUnit[] units)
+    {
+        var current = unit;
+        var visited = new HashSet<string>();
+        while (visited.Add(current.Id))
+        {
+            if (current.Id == ancestorId) return true;
+            if (current.ParentId is not { } parentId) return false;
+            var parent = units.FirstOrDefault(candidate => candidate.Id == parentId);
+            if (parent is null) return false;
+            current = parent;
+        }
+        return false;
     }
 
     private static bool HasTeachingContent((LearningChunk Chunk, ChunkResult Result) item) =>
