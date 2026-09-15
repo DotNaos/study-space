@@ -77,7 +77,7 @@ public sealed class LearningWorker(LearningStore store, LearningService service,
             LearningExercise[] exercises;
             if (state.InputPlanRevision is not null)
             {
-                (sections, exercises) = ReviewedGeneration.Assemble(chunks, results);
+                (sections, exercises) = ReviewedGeneration.Assemble(chunks, results, state.InputUnits);
                 outline = new("Kursskript", "Bestätigte Reihenfolge der Lerneinheiten", chunks.Select(chunk => chunk.Id).Distinct().ToArray());
                 state.Warnings = state.Warnings.Concat(ReviewedGeneration.Warnings(chunks, results)).Distinct().ToArray();
                 state.Partial |= state.Warnings.Length > 0;
