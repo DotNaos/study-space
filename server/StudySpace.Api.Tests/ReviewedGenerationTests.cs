@@ -9,22 +9,23 @@ public sealed class ReviewedGenerationTests
     {
         var rootA = new PipelineUnit("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Block A", null, 0, "script");
         var childA = new PipelineUnit("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "A.1 Grundlagen", rootA.Id, 0, "script");
+        var leafA = new PipelineUnit("dddddddddddddddddddddddddddddddd", "A.1.1 Sequenzen", childA.Id, 0, "script");
         var rootB = new PipelineUnit("cccccccccccccccccccccccccccccccc", "Block B", null, 1, "script");
-        var units = new[] { rootA, childA, rootB };
+        var units = new[] { rootA, childA, leafA, rootB };
         var source = new SourceRef("material", "revision", "block", 1);
 
-        // Deliberately put B before A to prove the saved learning structure, not source/chunk order,
-        // owns the high-level course outline.
+        // Deliberately put B before A and leave the intermediate A.1 unit without direct source content.
+        // The saved learning structure, not source/chunk order or source granularity, owns the outline.
         LearningChunk[] chunks =
         [
             new("chunk-b", "Source B", "Block B", [new(source, "B")]) { UnitId = rootB.Id },
-            new("chunk-a1", "Source A1", "A.1 Grundlagen", [new(source, "A1")]) { UnitId = childA.Id },
+            new("chunk-a11", "Source A11", "A.1.1 Sequenzen", [new(source, "A11")]) { UnitId = leafA.Id },
             new("chunk-a", "Source A", "Block A", [new(source, "A")]) { UnitId = rootA.Id }
         ];
         ChunkResult[] results =
         [
             Result("Details B", "Inhalt B", source),
-            Result("Details A.1", "Inhalt A.1", source),
+            Result("Details A.1.1", "Inhalt A.1.1", source),
             Result("Details A", "Inhalt A", source)
         ];
 
@@ -34,7 +35,8 @@ public sealed class ReviewedGenerationTests
         Assert.Equal(["Block A", "Block B"], sections.Select(section => section.Title));
         Assert.Contains("## Details A", sections[0].Markdown);
         Assert.Contains("## A.1 Grundlagen", sections[0].Markdown);
-        Assert.Contains("### Details A.1", sections[0].Markdown);
+        Assert.Contains("### A.1.1 Sequenzen", sections[0].Markdown);
+        Assert.Contains("#### Details A.1.1", sections[0].Markdown);
         Assert.DoesNotContain("A.1 Grundlagen", sections[1].Markdown);
     }
 
