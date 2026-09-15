@@ -1,51 +1,173 @@
 using System.Text;
 using System.Text.Json;
+using StudySpace.Api.Pipeline;
 namespace StudySpace.Api.Learning;
 
 public static class ReviewedGeneration
 {
-    public static (LearningSection[] Sections, LearningExercise[] Exercises) Assemble(LearningChunk[] chunks, IReadOnlyList<ChunkResult> results)
+    public static (LearningSection[] Sections, LearningExercise[] Exercises) Assemble(
+        LearningChunk[] chunks, IReadOnlyList<ChunkResult> results, PipelineUnit[]? units = null)
     {
-        var sections = new List<LearningSection>(); var tasks = new List<LearningExercise>();
-        foreach (var unit in chunks.Select((chunk, index) => (Chunk: chunk, Result: results[index])).GroupBy(item => item.Chunk.UnitId))
+        var items = chunks.Select((chunk, index) => (Chunk: chunk, Result: results[index])).ToArray();
+        var tasks = new List<LearningExercise>();
+        foreach (var item in items)
+            if (!item.Chunk.Roles.Contains("solution"))
+                foreach (var task in item.Result.Exercises)
+                {
+                    // The same immutable source task used by two units is one occurrence,
+                    // but text similarity across DIFFERENT sources never silently merges tasks.
+                    var identity = JsonSerializer.Serialize(new { task.Prompt, Sources = task.Sources.OrderBy(s => s.MaterialId).ThenBy(s => s.BlockId) });
+                    var taskId = LearningChunks.Hash("reviewed-task:" + identity);
+                    tasks.Add(task with { Id = taskId, SolutionOrigin = "agent", UnitIds = [item.Chunk.UnitId!] });
+                }
+
+        var sections = units is { Length: > 0 }
+            ? AssembleStructure(items, units, tasks)
+            : AssembleFlat(items, tasks);
+        return (sections, tasks.GroupBy(task => task.Id).Select(group => group.First() with
         {
-            var text = new StringBuilder(); var spans = new List<ScriptSpan>(); var refs = new List<SourceRef>();
-            foreach (var item in unit)
+            UnitIds = group.SelectMany(task => task.UnitIds ?? []).Distinct().ToArray()
+        }).ToArray());
+    }
+
+    private static LearningSection[] AssembleStructure(
+        (LearningChunk Chunk, ChunkResult Result)[] items, PipelineUnit[] units, IReadOnlyList<LearningExercise> tasks)
+    {
+        var visible = PipelineService.OrderedUnits(units)
+            .Where(unit => LearningStructure.Kind(unit) == "script" && !LearningStructure.IsHidden(unit, units)).ToArray();
+        var visibleIds = visible.Select(unit => unit.Id).ToHashSet();
+        var roots = visible.Where(unit => unit.ParentId is null || !visibleIds.Contains(unit.ParentId)).ToArray();
+        var output = new List<LearningSection>();
+        var included = new HashSet<string>();
+
+        foreach (var root in roots)
+        {
+            var descendants = visible.Where(unit => Root(unit, units)?.Id == root.Id).ToArray();
+            var section = AssembleRoot(root, descendants, items, tasks);
+            if (section is not null) output.Add(section);
+            foreach (var unit in descendants) included.Add(unit.Id);
+        }
+
+        // Frozen reviewed inputs should always point at a frozen structure unit. Preserve content rather than
+        // silently dropping it if an older or partially migrated version violates that invariant.
+        var unmatched = items.Where(item => item.Chunk.UnitId is null || !included.Contains(item.Chunk.UnitId))
+            .GroupBy(item => item.Chunk.UnitId);
+        output.AddRange(AssembleFlatGroups(unmatched, tasks));
+        return output.ToArray();
+    }
+
+    private static PipelineUnit? Root(PipelineUnit unit, PipelineUnit[] units)
+    {
+        var current = unit;
+        var visited = new HashSet<string>();
+        while (current.ParentId is { } parentId && visited.Add(current.Id))
+        {
+            var parent = units.FirstOrDefault(candidate => candidate.Id == parentId);
+            if (parent is null || LearningStructure.Kind(parent) != "script" || LearningStructure.IsHidden(parent, units)) break;
+            current = parent;
+        }
+        return current;
+    }
+
+    private static LearningSection? AssembleRoot(
+        PipelineUnit root, PipelineUnit[] orderedUnits, (LearningChunk Chunk, ChunkResult Result)[] items,
+        IReadOnlyList<LearningExercise> tasks)
+    {
+        var text = new StringBuilder();
+        var spans = new List<ScriptSpan>();
+        var refs = new List<SourceRef>();
+        var depths = orderedUnits.ToDictionary(unit => unit.Id, unit => Depth(unit, root.Id, orderedUnits));
+
+        foreach (var unit in orderedUnits)
+        {
+            var unitItems = items.Where(item => item.Chunk.UnitId == unit.Id).ToArray();
+            if (unitItems.Length == 0) continue;
+            var depth = depths[unit.Id];
+            if (depth > 0 && unitItems.Any(HasTeachingContent))
+                AppendHeading(text, Math.Min(6, depth + 1), LearningStructure.DisplayTitle(unit));
+            AppendUnit(text, spans, refs, unitItems, tasks, Math.Min(6, depth + 2));
+        }
+
+        if (text.Length == 0) return null;
+        var markdown = text.ToString().Trim();
+        LearningMdx.Parse(markdown);
+        return new(LearningChunks.Hash("learning-unit:" + root.Id), LearningStructure.DisplayTitle(root), markdown,
+            refs.Distinct().ToArray(), new(LearningChunks.Hash(markdown), spans.ToArray()), "mdx", root.Id);
+    }
+
+    private static int Depth(PipelineUnit unit, string rootId, PipelineUnit[] units)
+    {
+        var depth = 0;
+        var current = unit;
+        var visited = new HashSet<string>();
+        while (current.Id != rootId && current.ParentId is { } parentId && visited.Add(current.Id))
+        {
+            var parent = units.FirstOrDefault(candidate => candidate.Id == parentId);
+            if (parent is null) break;
+            depth++;
+            current = parent;
+        }
+        return depth;
+    }
+
+    private static bool HasTeachingContent((LearningChunk Chunk, ChunkResult Result) item) =>
+        item.Chunk.Roles.Contains("teaching") && (item.Result.Sections.Length > 0 || item.Result.Exercises.Length > 0);
+
+    private static void AppendHeading(StringBuilder text, int level, string title)
+    {
+        if (text.Length > 0) text.Append("\n\n");
+        text.Append(new string('#', level)).Append(' ').Append(title).Append("\n\n");
+    }
+
+    private static void AppendUnit(StringBuilder text, List<ScriptSpan> spans, List<SourceRef> refs,
+        IEnumerable<(LearningChunk Chunk, ChunkResult Result)> items, IReadOnlyList<LearningExercise> tasks, int headingLevel)
+    {
+        foreach (var item in items)
+        {
+            if (!item.Chunk.Roles.Contains("teaching")) continue;
+            foreach (var section in item.Result.Sections)
             {
-                if (item.Chunk.Roles.Contains("teaching"))
-                    foreach (var section in item.Result.Sections)
-                    {
-                        if (text.Length > 0) text.Append("\n\n");
-                        text.Append("## ").Append(section.Title).Append("\n\n");
-                        var start = text.Length; text.Append(section.Markdown); refs.AddRange(section.Sources);
-                        if (section.Provenance is { } provenance && provenance.MarkdownHash == LearningChunks.Hash(section.Markdown))
-                            spans.AddRange(provenance.Spans.Select(span => span with { Start = span.Start + start, End = span.End + start }));
-                    }
-                if (!item.Chunk.Roles.Contains("solution"))
-                    foreach (var task in item.Result.Exercises)
-                    {
-                        // The same immutable source task used by two units is one occurrence,
-                        // but text similarity across DIFFERENT sources never silently merges tasks.
-                        var identity = JsonSerializer.Serialize(new { task.Prompt, Sources = task.Sources.OrderBy(s => s.MaterialId).ThenBy(s => s.BlockId) });
-                        var taskId = LearningChunks.Hash("reviewed-task:" + identity);
-                        tasks.Add(task with { Id = taskId, SolutionOrigin = "agent", UnitIds = [item.Chunk.UnitId!] });
-                        if (item.Chunk.Roles.Contains("teaching"))
-                        {
-                            text.Append("\n\n"); var offset = text.Length; var reference = "<TaskRef id=\"" + taskId + "\" />";
-                            text.Append(reference).Append("\n\n"); refs.AddRange(task.Sources);
-                            spans.Add(new(offset, offset + reference.Length, reference, task.Sources, "source"));
-                        }
-                    }
+                AppendHeading(text, headingLevel, section.Title);
+                var start = text.Length;
+                text.Append(section.Markdown);
+                refs.AddRange(section.Sources);
+                if (section.Provenance is { } provenance && provenance.MarkdownHash == LearningChunks.Hash(section.Markdown))
+                    spans.AddRange(provenance.Spans.Select(span => span with { Start = span.Start + start, End = span.End + start }));
             }
-            if (text.Length > 0)
+            foreach (var task in item.Result.Exercises)
             {
-                var markdown = text.ToString();
-                LearningMdx.Parse(markdown);
-                sections.Add(new(LearningChunks.Hash("learning-unit:" + unit.Key), unit.First().Chunk.SectionName, markdown,
-                    refs.Distinct().ToArray(), new(LearningChunks.Hash(markdown), spans.ToArray()), "mdx", unit.Key));
+                var identity = JsonSerializer.Serialize(new { task.Prompt, Sources = task.Sources.OrderBy(s => s.MaterialId).ThenBy(s => s.BlockId) });
+                var taskId = LearningChunks.Hash("reviewed-task:" + identity);
+                if (!tasks.Any(candidate => candidate.Id == taskId)) continue;
+                if (text.Length > 0) text.Append("\n\n");
+                var offset = text.Length;
+                var reference = "<TaskRef id=\"" + taskId + "\" />";
+                text.Append(reference).Append("\n\n");
+                refs.AddRange(task.Sources);
+                spans.Add(new(offset, offset + reference.Length, reference, task.Sources, "source"));
             }
         }
-        return (sections.ToArray(), tasks.GroupBy(task => task.Id).Select(group => group.First() with { UnitIds = group.SelectMany(task => task.UnitIds ?? []).Distinct().ToArray() }).ToArray());
+    }
+
+    private static LearningSection[] AssembleFlat(
+        (LearningChunk Chunk, ChunkResult Result)[] items, IReadOnlyList<LearningExercise> tasks) =>
+        AssembleFlatGroups(items.GroupBy(item => item.Chunk.UnitId), tasks).ToArray();
+
+    private static IEnumerable<LearningSection> AssembleFlatGroups(
+        IEnumerable<IGrouping<string?, (LearningChunk Chunk, ChunkResult Result)>> groups, IReadOnlyList<LearningExercise> tasks)
+    {
+        foreach (var unit in groups)
+        {
+            var text = new StringBuilder();
+            var spans = new List<ScriptSpan>();
+            var refs = new List<SourceRef>();
+            AppendUnit(text, spans, refs, unit, tasks, 2);
+            if (text.Length == 0) continue;
+            var markdown = text.ToString().Trim();
+            LearningMdx.Parse(markdown);
+            yield return new(LearningChunks.Hash("learning-unit:" + unit.Key), unit.First().Chunk.SectionName, markdown,
+                refs.Distinct().ToArray(), new(LearningChunks.Hash(markdown), spans.ToArray()), "mdx", unit.Key);
+        }
     }
 
     public static LearningSolution[] Solutions(LearningChunk[] chunks, IReadOnlyList<ChunkResult> results) => chunks.SelectMany((chunk, index) =>
