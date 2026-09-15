@@ -63,7 +63,7 @@ public sealed class ReviewedGenerationTests
         Assert.Single(sections);
         Assert.Equal(root.Id, sections[0].UnitId);
         Assert.Single(exercises);
-        Assert.Equal([tasks.Id], exercises[0].UnitIds);
+        Assert.Equal([tasks.Id], exercises[0].UnitIds!);
     }
 
     private static ChunkResult Result(string title, string markdown, SourceRef source) =>
