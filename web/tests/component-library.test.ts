@@ -38,6 +38,15 @@ test("generic Study Space controls come from the DotNaos component library", () 
   const activities = read("CourseActivities.tsx");
   expect(activities).toContain("Icon.File");
   expect(activities).not.toContain('from "lucide-react"');
+
+  const authoring = read("ContentAuthoringView.tsx");
+  expect(authoring).toContain('import { Composer, type AiOption } from "./ui-ai"');
+  expect(authoring).toContain("<Composer");
+  expect(authoring).not.toContain('from "@dotnaos/ui/ai"');
+
+  const ai = read("ui-ai.ts");
+  expect(ai).toContain('import "./ui-ai.css"');
+  expect(ai).toContain('export { Composer } from "@dotnaos/ui/ai/chat"');
 });
 
 test("native form primitives are not duplicated in app source", () => {
