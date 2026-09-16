@@ -6,6 +6,7 @@ public static class ContentEndpoints
     {
         services.AddSingleton<ContentStore>();
         services.AddSingleton<ContentService>();
+        services.AddSingleton<ContentAgentService>();
         return services;
     }
 
@@ -18,5 +19,7 @@ public static class ContentEndpoints
         group.MapGet("/blocks/{blockId}/revisions/{revisionId}", (long courseId, string blockId, string revisionId, ContentService service, CancellationToken ct) => service.Revision(courseId, blockId, revisionId, ct));
         group.MapPut("/blocks/{blockId}", (long courseId, string blockId, ContentEditRequest request, ContentService service, CancellationToken ct) => service.Edit(courseId, blockId, request, ct));
         group.MapPost("/blocks/{blockId}/reset", (long courseId, string blockId, ContentResetRequest request, ContentService service, CancellationToken ct) => service.Reset(courseId, blockId, request, ct));
+        group.MapPost("/blocks/{blockId}/undo", (long courseId, string blockId, ContentUndoRequest request, ContentService service, CancellationToken ct) => service.Undo(courseId, blockId, request, ct));
+        group.MapPost("/blocks/{blockId}/agent", (long courseId, string blockId, ContentAgentRequest request, ContentAgentService service, CancellationToken ct) => service.Edit(courseId, blockId, request, ct));
     }
 }

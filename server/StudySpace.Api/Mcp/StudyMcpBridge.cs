@@ -9,7 +9,7 @@ namespace StudySpace.Api.Mcp;
 
 public static class StudyMcpBridge
 {
-    private const int MaxRequestBytes = 64 * 1024;
+    private const int MaxRequestBytes = 128 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     public static async Task RunAsync(string[] args)
@@ -21,7 +21,7 @@ public static class StudyMcpBridge
         {
             BaseAddress = upstream,
             Timeout = TimeSpan.FromSeconds(30),
-        }, Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_FEEDBACK_WRITES") == "true", Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_PIPELINE_WRITES") == "true"));
+        }, Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_FEEDBACK_WRITES") == "true", Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_PIPELINE_WRITES") == "true", Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_CONTENT_WRITES") == "true"));
         var app = builder.Build();
         app.Use(async (context, next) =>
         {
@@ -136,7 +136,7 @@ public static class StudyMcpBridge
         IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
 }
 
-public sealed partial class StudyMcpTools(HttpClient client, bool allowFeedbackWrites = false, bool allowPipelineWrites = false)
+public sealed partial class StudyMcpTools(HttpClient client, bool allowFeedbackWrites = false, bool allowPipelineWrites = false, bool allowContentWrites = false)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const int DefaultItems = 20;
@@ -271,10 +271,12 @@ public sealed partial class StudyMcpTools(HttpClient client, bool allowFeedbackW
         object value = name switch
         {
             "study_pipeline" => await PipelineRead(arguments, ct),
+            "study_content" => await ContentRead(arguments, ct),
             "study_attempts" => await AttemptsRead(arguments, ct),
             "study_feedback" => await FeedbackWrite(arguments, ct),
             "study_pipeline_decide" => await PipelineWrite(arguments, false, ct),
             "study_pipeline_structure" => await PipelineWrite(arguments, true, ct),
+            "study_content_edit" => await ContentWrite(arguments, ct),
             "study_status" => await Status(ct),
             "study_courses" => await Courses(arguments, ct),
             "study_course" => await Course(arguments, ct),

@@ -31,11 +31,13 @@ import { ContentAuthoringView } from "./ContentAuthoringView";
 
 export function PipelineView({
   courseId,
+  courseName,
   version,
   onSource,
   onOpenLearning,
 }: {
   courseId: number;
+  courseName: string;
   version?: LearningVersion | null;
   onSource: (source: SourceSelection) => void;
   onOpenLearning: (target: LearningTarget) => void;
@@ -290,7 +292,7 @@ export function PipelineView({
       {!state ? (
         !error && <Loading label="Quellenstruktur wird gelesen …" />
       ) : route.kind === "content" ? (
-        <ContentAuthoringView courseId={courseId} pipeline={state}/>
+        <ContentAuthoringView courseId={courseId} courseName={courseName} pipeline={state}/>
       ) : combinedStructure ? (
         <PipelineStructure
           state={state}

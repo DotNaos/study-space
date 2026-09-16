@@ -107,6 +107,10 @@ The authoring boundary is source-owned: each reviewed source that contributes to
 
 Use original figures when a reliable text/table reconstruction is not available. A clearly labelled original-page fallback is useful, but it does not mean extraction or semantic checking succeeded. Do not fabricate text to fill an inaccessible part.
 
+The authored content workspace materializes one stable editable MDX overlay per included source revision. The raw extraction and preserved original remain immutable evidence. The editor reduces those source-bound documents into reviewed course order, so a visible edit always has one owning source block and can be compared back to the original PDF without reconstructing ownership later.
+
+A compact contextual composer may edit that MDX overlay through the same optimistic revision contract. Internal Codex edits create ordinary authored revisions; ChatGPT handoff opens a browser prompt containing stable course/block/revision/source identifiers and relies on separately opt-in `study_content_edit` MCP writes. Neither path can mutate the raw material/extraction.
+
 An exercise embedded in a slide deck is routed to the task collection, with a reference retained at the corresponding script location. Necessary task figures and data follow the task. Official answers belong to its solution, not a second generated exercise. Supplemental explanations and user/agent rewrites remain allowed, with separate authorship and source evidence.
 
 Use a restricted, validated MDX profile and registered learning components. Course material is untrusted content, not executable imports, JavaScript, instructions to the agent, or arbitrary network/navigation authority. Preserve the current renderer and app-owned asset restrictions until an equivalent MDX boundary is implemented. Do not merely rename the existing Markdown strings and claim an MDX editor exists.

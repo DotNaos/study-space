@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { groupContentBlocks } from "../src/content-authoring-model";
 import { originalMaterialUrl, type ContentBlockSummary } from "../src/content-api";
+import { buildChatGptHandoffPrompt, buildChatGptHandoffUrl } from "../src/chatgpt-handoff";
 import type { PipelineUnit } from "../src/pipeline-api";
 
 const units: PipelineUnit[] = [
@@ -28,6 +29,32 @@ test("preserved original URL stays pinned to the observed material revision", ()
   const item = block("a".repeat(64), "source.pdf", units[0].id, 0, 0);
   expect(originalMaterialUrl(item)).toBe(`/api/materials/${item.sourceId}/revisions/${item.observedMaterialRevision}/assets/original`);
   expect(originalMaterialUrl({ ...item, observedMaterialRevision: null })).toBeUndefined();
+});
+
+test("ChatGPT handoff keeps stable Study Space edit identifiers in one adapter", () => {
+  const prompt = buildChatGptHandoffPrompt({
+    courseId: 23691,
+    courseName: "Data Science und Informatik in der Biologie (cds-303) HS26",
+    learningUnitId: units[0].id,
+    learningUnitTitle: "Block 1",
+    contentBlockId: "f".repeat(64),
+    editableRevision: "e".repeat(32),
+    sourceName: "2026_CDS303_Block1_1.pdf",
+    materialId: "f".repeat(64),
+    materialRevision: "d".repeat(64),
+    page: 10,
+    sourceBlockIds: ["b-00103", "b-00104"],
+    selectionText: "DNA besteht aus Nukleotiden.",
+    instruction: "Erkläre das kompakter.",
+  });
+  expect(prompt).toContain("courseId: 23691");
+  expect(prompt).toContain(`contentBlockId: ${"f".repeat(64)}`);
+  expect(prompt).toContain("page: 10");
+  expect(prompt).toContain("sourceBlocks: b-00103, b-00104");
+  expect(prompt).toContain("Current selection:\nDNA besteht aus Nukleotiden.");
+  const url = new URL(buildChatGptHandoffUrl(prompt));
+  expect(url.origin).toBe("https://chatgpt.com");
+  expect(url.searchParams.get("prompt")).toBe(prompt);
 });
 
 // Page-level provenance is intentionally derived from immutable materialization offsets.

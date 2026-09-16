@@ -96,6 +96,29 @@ public sealed class ContentService(ContentStore content, LearningStore learning,
         }, ct);
     }
 
+    public async Task<ContentBlockView> Undo(long courseId, string blockId, ContentUndoRequest request, CancellationToken ct = default)
+    {
+        ValidateReason(request.Reason, request.Actor);
+        return await content.WithCourse(courseId, async state =>
+        {
+            var block = state.Blocks.SingleOrDefault(value => value.Id == blockId) ?? throw Missing();
+            if (block.CurrentRevisionId is null || block.CurrentRevisionId != request.ExpectedRevisionId) throw Conflict();
+            var current = await content.Revision(courseId, block.Id, block.CurrentRevisionId, ct) ?? throw Missing();
+            if (current.ParentRevisionId is null) throw new ApiFailure("content_undo_unavailable", "Für diesen Block gibt es keine vorherige bearbeitbare Revision.", 409);
+            var previous = await content.Revision(courseId, block.Id, current.ParentRevisionId, ct) ?? throw Missing();
+            var now = clock.GetUtcNow();
+            var next = previous with
+            {
+                Id = Guid.NewGuid().ToString("N"), ParentRevisionId = current.Id, CreatedAt = now,
+                Actor = request.Actor.Trim(), Reason = request.Reason.Trim(), Kind = "undo"
+            };
+            await content.WriteRevision(courseId, block.Id, next, ct);
+            block.CurrentRevisionId = next.Id;
+            await content.Save(state, ct);
+            return new ContentBlockView(Summary(block), next);
+        }, ct);
+    }
+
     public async Task<ContentBlockView> Reset(long courseId, string blockId, ContentResetRequest request, CancellationToken ct = default)
     {
         ValidateReason(request.Reason, request.Actor);
