@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Icon } from "@dotnaos/ui-base";
 import { MarkdownEditor, MarkdownRenderer } from "@dotnaos/ui/markdown-editor";
 import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
-import { AssistantComposer as Composer, type AiOption } from "@dotnaos/ui/ai";
+import { Composer, type AiOption } from "./ui-ai";
 import { AlertTriangle, Check, GitCompareArrows, PencilLine } from "lucide-react";
 import { message } from "./api";
 import type { PipelineState } from "./pipeline-api";
