@@ -41,8 +41,9 @@ type MappingActions = {
   onOpen: (item: PipelineSourceView, unitId: string) => void;
 };
 
-function NestedSources({state,unit,units,actions}:{state:PipelineState;unit:PipelineUnit;units:PipelineUnit[];actions:MappingActions}) {
-  const base=useMemo(()=>orderedSources(state,sourceItems(state,units,unit)),[state.revision,unit.id,units]);
+function NestedSources({state,unit,units,actions,showHidden}:{state:PipelineState;unit:PipelineUnit;units:PipelineUnit[];actions:MappingActions;showHidden:boolean}) {
+  const all=useMemo(()=>orderedSources(state,sourceItems(state,units,unit)),[state.revision,unit.id,units]);
+  const base=useMemo(()=>showHidden?all:all.filter(item=>item.decision?.disposition!=="exclude"),[all,showHidden]);
   const [order,setOrder]=useState(()=>base.map(item=>item.source.id));
   useEffect(()=>setOrder(base.map(item=>item.source.id)),[base.map(item=>item.source.id).join("|")]);
   const items=order.map(id=>base.find(item=>item.source.id===id)).filter((item):item is PipelineSourceView=>!!item);
@@ -77,7 +78,7 @@ function NestedSources({state,unit,units,actions}:{state:PipelineState;unit:Pipe
   if(!items.length) return null;
   const open=items.filter(item=>["pending","stale","partial","not-returned"].includes(item.status)).length;
   return <div className="structure-source-block">
-    <div className="structure-source-head"><span>{items.length} Quellen{open?` · ${open} offen`:""}</span>{proposals.length>0&&<Button size="sm" variant="ghost" icon="sparkles" label={`Vorschläge ${proposals.length}`} disabled={actions.disabled} onPress={()=>void acceptProposals()}/>}</div>
+    <div className="structure-source-head"><span>{all.length} Quellen{open?` · ${open} offen`:""}</span>{proposals.length>0&&<Button size="sm" variant="ghost" icon="sparkles" label={`Vorschläge ${proposals.length}`} disabled={actions.disabled} onPress={()=>void acceptProposals()}/>}</div>
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={event=>void dragEnd(event)}>
       <SortableContext items={items.map(item=>item.source.id)} strategy={verticalListSortingStrategy}>
         <ul className="mapping-rows structure-mapping-rows">{items.map((item,index)=><MappingRow key={item.source.id} item={item} state={state} rootId={unit.id} index={index} disabled={actions.disabled} compact
@@ -114,14 +115,27 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
 
   useEffect(()=>{if(!focusId)return;const input=listRef.current?.querySelector<HTMLInputElement>(`[data-unit-id="${focusId}"] input`);input?.focus();input?.select();},[focusId]);
   async function syncStructure(){
-    if(mappingBlocked)return false;
-    if(!await queue.flush(true))return false;
-    const remote=await readPipeline(state.courseId);mappings.accept(remote);onState(remote);return true;
+    if(mappingBlocked)return null;
+    if(!await queue.flush(true))return null;
+    const remote=await readPipeline(state.courseId);mappings.accept(remote);onState(remote);return remote;
   }
   async function flushAll(){if(!await syncStructure())return false;return mappings.flush();}
   useEffect(()=>{onGuard?.(flushAll);return()=>onGuard?.(null);},[onGuard,queue,mappings]);
   async function compare(){try{const remote=await readPipeline(state.courseId);queue.accept(remote);mappings.accept(remote);if(queue.getSnapshot().status==="conflict")setConflict(remote);setConflictError("");}catch{setConflictError("Server nicht erreichbar. Dein Entwurf bleibt erhalten.");}}
-  async function beforeMapping(){return syncStructure();}
+  async function beforeMapping(){return !!await syncStructure();}
+  async function setAllIncluded(included:boolean){
+    if(disabled||mappingBlocked)return;
+    setUnits(current=>current.map(unit=>({...unit,hidden:!included})));
+    const remote=await syncStructure();
+    if(!remote)return;
+    const changes:MappingItem[]=[];
+    for(const item of remote.sources.filter(item=>item.source.present&&!!sourceOwner(remote.units,item))){
+      const excluded=item.decision?.disposition==="exclude";
+      if(included&&excluded)changes.push({sourceId:item.source.id,sourceVersion:item.source.sourceVersion,disposition:"clear",uses:[]});
+      else if(!included&&!excluded)changes.push({sourceId:item.source.id,sourceVersion:item.source.sourceVersion,disposition:"exclude",uses:[]});
+    }
+    if(changes.length){mappings.enqueue(changes);await mappings.flush();}
+  }
   async function openContent(){if(await flushAll())onContent();}
   function change(id:string,patch:Partial<PipelineUnit>){setUnits(current=>current.map(unit=>unit.id===id?{...unit,...patch}:unit));}
   function add(kind:"script"|"tasks"){
@@ -135,12 +149,17 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
 
   const roots=units.filter(unit=>unit.parentId===null&&unitKind(unit)==="script"&&(showHidden||!unitHidden(unit,units))).sort((a,b)=>a.order-b.order);
   const standaloneTasks=units.filter(unit=>unit.parentId===null&&unitKind(unit)==="tasks"&&!linkedTaskOwner(units,unit)&&(showHidden||!unitHidden(unit,units))).sort((a,b)=>a.order-b.order);
-  const hiddenCount=units.filter(unit=>unitHidden(unit,units)).length;
+  const hiddenUnitCount=units.filter(unit=>unitHidden(unit,units)).length;
+  const ownedSources=state.sources.filter(item=>!!sourceOwner(units,item));
+  const excludedSourceCount=ownedSources.filter(item=>item.decision?.disposition==="exclude").length;
+  const hiddenCount=hiddenUnitCount+excludedSourceCount;
+  const canCheckAll=hiddenCount>0;
+  const canUncheckAll=units.some(unit=>!unitHidden(unit,units))||ownedSources.some(item=>item.decision?.disposition!=="exclude");
   const disabled=busy||mappingBusy;
   const actions:MappingActions={disabled:busy||structureBusy||mappingBlocked,enqueue:mappings.enqueue,before:beforeMapping,onOpen:onOpenSource};
 
   function row(unit:PipelineUnit,children?:ReactNode){
-    const sources=sourceItems(state,units,unit);const childUnits=units.filter(item=>item.parentId===unit.id&&(showHidden||!unitHidden(item,units)));
+    const sources=sourceItems(state,units,unit).filter(item=>showHidden||item.decision?.disposition!=="exclude");const childUnits=units.filter(item=>item.parentId===unit.id&&(showHidden||!unitHidden(item,units)));
     const taskChildren=unitKind(unit)==="script"?units.filter(item=>unitKind(item)==="tasks"&&linkedTaskOwner(units,item)===unit.id&&(showHidden||!unitHidden(item,units))):[];
     const nestedCount=sources.length+childUnits.length+taskChildren.length;
     return <StructureRow key={unit.id} unit={unit} units={units} disabled={disabled} expanded={expanded===unit.id} onToggle={()=>setExpanded(expanded===unit.id?undefined:unit.id)}
@@ -152,7 +171,7 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
   function level(items:PipelineUnit[],key:string){
     if(!items.length)return null;
     return <DndContext key={key} sensors={structureSensors} collisionDetection={closestCenter} onDragEnd={reorder}><SortableContext items={items.map(unit=>unit.id)} strategy={verticalListSortingStrategy}><ul className="structure-list structure-tree-level">{items.map(unit=>{
-      const sources=<NestedSources state={state} unit={unit} units={units} actions={actions}/>;
+      const sources=<NestedSources state={state} unit={unit} units={units} actions={actions} showHidden={showHidden}/>;
       const childScripts=units.filter(item=>item.parentId===unit.id&&unitKind(item)===unitKind(unit)&&(showHidden||!unitHidden(item,units))).sort((a,b)=>a.order-b.order);
       const tasks=unitKind(unit)==="script"?units.filter(item=>unitKind(item)==="tasks"&&linkedTaskOwner(units,item)===unit.id&&(showHidden||!unitHidden(item,units))).sort((a,b)=>a.order-b.order):[];
       const nested=<>{sources}{childScripts.length?level(childScripts,`${unit.id}-children`):null}{tasks.length?<div className="structure-task-branch"><div className="structure-branch-label">Aufgaben</div>{level(tasks,`${unit.id}-tasks`)}</div>:null}</>;
@@ -162,7 +181,7 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
 
   return <div className="pipeline-structure pipeline-structure-nested">
     <div className="prepare-section-heading"><h2>Struktur</h2><div className="structure-heading-actions"><StructureSaveStatus status={mappingBusy?"saving":mappings.snapshot.status==="saved"?status:mappings.snapshot.status} onRetry={()=>{void retry();mappings.retry();}} onConflict={()=>void compare()}/></div></div>
-    <div className="structure-toolbar"><div className="structure-view-tabs" role="group" aria-label="Strukturansicht"><button type="button" data-active><ListTree size={16}/><span>Verschachtelt</span></button><button type="button" onClick={onFocus}><Focus size={16}/><span>Fokus</span></button></div><button type="button" className="structure-hidden-toggle" role="switch" aria-checked={showHidden} onClick={()=>setShowHidden(value=>!value)}><span className="structure-hidden-switch" aria-hidden="true"><span/></span><span>Ausgeblendete anzeigen{hiddenCount?` (${hiddenCount})`:""}</span></button></div>
+    <div className="structure-toolbar"><div className="structure-view-tabs" role="group" aria-label="Strukturansicht"><button type="button" data-active><ListTree size={16}/><span>Verschachtelt</span></button><button type="button" onClick={onFocus}><Focus size={16}/><span>Fokus</span></button></div><div className="structure-toolbar-actions"><Button size="sm" variant="ghost" label="Alle auswählen" disabled={disabled||!canCheckAll} onPress={()=>void setAllIncluded(true)}/><Button size="sm" variant="ghost" label="Alle abwählen" disabled={disabled||!canUncheckAll} onPress={()=>void setAllIncluded(false)}/><button type="button" className="structure-hidden-toggle" role="switch" aria-checked={showHidden} onClick={()=>setShowHidden(value=>!value)}><span className="structure-hidden-switch" aria-hidden="true"><span/></span><span>Ausgeblendete anzeigen{hiddenCount?` (${hiddenCount})`:""}</span></button></div></div>
     <div ref={listRef}>{level(roots,"script-roots")}{standaloneTasks.length?<div className="structure-standalone-tasks"><div className="structure-branch-label">Aufgaben</div>{level(standaloneTasks,"standalone-tasks")}</div>:null}</div>
     {!roots.length&&!standaloneTasks.length&&<p className="pipeline-muted">Noch keine sichtbare Struktur.</p>}
     <div className="structure-add-actions"><Button size="sm" variant="ghost" icon="plus" label="Lerneinheit" disabled={disabled} onPress={()=>add("script")}/><Button size="sm" variant="ghost" icon="plus" label="Aufgabe" disabled={disabled} onPress={()=>add("tasks")}/></div>

@@ -68,11 +68,12 @@
 @media (prefers-reduced-motion: reduce) { .structure-list > li { transition: none !important; } }
 
 .pipeline-view .pipeline-structure-nested { max-width: none; margin: 0; padding-left: clamp(.5rem, 1.5vw, 1.25rem); }
-.structure-heading-actions,.structure-mode-label,.structure-add-actions { display:flex; align-items:center; gap:.5rem; }
-.structure-visibility-checkbox { display:flex; align-items:center; justify-content:center; width:2.25rem; min-width:2.25rem; min-height:2.5rem; flex-shrink:0; }
-.structure-visibility-checkbox > label { position:relative; width:2.25rem; min-height:2.5rem; align-items:center; justify-content:center; gap:0; }
-.structure-visibility-checkbox > label > span:first-child { margin-top:0; }
-.structure-visibility-checkbox > label > span:last-child { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+.structure-heading-actions,.structure-mode-label,.structure-add-actions,.structure-toolbar-actions { display:flex; align-items:center; gap:.5rem; }
+.structure-toolbar-actions { justify-content:flex-end; min-width:0; }
+.structure-visibility-checkbox,.mapping-selection-checkbox { display:flex; align-items:center; justify-content:center; width:2.25rem; min-width:2.25rem; min-height:2.5rem; flex-shrink:0; }
+.structure-visibility-checkbox > label,.mapping-selection-checkbox > label { position:relative; width:2.25rem; min-height:2.5rem; align-items:center; justify-content:center; gap:0; }
+.structure-visibility-checkbox > label > span:first-child,.mapping-selection-checkbox > label > span:first-child { margin-top:0; }
+.structure-visibility-checkbox > label > span:last-child,.mapping-selection-checkbox > label > span:last-child { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
 .structure-hidden-toggle { display:flex; align-items:center; gap:.5rem; min-height:2.2rem; padding:.35rem .45rem; border:0; border-radius:.45rem; background:transparent; color:var(--color-text-muted); font-size:.72rem; cursor:pointer; white-space:nowrap; }
 .structure-hidden-toggle:hover { color:var(--color-text); background:var(--color-bg-1); }
 .structure-hidden-toggle:focus-visible { outline:2px solid var(--color-accent); outline-offset:2px; }
@@ -93,11 +94,11 @@
 .structure-source-block { min-width:0; padding:.15rem 0 .35rem; }
 .structure-source-head { display:flex; align-items:center; justify-content:space-between; min-height:1.75rem; gap:.5rem; padding:0 .25rem; color:var(--color-text-muted); font-size:.68rem; }
 .structure-source-head > button { white-space:nowrap; }
-.mapping-rows.structure-mapping-rows > li { grid-template-columns:minmax(0,1fr) 2rem 2rem; gap:.1rem; min-height:2.55rem; padding:.05rem 0; background:transparent; }
+.mapping-rows.structure-mapping-rows > li { grid-template-columns:2.25rem minmax(0,1fr) 2rem; gap:.1rem; min-height:2.55rem; padding:.05rem 0; background:transparent; }
 .structure-mapping-rows > li:last-child { border-bottom:0; }
-.structure-mapping-rows .mapping-source { grid-column:1; grid-row:1; gap:.5rem; min-height:2.25rem; padding:.3rem .25rem; }
+.structure-mapping-rows .mapping-selection-checkbox { grid-column:1; grid-row:1; min-height:2.35rem; }
+.structure-mapping-rows .mapping-source { grid-column:2; grid-row:1; gap:.5rem; min-height:2.25rem; padding:.3rem .25rem; }
 .structure-mapping-rows .mapping-source-icon { width:1.6rem; height:1.6rem; flex-basis:1.6rem; border-radius:.35rem; }
-.structure-mapping-rows .mapping-eye { grid-column:2; grid-row:1; width:2rem; height:2.35rem; }
 .structure-mapping-rows .mapping-more { grid-column:3; grid-row:1; width:2rem; height:2.35rem; }
 .structure-mapping-rows > li[data-status="stale"] .mapping-source { box-shadow:inset 2px 0 var(--color-warning); }
 .structure-mapping-rows > li[data-mapping="open"] .mapping-source-icon { color:var(--color-warning); }
@@ -108,6 +109,8 @@
 
 @media (max-width:700px) {
   .pipeline-view .pipeline-structure-nested { max-width:none; padding-left:0; }
+  .structure-toolbar { align-items:flex-start; }
+  .structure-toolbar-actions { flex-wrap:wrap; gap:.25rem; }
   .structure-inline-children { margin-left:1rem; padding-left:.4rem; }
   .structure-source-head { padding-left:0; }
   .structure-task-branch { margin-left:0; }
