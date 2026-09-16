@@ -1,12 +1,16 @@
 import { expect, test } from "bun:test";
-import { groupContentBlocks } from "../src/content-authoring-model";
+import { buildContentOutline } from "../src/content-authoring-model";
 import { originalMaterialUrl, type ContentBlockSummary } from "../src/content-api";
 import { buildChatGptHandoffPrompt, buildChatGptHandoffUrl } from "../src/chatgpt-handoff";
 import type { PipelineUnit } from "../src/pipeline-api";
 
 const units: PipelineUnit[] = [
   { id: "a".repeat(32), title: "Block 1", parentId: null, order: 0, kind: "script", hidden: false },
-  { id: "b".repeat(32), title: "Block 2", parentId: null, order: 1, kind: "script", hidden: false },
+  { id: "b".repeat(32), title: "Block 1.1", parentId: "a".repeat(32), order: 0, kind: "script", hidden: false },
+  { id: "c".repeat(32), title: "Block 2", parentId: null, order: 1, kind: "script", hidden: false },
+  { id: "d".repeat(32), title: "Aufgabe 1", parentId: null, order: 0, kind: "tasks", hidden: false, scriptUnitIds: ["a".repeat(32)] },
+  { id: "e".repeat(32), title: "Aufgabe 2", parentId: null, order: 1, kind: "tasks", hidden: false, scriptUnitIds: ["a".repeat(32), "c".repeat(32)] },
+  { id: "f".repeat(32), title: "Aufgabe zu Block 1.1", parentId: null, order: 2, kind: "tasks", hidden: false, scriptUnitIds: ["b".repeat(32)] },
 ];
 function block(id: string, name: string, unitId: string, unitOrder: number, order: number): ContentBlockSummary {
   return {
@@ -16,13 +20,38 @@ function block(id: string, name: string, unitId: string, unitOrder: number, orde
   };
 }
 
-test("content reducer groups stable source files by reviewed unit and source order", () => {
+test("content outline preserves script hierarchy, empty sections and source order", () => {
   const later = block("1".repeat(64), "B.pdf", units[0].id, 0, 2);
   const first = block("2".repeat(64), "A.pdf", units[0].id, 0, 1);
-  const secondUnit = block("3".repeat(64), "C.pdf", units[1].id, 1, 0);
-  const groups = groupContentBlocks([later, secondUnit, first], units);
-  expect(groups.map(group => group.unitId)).toEqual([units[0].id, units[1].id]);
-  expect(groups[0].blocks.map(item => item.name)).toEqual(["A.pdf", "B.pdf"]);
+  const nested = block("3".repeat(64), "Nested.pdf", units[1].id, 1, 0);
+  const outline = buildContentOutline([later, nested, first], units);
+  expect(outline.script.map(node => node.unit.title)).toEqual(["Block 1", "Block 2"]);
+  expect(outline.script[0].blocks.map(item => item.name)).toEqual(["A.pdf", "B.pdf"]);
+  expect(outline.script[0].children.map(node => node.unit.title)).toEqual(["Block 1.1"]);
+  expect(outline.script[0].children[0].blocks.map(item => item.name)).toEqual(["Nested.pdf"]);
+  expect(outline.script[1].blocks).toEqual([]);
+});
+
+
+test("content outline remains visible before any source block is materialized", () => {
+  const outline = buildContentOutline([], units);
+  expect(outline.script.map(node => node.unit.title)).toEqual(["Block 1", "Block 2"]);
+  expect(outline.taskGroups.flatMap(group => group.tasks.map(node => node.unit.title))).toEqual([
+    "Aufgabe 1",
+    "Aufgabe 2",
+    "Aufgabe zu Block 1.1",
+  ]);
+});
+test("tasks stay in a separate area and retain links to script sections", () => {
+  const taskBlock = block("4".repeat(64), "Aufgabe1.pdf", units[3].id, 3, 10);
+  taskBlock.placements[0].role = "task";
+  const outline = buildContentOutline([taskBlock], units);
+  expect(outline.taskGroups.map(group => group.scriptUnit?.title)).toEqual(["Block 1", "Block 1.1"]);
+  expect(outline.taskGroups[0].tasks.map(node => node.unit.title)).toEqual(["Aufgabe 1", "Aufgabe 2"]);
+  expect(outline.taskGroups[1].tasks.map(node => node.unit.title)).toEqual(["Aufgabe zu Block 1.1"]);
+  expect(outline.taskGroups[0].tasks[0].blocks.map(item => item.name)).toEqual(["Aufgabe1.pdf"]);
+  expect(outline.taskGroups[0].tasks[1].blocks).toEqual([]);
+  expect(outline.taskGroups[0].tasks[1].linkedScriptUnits.map(unit => unit.title)).toEqual(["Block 1", "Block 2"]);
 });
 
 test("preserved original URL stays pinned to the observed material revision", () => {

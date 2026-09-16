@@ -8,7 +8,7 @@ import { AlertTriangle, Check, GitCompareArrows, PencilLine } from "lucide-react
 import { message } from "./api";
 import type { PipelineState } from "./pipeline-api";
 import { unitHidden, unitLabel } from "./learning-structure";
-import { groupContentBlocks } from "./content-authoring-model";
+import { buildContentOutline, type ContentUnitNode } from "./content-authoring-model";
 import {
   materializeContent,
   originalMaterialUrl,
@@ -302,7 +302,8 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
   }
 
   const blocks = useMemo(() => (workspace?.blocks ?? []).filter(block => block.included), [workspace]);
-  const groups = useMemo(() => groupContentBlocks(blocks, pipeline.units), [blocks, pipeline.units]);
+  const outline = useMemo(() => buildContentOutline(blocks, pipeline.units), [blocks, pipeline.units]);
+  const hasOutline = outline.script.length > 0 || outline.taskGroups.length > 0;
   const stale = blocks.filter(block => block.stale).length;
   const selectedSummary = blocks.find(block => block.id === selected);
   const selectedView = selected ? views[selected] : undefined;
@@ -316,6 +317,74 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
     { id: "codex", label: "Codex", selected: aiProvider === "codex" },
     { id: "chatgpt", label: "ChatGPT", selected: aiProvider === "chatgpt" },
   ];
+
+  function renderBlock(block: ContentBlockSummary, unit?: ContentUnitNode["unit"]) {
+    const active = block.id === selected;
+    const highlighted = block.id === hovered || active;
+    const cached = views[block.id];
+    const preview = cached?.revision?.content;
+    return <section key={block.id} className="content-source-block" data-active={active || undefined} data-highlighted={highlighted || undefined} data-review={surfaceMode === "review" || undefined}
+      onMouseEnter={() => setHovered(block.id)} onMouseLeave={() => setHovered(current => current === block.id ? undefined : current)}>
+      <button type="button" className="content-source-head" onClick={() => void openBlock(block.id)} aria-pressed={active}>
+        <Icon.File filename={block.name} size={16}/>
+        <span className="content-source-name">{block.name}</span>
+        {surfaceMode === "review" && unit && <span className="content-source-unit">{unitLabel(unit)}</span>}
+        {sourcePages(block) && <span className="content-source-pages">{sourcePages(block)}</span>}
+        <span className={`content-source-status${block.stale ? " stale" : ""}`}>{block.status === "ready" ? <Check size={13}/> : block.stale ? <AlertTriangle size={13}/> : null}{statusLabel(block)}</span>
+      </button>
+
+      {!active ? <button type="button" className="content-block-preview" onClick={() => void openBlock(block.id)}>
+        {preview ? <MarkdownRenderer value={preview}/> : <span className="content-preview-placeholder">{block.currentRevisionId ? "Zum Bearbeiten öffnen" : block.observedMaterialRevision ? "Rohfassung beim Aktualisieren erstellen" : "Quelle noch nicht extrahiert"}</span>}
+      </button> : <div className="content-block-active" ref={activeBlockRef}>
+        {surfaceMode === "review" && <div className="content-block-tabs" role="tablist" aria-label={`${block.name} Ansicht`}>
+          <button type="button" role="tab" aria-selected={blockMode === "edited"} onClick={() => setBlockMode("edited")}>Bearbeitet</button>
+          <button type="button" role="tab" aria-selected={blockMode === "pdf"} disabled={!isPdf} onClick={() => setBlockMode("pdf")}>PDF</button>
+          <button type="button" role="tab" aria-selected={blockMode === "compare"} disabled={!isPdf} onClick={() => setBlockMode("compare")}>Vergleich</button>
+        </div>}
+
+        {!selectedView && block.currentRevisionId ? <Loading label="Block wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : blockMode === "edited" || surfaceMode === "edit" ? <>
+          <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/>
+          <div className="content-block-footer">
+            <span>{saving ? "Speichert…" : draft === savedDraft ? `Revision ${selectedView.revision.id.slice(0, 8)}` : "Änderungen werden automatisch gespeichert"}</span>
+            <Button size="sm" variant="ghost" label="Auf Original zurücksetzen" disabled={busy || saving || !selectedView.revision} onPress={() => void reset()}/>
+          </div>
+        </> : blockMode === "pdf" && originalUrl ? <div className="content-pdf-viewer">
+          <PdfViewer source={originalUrl} title={block.name} initialPage={block.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Review the preserved source beside authored Study Space content"}}/>
+        </div> : blockMode === "compare" && originalUrl ? <>
+          <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
+            <button type="button" aria-pressed={comparePane === "pdf"} onClick={() => setComparePane("pdf")}>Original</button>
+            <button type="button" aria-pressed={comparePane === "current"} onClick={() => setComparePane("current")}>Aktuell</button>
+          </div>
+          <div className="content-compare">
+            <div className="content-compare-pane content-compare-pdf" data-mobile-visible={comparePane === "pdf" || undefined}>
+              <div className="content-compare-label">Original PDF</div>
+              <PdfViewer source={originalUrl} title={block.name} initialPage={block.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Compare preserved source with current rendered Study Space content"}}/>
+            </div>
+            <div className="content-compare-pane content-compare-current" data-mobile-visible={comparePane === "current" || undefined}>
+              <div className="content-compare-label">Aktueller Stand</div>
+              <div className="content-current-render"><ProvenancePreview content={draft} view={selectedView} activePage={activeSourcePage} onHoverPage={setHoveredSourcePage} onPinPage={setSourcePage}/></div>
+            </div>
+          </div>
+        </> : null}
+      </div>}
+    </section>;
+  }
+
+  function renderUnit(node: ContentUnitNode, depth = 0, tasks = false, primaryScriptUnitId?: string) {
+    const additionalLinks = tasks ? node.linkedScriptUnits.filter(unit => unit.id !== primaryScriptUnitId) : [];
+    return <section className="content-outline-unit" data-kind={tasks ? "tasks" : "script"} data-depth={depth} key={node.unit.id}>
+      <div className="content-outline-unit-head">
+        <h3 title={unitLabel(node.unit)}>{unitLabel(node.unit)}</h3>
+        {additionalLinks.length > 0 && <div className="content-task-links" aria-label="Weitere Skript-Zuordnungen">
+          {additionalLinks.map(unit => <span key={unit.id} title={unitLabel(unit)}>{unitLabel(unit)}</span>)}
+        </div>}
+      </div>
+      <div className="content-unit-blocks">
+        {node.blocks.length > 0 ? node.blocks.map(block => renderBlock(block, node.unit)) : <div className="content-unit-empty">Noch kein aufbereiteter Inhalt.</div>}
+      </div>
+      {node.children.length > 0 && <div className="content-outline-children">{node.children.map(child => renderUnit(child, depth + 1, tasks, primaryScriptUnitId))}</div>}
+    </section>;
+  }
 
   if (loading) return <div className="content-authoring-loading"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
@@ -336,72 +405,36 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
     </header>
 
     {error && <Notice>{error}</Notice>}
-    {!blocks.length ? <div className="content-authoring-empty">
-      <p>{contentCandidateCount === 0
+    {!blocks.length && <div className="content-materialize-hint">
+      <span>{contentCandidateCount === 0
         ? pipeline.pending > 0
           ? `${pipeline.pending} Quellen sind noch offen. Bestätige in der Struktur zuerst mindestens eine Quellenzuordnung.`
           : "Keine bestätigte Quelle ist einer sichtbaren Lerneinheit zugeordnet."
-        : "Noch keine editierbare Rohfassung aus der bestätigten Struktur."}</p>
-      <Button label="Rohfassung erstellen" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
-    </div> : <div className="content-block-list">
-      {groups.map(group => <section className="content-unit-group" key={group.unitId}>
-        <h2>{group.unit ? unitLabel(group.unit) : "Weitere Inhalte"}</h2>
-        <div className="content-unit-blocks">
-      {group.blocks.map(block => {
-        const active = block.id === selected;
-        const highlighted = block.id === hovered || active;
-        const unit = group.unit;
-        const cached = views[block.id];
-        const preview = cached?.revision?.content;
-        return <section key={block.id} className="content-source-block" data-active={active || undefined} data-highlighted={highlighted || undefined} data-review={surfaceMode === "review" || undefined}
-          onMouseEnter={() => setHovered(block.id)} onMouseLeave={() => setHovered(current => current === block.id ? undefined : current)}>
-          <button type="button" className="content-source-head" onClick={() => void openBlock(block.id)} aria-pressed={active}>
-            <Icon.File filename={block.name} size={16}/>
-            <span className="content-source-name">{block.name}</span>
-            {surfaceMode === "review" && unit && <span className="content-source-unit">{unitLabel(unit)}</span>}
-            {sourcePages(block) && <span className="content-source-pages">{sourcePages(block)}</span>}
-            <span className={`content-source-status${block.stale ? " stale" : ""}`}>{block.status === "ready" ? <Check size={13}/> : block.stale ? <AlertTriangle size={13}/> : null}{statusLabel(block)}</span>
-          </button>
-
-          {!active ? <button type="button" className="content-block-preview" onClick={() => void openBlock(block.id)}>
-            {preview ? <MarkdownRenderer value={preview}/> : <span className="content-preview-placeholder">{block.currentRevisionId ? "Zum Bearbeiten öffnen" : block.observedMaterialRevision ? "Rohfassung beim Aktualisieren erstellen" : "Quelle noch nicht extrahiert"}</span>}
-          </button> : <div className="content-block-active" ref={activeBlockRef}>
-            {surfaceMode === "review" && <div className="content-block-tabs" role="tablist" aria-label={`${block.name} Ansicht`}>
-              <button type="button" role="tab" aria-selected={blockMode === "edited"} onClick={() => setBlockMode("edited")}>Bearbeitet</button>
-              <button type="button" role="tab" aria-selected={blockMode === "pdf"} disabled={!isPdf} onClick={() => setBlockMode("pdf")}>PDF</button>
-              <button type="button" role="tab" aria-selected={blockMode === "compare"} disabled={!isPdf} onClick={() => setBlockMode("compare")}>Vergleich</button>
-            </div>}
-
-            {!selectedView && block.currentRevisionId ? <Loading label="Block wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : blockMode === "edited" || surfaceMode === "edit" ? <>
-              <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/>
-              <div className="content-block-footer">
-                <span>{saving ? "Speichert…" : draft === savedDraft ? `Revision ${selectedView.revision.id.slice(0, 8)}` : "Änderungen werden automatisch gespeichert"}</span>
-                <Button size="sm" variant="ghost" label="Auf Original zurücksetzen" disabled={busy || saving || !selectedView.revision} onPress={() => void reset()}/>
-              </div>
-            </> : blockMode === "pdf" && originalUrl ? <div className="content-pdf-viewer">
-              <PdfViewer source={originalUrl} title={block.name} initialPage={block.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Review the preserved source beside authored Study Space content"}}/>
-            </div> : blockMode === "compare" && originalUrl ? <>
-              <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
-                <button type="button" aria-pressed={comparePane === "pdf"} onClick={() => setComparePane("pdf")}>Original</button>
-                <button type="button" aria-pressed={comparePane === "current"} onClick={() => setComparePane("current")}>Aktuell</button>
-              </div>
-              <div className="content-compare">
-                <div className="content-compare-pane content-compare-pdf" data-mobile-visible={comparePane === "pdf" || undefined}>
-                  <div className="content-compare-label">Original PDF</div>
-                  <PdfViewer source={originalUrl} title={block.name} initialPage={block.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Compare preserved source with current rendered Study Space content"}}/>
-                </div>
-                <div className="content-compare-pane content-compare-current" data-mobile-visible={comparePane === "current" || undefined}>
-                  <div className="content-compare-label">Aktueller Stand</div>
-                  <div className="content-current-render"><ProvenancePreview content={draft} view={selectedView} activePage={activeSourcePage} onHoverPage={setHoveredSourcePage} onPinPage={setSourcePage}/></div>
-                </div>
-              </div>
-            </> : null}
-          </div>}
-        </section>;
-      })}
-        </div>
-      </section>)}
+        : "Noch keine editierbare Rohfassung aus der bestätigten Struktur."}</span>
+      <Button label="Rohfassung erstellen" size="sm" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
     </div>}
+
+    {hasOutline ? <div className="content-outline">
+      {outline.script.length > 0 && <section className="content-outline-area" data-kind="script">
+        <div className="content-outline-area-head"><h2>Skript</h2></div>
+        <div className="content-outline-units">{outline.script.map(node => renderUnit(node))}</div>
+      </section>}
+
+      {outline.taskGroups.length > 0 && <section className="content-outline-area" data-kind="tasks">
+        <div className="content-outline-area-head"><h2>Aufgaben</h2></div>
+        <div className="content-task-groups">
+          {outline.taskGroups.map(group => <section className="content-task-group" key={group.id}>
+            <h3 title={group.scriptUnit ? unitLabel(group.scriptUnit) : undefined}>{group.scriptUnit ? unitLabel(group.scriptUnit) : "Nicht zugeordnet"}</h3>
+            <div className="content-outline-units">{group.tasks.map(node => renderUnit(node, 0, true, group.scriptUnit?.id))}</div>
+          </section>)}
+        </div>
+      </section>}
+
+      {outline.unassignedBlocks.length > 0 && <section className="content-outline-area" data-kind="other">
+        <div className="content-outline-area-head"><h2>Weitere Inhalte</h2></div>
+        <div className="content-unit-blocks">{outline.unassignedBlocks.map(block => renderBlock(block))}</div>
+      </section>}
+    </div> : !blocks.length ? <div className="content-authoring-empty">Noch keine bestätigte Inhaltsstruktur.</div> : null}
     {selectedSummary && selectedView?.revision ? <div className="content-ai-wrap">
       {aiStatus ? <div className="content-ai-status" role="status"><span>{aiStatus}</span><div><Button size="sm" variant="ghost" label="Review" onPress={() => { setSurfaceMode("review"); setBlockMode(isPdf ? "compare" : "edited"); }}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div></div> : null}
       <div className="content-ai-context" title={aiContextLabel}>{aiContextLabel}</div>
