@@ -58,6 +58,8 @@ Course
 
 A **learning unit** can correspond to a topic, teaching week, or block. Additional grouping is optional; no course must fit a fixed number of levels. Retain a confirmed teaching sequence, with links for parallel topics and shared materials. Source-container order, file numbering, and upload time are evidence, not interchangeable definitions of chronology.
 
+The **Inhalt** authoring surface is a projection of this reviewed structure, not a second grouping model. Visible script units retain their parent/child hierarchy even before a source block is materialized. Tasks stay in a separate **Aufgaben** area; `scriptUnitIds` links each task group to one or more script blocks/sections without turning the task into a script child or duplicating its content. The primary linked script unit may group the task visually, while additional links remain visible as relationships.
+
 General resources and administrative material stay in the source area and may be linked from learning units or tasks. They do not require a third generated textbook or an artificial task per file. Source material is not automatically irrelevant because it lives under General Information or includes `template` / `Kopie` in its name.
 
 ### 3. Explicit mapping and decisions
