@@ -4,7 +4,7 @@ import type { PipelineUnit } from "./pipeline-api";
 import "./preparation-flow.css";
 import { PipelineUnits } from "./PipelineUnits";
 import { unitLabel } from "./learning-structure";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Checkbox } from "@dotnaos/ui-base";
 import { ChevronRight, FileText, Folder } from "lucide-react";
 import { api, message } from "./api";
@@ -27,19 +27,18 @@ import {
   type PipelineState,
 } from "./pipeline-api";
 import "./pipeline.css";
+import { ContentAuthoringView } from "./ContentAuthoringView";
 
 export function PipelineView({
   courseId,
   version,
   onSource,
   onOpenLearning,
-  content,
 }: {
   courseId: number;
   version?: LearningVersion | null;
   onSource: (source: SourceSelection) => void;
   onOpenLearning: (target: LearningTarget) => void;
-  content: ReactNode;
 }) {
   const [state, setState] = useState<PipelineState>();
   const [error, setError] = useState("");
@@ -291,7 +290,7 @@ export function PipelineView({
       {!state ? (
         !error && <Loading label="Quellenstruktur wird gelesen …" />
       ) : route.kind === "content" ? (
-        <>{content}</>
+        <ContentAuthoringView courseId={courseId} pipeline={state}/>
       ) : combinedStructure ? (
         <PipelineStructure
           state={state}
