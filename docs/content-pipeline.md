@@ -1,6 +1,6 @@
 # Reviewed course-content pipeline
 
-Status: **accepted target design, 2026-09-13**. This document records the approved direction, not a claim that every step is implemented. The implementation baseline reviewed here is [`f28bb30` / v0.2.21](https://github.com/DotNaos/study-space/tree/f28bb30413b42db18544a84e0dcb50e8a7333e5f). See [implementation status](#implementation-status) before changing runtime behavior.
+Status: **accepted target design, 2026-09-13**, extended by the [content and authoring model](content-authoring-model.md) accepted on 2026-09-16. This document records the approved direction, not a claim that every step is implemented. The implementation baseline reviewed here is [`f28bb30` / v0.2.21](https://github.com/DotNaos/study-space/tree/f28bb30413b42db18544a84e0dcb50e8a7333e5f). See [implementation status](#implementation-status) before changing runtime behavior.
 
 ## Purpose and invariant
 

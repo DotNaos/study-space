@@ -1,5 +1,7 @@
 # Course-wide provenance graph (#63)
 
+> **Primary-navigation target:** the graph remains a provenance/diagnostic tool but moves out of the primary course tabs as the unified **Inhalt** surface lands. See [Content and authoring model](content-authoring-model.md) and [#111](https://github.com/DotNaos/study-space/issues/111).
+
 For the accepted hierarchy-first source/learning reconciliation and review workflow, see [Reviewed course-content pipeline](content-pipeline.md). The initial review workflow is implemented separately as [Aufbereitung](reviewed-pipeline.md); this page describes the retained whole-course graph.
 
 The Graph tab shows the **entire course**, not a selected source's neighbourhood. The raw graph keeps every Moodle entry, saved source revision, chapter and exercise. Its presentation groups related entries into larger React Flow nodes with scrollable lists. Search and selection move the camera and reveal a row; they never remove other entries. There is no item pagination, automatic first-PDF selection, or coverage percentage.

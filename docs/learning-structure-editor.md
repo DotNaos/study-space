@@ -1,5 +1,7 @@
 # Learning structure editor
 
+> **Target projection (2026-09-16):** Structure becomes the edit-mode sidebar of the unified **Inhalt** surface. Source/PDF rows will no longer be nested into the authored structure tree. Read mode uses a rendered heading-based **Inhaltsverzeichnis** instead. Visibility moves into an explicit staged mode with a fixed right-aligned checkbox column and submit/cancel. See [Content and authoring model](content-authoring-model.md) and [#111](https://github.com/DotNaos/study-space/issues/111). The remainder of this page documents the current implementation while migration is in progress.
+
 Implemented in v0.2.24; compact visibility and options controls updated in v0.2.26; guided automatic saving in v0.2.28; hierarchical source mapping in v0.2.29. Open **Course → Aufbereitung → Struktur bearbeiten**.
 
 The editor keeps the observed Moodle hierarchy separate from a user-owned learning structure. It edits one level at a time, with separate **Skript** and **Aufgaben** lists. Task groups link to one or more script units rather than becoming their child chapters. Name-based starting suggestions are not confirmed source-use decisions.

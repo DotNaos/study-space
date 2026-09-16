@@ -1,5 +1,6 @@
 # Reviewed source preparation and learning workflow
 
+> **UI migration target (2026-09-16):** the current `Aufbereitung` runtime described below is being folded into the single course **Inhalt** surface. Read mode will render the finished course with a derived table of contents; edit mode will replace that TOC with the authored structure. Course-local `Materialien` becomes **Quellen**, source files stop appearing as structure-tree nodes, and the graph moves out of primary navigation while remaining available for provenance/diagnostics. See [Content and authoring model](content-authoring-model.md) and [#111](https://github.com/DotNaos/study-space/issues/111). The sections below remain the implemented runtime contract until each migration stage lands.
 This contract describes the implemented workflow that follows the [accepted target](content-pipeline.md). It extends, rather than replaces, the existing [learning API](learning-contract.md), [source comparison](source-comparison.md) and [course graph](content-graph.md). Remaining limitations are listed below; this is not a claim of automatic, lossless course conversion.
 
 ## User flow
