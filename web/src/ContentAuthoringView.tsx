@@ -7,7 +7,7 @@ import { AssistantComposer as Composer, type AiOption } from "@dotnaos/ui/ai";
 import { AlertTriangle, Check, GitCompareArrows, PencilLine } from "lucide-react";
 import { message } from "./api";
 import type { PipelineState } from "./pipeline-api";
-import { unitLabel } from "./learning-structure";
+import { unitHidden, unitLabel } from "./learning-structure";
 import { groupContentBlocks } from "./content-authoring-model";
 import {
   materializeContent,
@@ -156,8 +156,23 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
     return () => document.removeEventListener("selectionchange", update);
   }, [selected]);
 
+  const contentCandidateCount = useMemo(() => pipeline.sources.filter(item => {
+    if (!item.source.present || item.decision?.disposition !== "use") return false;
+    return item.decision.uses.some(use => {
+      const unit = pipeline.units.find(candidate => candidate.id === use.unitId);
+      return !!unit && !unitHidden(unit, pipeline.units);
+    });
+  }).length, [pipeline]);
+  const canMaterialize = contentCandidateCount > 0 || (workspace?.blocks.length ?? 0) > 0;
+
   async function refresh() {
     if (busy) return;
+    if (!canMaterialize) {
+      setError(pipeline.pending > 0
+        ? `${pipeline.pending} Quellen sind noch offen. Bestätige in der Struktur zuerst mindestens eine Quellenzuordnung.`
+        : "Keine bestätigte Quelle ist einer sichtbaren Lerneinheit zugeordnet.");
+      return;
+    }
     setBusy(true); setError("");
     try {
       const next = await materializeContent(courseId, pipeline.revision);
@@ -316,14 +331,18 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
           <button type="button" aria-pressed={surfaceMode === "edit"} onClick={() => setSurfaceMode("edit")}><PencilLine size={14}/>Bearbeiten</button>
           <button type="button" aria-pressed={surfaceMode === "review"} onClick={() => setSurfaceMode("review")}><GitCompareArrows size={14}/>Review</button>
         </div>
-        <Button size="sm" variant="ghost" icon="refresh" label={blocks.length ? "Inhalte aktualisieren" : "Rohfassung erstellen"} disabled={busy} onPress={() => void refresh()}/>
+        <Button size="sm" variant="ghost" icon="refresh" label={blocks.length ? "Inhalte aktualisieren" : "Rohfassung erstellen"} disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
       </div>
     </header>
 
     {error && <Notice>{error}</Notice>}
     {!blocks.length ? <div className="content-authoring-empty">
-      <p>Noch keine editierbare Rohfassung aus der bestätigten Struktur.</p>
-      <Button label="Rohfassung erstellen" disabled={busy} onPress={() => void refresh()}/>
+      <p>{contentCandidateCount === 0
+        ? pipeline.pending > 0
+          ? `${pipeline.pending} Quellen sind noch offen. Bestätige in der Struktur zuerst mindestens eine Quellenzuordnung.`
+          : "Keine bestätigte Quelle ist einer sichtbaren Lerneinheit zugeordnet."
+        : "Noch keine editierbare Rohfassung aus der bestätigten Struktur."}</p>
+      <Button label="Rohfassung erstellen" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
     </div> : <div className="content-block-list">
       {groups.map(group => <section className="content-unit-group" key={group.unitId}>
         <h2>{group.unit ? unitLabel(group.unit) : "Weitere Inhalte"}</h2>
