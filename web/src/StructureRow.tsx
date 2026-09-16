@@ -8,31 +8,50 @@ import { descendants, unitHidden, unitKind, unitLabel } from "./learning-structu
 import { DialogShell } from "./DialogShell";
 import { StructurePicker } from "./StructurePicker";
 
-export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onHide,onOpen,onParent,onKind,inlineChildren=false,nestedOpen=false,nestedCount=0,onToggleNested,children,editing=true,selected=false,onSelect}:{
+export function StructureRow({
+  unit, units, disabled, expanded, onToggle, onChange, onHide, onOpen, onParent, onKind,
+  inlineChildren=false, nestedOpen=false, nestedCount=0, onToggleNested, children,
+  editing=true, selected=false, onSelect, visibilityMode=false, onVisibilityToggle, inlineVisibility=true,
+}: {
   unit:PipelineUnit;units:PipelineUnit[];disabled:boolean;expanded:boolean;onToggle:()=>void;
   onChange:(patch:Partial<PipelineUnit>)=>void;onHide:(hidden:boolean)=>void;onOpen:()=>void;
   onParent:(id:string|null)=>void;onKind:()=>void;inlineChildren?:boolean;nestedOpen?:boolean;nestedCount?:number;
   onToggleNested?:()=>void;children?:ReactNode;editing?:boolean;selected?:boolean;onSelect?:()=>void;
+  visibilityMode?:boolean;onVisibilityToggle?:()=>void;inlineVisibility?:boolean;
 }) {
-  const {attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:unit.id,disabled:disabled||!editing});
+  const editingControls=editing&&!visibilityMode;
+  const {attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:unit.id,disabled:disabled||!editingControls});
   const childUnits=units.filter(child=>child.parentId===unit.id);
   const hidden=unitHidden(unit,units),kind=unitKind(unit),excluded=descendants(units,unit.id);
   const inheritedHidden = hidden && !unit.hidden;
   const script=units.filter(item=>unitKind(item)==="script");
   const links=(unit.scriptUnitIds??[]).map(id=>script.find(item=>item.id===id)).filter((item):item is PipelineUnit=>!!item);
-  const visibilityAction = hidden ? "Einblenden" : "Ausblenden";
+  const visibilityAction = unit.hidden ? "Einblenden" : "Ausblenden";
   const visibilityTitle = inheritedHidden ? "Zuerst den übergeordneten Eintrag einblenden" : visibilityAction;
   const nestedToggle=inlineChildren&&nestedCount>0;
   const childToggle=!inlineChildren&&childUnits.length>0;
   return <>
     <li ref={setNodeRef} data-unit-id={unit.id} data-kind={kind} data-selected={selected||undefined} data-hidden={hidden||undefined} data-dragging={isDragging||undefined}
       style={{transform:CSS.Transform.toString(transform),transition}}>
-      <div className="structure-line">
-        {editing ? <>
-          <span className="structure-visibility-checkbox" title={visibilityTitle}>
+      <div className="structure-line" data-visibility-mode={visibilityMode||undefined}>
+        {visibilityMode ? <>
+          {nestedToggle ? <button type="button" className="structure-icon structure-leading structure-nested-toggle" onClick={onToggleNested}
+            aria-expanded={nestedOpen} aria-label={`${unitLabel(unit)} ${nestedOpen?"einklappen":"ausklappen"}`} title={nestedOpen?"Einklappen":"Ausklappen"}>
+            <ChevronDown size={16} aria-hidden="true" className={nestedOpen?"structure-chevron-open":undefined}/>
+          </button> : <span className="structure-leading structure-leading-spacer"/>}
+          <button type="button" className="structure-name-button structure-visibility-row" onClick={onVisibilityToggle}
+            disabled={disabled||inheritedHidden} title={visibilityTitle}>
+            {kind==="tasks" && <PencilLine size={14} aria-hidden="true"/>}<span>{unitLabel(unit)}</span>
+          </button>
+          <span className="structure-visibility-checkbox structure-visibility-checkbox-right" title={visibilityTitle}>
+            <Checkbox label={`In Struktur verwenden: ${unitLabel(unit)}`} checked={!unit.hidden} disabled={disabled||inheritedHidden}
+              onCheckedChange={()=>onVisibilityToggle?.()}/>
+          </span>
+        </> : editingControls ? <>
+          {inlineVisibility && <span className="structure-visibility-checkbox" title={visibilityTitle}>
             <Checkbox label={`In Struktur verwenden: ${unitLabel(unit)}`} checked={!hidden} disabled={disabled||inheritedHidden}
               onCheckedChange={checked=>onHide(!checked)}/>
-          </span>
+          </span>}
           {nestedToggle?<button type="button" className="structure-icon structure-leading structure-nested-toggle" ref={setActivatorNodeRef} {...attributes} {...listeners}
             onClick={onToggleNested} disabled={disabled} aria-expanded={nestedOpen} aria-label={`${unitLabel(unit)} ${nestedOpen?"einklappen":"ausklappen"}`} title={nestedOpen?"Einklappen":"Ausklappen"}>
             <ChevronDown size={16} aria-hidden="true" className={nestedOpen?"structure-chevron-open":undefined}/>
@@ -59,12 +78,12 @@ export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onH
       </div>
       {inlineChildren && nestedOpen && children && <div className="structure-inline-children">{children}</div>}
     </li>
-    {editing && expanded && <DialogShell title="Eintrag bearbeiten" onClose={onToggle}>
+    {editingControls && expanded && <DialogShell title="Eintrag bearbeiten" onClose={onToggle}>
       <div className="structure-options">
         <Form.Field label="Anzeigename"><Input size="sm" fullWidth accessibilityLabel="Anzeigename im Dialog" value={unitLabel(unit)} disabled={disabled}
           onValueChange={value=>onChange({customTitle:value===unit.title?null:value})}/></Form.Field>
         {unit.customTitle!=null && <div className="structure-original">
-          <span>{unit.sourceGroupId?"Moodle-Name (unverändert)":"Ursprünglicher Name"}</span>
+          <span>{unit.sourceGroupId?"Quellname (unverändert)":"Ursprünglicher Name"}</span>
           <p>{unit.title}</p>
           <Button size="sm" variant="ghost" label="Originalnamen verwenden" disabled={disabled} onPress={()=>onChange({customTitle:null})}/>
         </div>}

@@ -67,7 +67,10 @@ export function CourseDetail({
       : typeof window !== "undefined" &&
           window.location.hash.startsWith("#graph")
         ? "graph"
-        : "materials",
+        : typeof window !== "undefined" &&
+            window.location.hash.startsWith("#section-")
+          ? "materials"
+          : "pipeline",
   );
   const [tabChosen, setTabChosen] = useState(
     () =>
@@ -79,18 +82,8 @@ export function CourseDetail({
   const learning = useLearningCourse(course.id);
   const materials = useMaterialSnapshot(course.id);
   useEffect(() => {
-    if (!tabChosen && !learning.loading)
-      setTab(
-        learning.state?.activeVersion || learning.state?.job
-          ? "learning"
-          : "materials",
-      );
-  }, [
-    learning.loading,
-    learning.state?.activeVersionId,
-    learning.state?.job?.id,
-    tabChosen,
-  ]);
+    if (!tabChosen && !learning.loading) setTab("pipeline");
+  }, [learning.loading, tabChosen]);
   useEffect(() => {
     const followGraph = () => {
       if (window.location.hash.startsWith("#graph")) {
@@ -228,37 +221,17 @@ export function CourseDetail({
           size="sm"
           variant="ghost"
           icon="list"
-          label="Lernen"
-          pressed={tab === "learning"}
-          onPress={() => {
-            chooseTab("learning");
-          }}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="folder-open"
-          label="Materialien"
-          pressed={tab === "materials"}
-          onPress={() => {
-            chooseTab("materials");
-          }}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="list-filter"
-          label="Aufbereitung"
+          label="Inhalt"
           pressed={tab === "pipeline"}
           onPress={() => chooseTab("pipeline")}
         />
         <Button
           size="sm"
           variant="ghost"
-          icon="git-branch"
-          label="Graph"
-          pressed={tab === "graph"}
-          onPress={() => chooseTab("graph")}
+          icon="folder-open"
+          label="Quellen"
+          pressed={tab === "materials"}
+          onPress={() => chooseTab("materials")}
         />
       </div>
       {!tabChosen && learning.loading ? (
@@ -266,7 +239,7 @@ export function CourseDetail({
           <Loading label="Kurs wird geöffnet …" />
         </div>
       ) : tab === "pipeline" ? (
-        <Suspense fallback={<Loading label="Aufbereitung wird geöffnet …" />}>
+        <Suspense fallback={<Loading label="Inhalt wird geöffnet …" />}>
           <PipelineView
             courseId={course.id}
             courseName={course.name}
