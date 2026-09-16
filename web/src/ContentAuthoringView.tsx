@@ -1,18 +1,20 @@
 import "./content-authoring.css";
+import "./content-authoring-workspace.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Icon } from "@dotnaos/ui-base";
 import { MarkdownEditor, MarkdownRenderer } from "@dotnaos/ui/markdown-editor";
 import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
 import { Composer, type AiOption } from "./ui-ai";
-import { AlertTriangle, Check, GitCompareArrows, PencilLine } from "lucide-react";
+import { AlertTriangle, Check, PencilLine } from "lucide-react";
 import { message } from "./api";
 import type { PipelineState } from "./pipeline-api";
-import { unitHidden, unitLabel } from "./learning-structure";
+import { unitHidden, unitKind, unitLabel } from "./learning-structure";
 import { buildContentOutline, type ContentUnitNode } from "./content-authoring-model";
 import {
   materializeContent,
   originalMaterialUrl,
   readContentBlock,
+  readContentRevision,
   readContentWorkspace,
   resetContentBlock,
   runContentAgent,
@@ -20,13 +22,18 @@ import {
   undoContentBlock,
   type ContentBlockSummary,
   type ContentBlockView,
+  type ContentRevision,
   type ContentWorkspace,
 } from "./content-api";
 import { Loading, Notice } from "./shared";
 import { buildChatGptHandoffPrompt, buildChatGptHandoffUrl } from "./chatgpt-handoff";
 
-type SurfaceMode = "edit" | "review";
-type BlockMode = "edited" | "pdf" | "compare";
+export type ContentSelection =
+  | { kind: "script" }
+  | { kind: "unit"; id: string }
+  | { kind: "source"; id: string; unitId?: string };
+
+type ContentTab = "content" | "pdf-current" | "edited-raw" | "raw";
 
 function statusLabel(block: ContentBlockSummary) {
   if (block.stale) return "Quelle aktualisiert";
@@ -40,6 +47,15 @@ function sourcePages(block: ContentBlockSummary) {
   if (!pages.length) return undefined;
   const first = Math.min(...pages), last = Math.max(...pages);
   return first === last ? `S. ${first}` : `S. ${first}–${last}`;
+}
+
+function findNode(nodes: ContentUnitNode[], id: string): ContentUnitNode | undefined {
+  for (const node of nodes) {
+    if (node.unit.id === id) return node;
+    const child = findNode(node.children, id);
+    if (child) return child;
+  }
+  return undefined;
 }
 
 function ProvenancePreview({
@@ -90,14 +106,27 @@ function ProvenancePreview({
   </div>;
 }
 
-export function ContentAuthoringView({ courseId, courseName, pipeline }: { courseId: number; courseName: string; pipeline: PipelineState }) {
+export function ContentAuthoringView({
+  courseId,
+  courseName,
+  pipeline,
+  selection,
+  editing,
+  onSelectSource,
+}: {
+  courseId: number;
+  courseName: string;
+  pipeline: PipelineState;
+  selection: ContentSelection;
+  editing: boolean;
+  onSelectSource: (id: string, unitId?: string) => void;
+}) {
   const [workspace, setWorkspace] = useState<ContentWorkspace>();
-  const [selected, setSelected] = useState<string>();
-  const [hovered, setHovered] = useState<string>();
-  const [surfaceMode, setSurfaceMode] = useState<SurfaceMode>("edit");
-  const [blockMode, setBlockMode] = useState<BlockMode>("edited");
-  const [comparePane, setComparePane] = useState<"pdf" | "current">("pdf");
   const [views, setViews] = useState<Record<string, ContentBlockView>>({});
+  const [rawRevisions, setRawRevisions] = useState<Record<string, ContentRevision>>({});
+  const [rawLoading, setRawLoading] = useState<string>();
+  const [tab, setTab] = useState<ContentTab>("content");
+  const [comparePane, setComparePane] = useState<"left" | "right">("left");
   const [draft, setDraft] = useState("");
   const [savedDraft, setSavedDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -112,6 +141,8 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
   const [sourcePage, setSourcePage] = useState<number>();
   const [hoveredSourcePage, setHoveredSourcePage] = useState<number>();
   const activeBlockRef = useRef<HTMLDivElement>(null);
+
+  const selected = selection.kind === "source" ? selection.id : undefined;
 
   const hydrate = useCallback(async (workspace: ContentWorkspace, signal?: AbortSignal) => {
     const available = workspace.blocks.filter(block => block.currentRevisionId);
@@ -143,18 +174,83 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
   useEffect(() => {
     if (!selected) { setSelectionText(""); return; }
     const update = () => {
-      const selection = window.getSelection();
+      const selectedText = window.getSelection();
       const root = activeBlockRef.current;
-      if (!selection || selection.isCollapsed || !root || !selection.anchorNode || !selection.focusNode ||
-          !root.contains(selection.anchorNode) || !root.contains(selection.focusNode)) {
+      if (!selectedText || selectedText.isCollapsed || !root || !selectedText.anchorNode || !selectedText.focusNode ||
+          !root.contains(selectedText.anchorNode) || !root.contains(selectedText.focusNode)) {
         setSelectionText("");
         return;
       }
-      setSelectionText(selection.toString().trim().slice(0, 8000));
+      setSelectionText(selectedText.toString().trim().slice(0, 8000));
     };
     document.addEventListener("selectionchange", update);
     return () => document.removeEventListener("selectionchange", update);
   }, [selected]);
+
+  const blocks = useMemo(() => (workspace?.blocks ?? []).filter(block => block.included), [workspace]);
+  const outline = useMemo(() => buildContentOutline(blocks, pipeline.units), [blocks, pipeline.units]);
+  const selectedSummary = selected ? blocks.find(block => block.id === selected) : undefined;
+  const selectedView = selected ? views[selected] : undefined;
+  const rawRevision = selected ? rawRevisions[selected] : undefined;
+  const originalUrl = selectedSummary ? originalMaterialUrl(selectedSummary) : undefined;
+  const isPdf = selectedSummary?.mimeType === "application/pdf" && !!originalUrl;
+  const activeSourcePage = hoveredSourcePage ?? sourcePage;
+  const selectedPlacement = selectedSummary?.placements[0];
+  const selectedUnit = selectedPlacement ? pipeline.units.find(unit => unit.id === selectedPlacement.unitId) : undefined;
+
+  const ensureRawRevision = useCallback(async (blockId: string, revision: ContentRevision) => {
+    if (rawRevisions[blockId]) return;
+    setRawLoading(blockId);
+    try {
+      let cursor = revision;
+      const seen = new Set<string>();
+      while (cursor.parentRevisionId && !["materialized", "reset"].includes(cursor.kind) && !seen.has(cursor.id)) {
+        seen.add(cursor.id);
+        cursor = await readContentRevision(courseId, blockId, cursor.parentRevisionId);
+      }
+      setRawRevisions(current => ({ ...current, [blockId]: cursor }));
+    } catch (error) {
+      setError(message(error));
+    } finally {
+      setRawLoading(current => current === blockId ? undefined : current);
+    }
+  }, [courseId, rawRevisions]);
+
+  useEffect(() => {
+    setTab("content");
+    setComparePane("left");
+    setAiStatus("");
+    setSelectionText("");
+    setHoveredSourcePage(undefined);
+    if (!selected) {
+      setDraft("");
+      setSavedDraft("");
+      return;
+    }
+    const summary = blocks.find(block => block.id === selected);
+    const cached = views[selected];
+    if (cached?.revision) {
+      const content = cached.revision.content ?? "";
+      setDraft(content);
+      setSavedDraft(content);
+      setSourcePage(summary?.placements[0]?.firstPage ?? cached.revision.provenance.find(item => item.page != null)?.page ?? cached.revision.provenance.find(item => item.slide != null)?.slide ?? undefined);
+      void ensureRawRevision(selected, cached.revision);
+      return;
+    }
+    if (!summary?.currentRevisionId) return;
+    void readContentBlock(courseId, selected).then(view => {
+      setViews(current => ({ ...current, [selected]: view }));
+      const content = view.revision?.content ?? "";
+      setDraft(content);
+      setSavedDraft(content);
+      if (view.revision) void ensureRawRevision(selected, view.revision);
+    }).catch(error => setError(message(error)));
+  }, [selected]);
+
+  useEffect(() => {
+    if (!selected || !selectedView?.revision || rawRevisions[selected]) return;
+    void ensureRawRevision(selected, selectedView.revision);
+  }, [ensureRawRevision, rawRevisions, selected, selectedView?.revision]);
 
   const contentCandidateCount = useMemo(() => pipeline.sources.filter(item => {
     if (!item.source.present || item.decision?.disposition !== "use") return false;
@@ -163,7 +259,7 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
       return !!unit && !unitHidden(unit, pipeline.units);
     });
   }).length, [pipeline]);
-  const canMaterialize = contentCandidateCount > 0 || (workspace?.blocks.length ?? 0) > 0;
+  const canMaterialize = contentCandidateCount > 0 || blocks.length > 0;
 
   async function refresh() {
     if (busy) return;
@@ -177,34 +273,21 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
     try {
       const next = await materializeContent(courseId, pipeline.revision);
       setWorkspace(next);
-      void hydrate(next);
-      const current = selected ? next.blocks.find(block => block.id === selected) : undefined;
-      if (current?.currentRevisionId) await openBlock(current.id, true);
+      await hydrate(next);
+      if (selected && next.blocks.some(block => block.id === selected && block.currentRevisionId)) {
+        const view = await readContentBlock(courseId, selected);
+        setViews(current => ({ ...current, [selected]: view }));
+        const content = view.revision?.content ?? "";
+        setDraft(content); setSavedDraft(content);
+        setRawRevisions(current => { const nextRaw = { ...current }; delete nextRaw[selected]; return nextRaw; });
+        if (view.revision) void ensureRawRevision(selected, view.revision);
+      }
     } catch (error) { setError(message(error)); }
     finally { setBusy(false); }
   }
 
-  async function openBlock(id: string, force = false) {
-    setSelected(id); setBlockMode("edited"); setComparePane("pdf"); setError(""); setAiStatus(""); setSelectionText(""); setHoveredSourcePage(undefined);
-    const summary = workspace?.blocks.find(block => block.id === id);
-    const cachedRevision = views[id]?.revision;
-    setSourcePage(summary?.placements[0]?.firstPage ?? cachedRevision?.provenance.find(item => item.page != null || item.slide != null)?.page ?? cachedRevision?.provenance.find(item => item.slide != null)?.slide ?? undefined);
-    if (!force && cachedRevision) {
-      const content = cachedRevision.content ?? "";
-      setDraft(content); setSavedDraft(content); return;
-    }
-    try {
-      const view = await readContentBlock(courseId, id);
-      setViews(current => ({ ...current, [id]: view }));
-      const content = view.revision?.content ?? "";
-      setDraft(content); setSavedDraft(content);
-      setSourcePage(summary?.placements[0]?.firstPage ?? view.revision?.provenance.find(item => item.page != null)?.page ?? view.revision?.provenance.find(item => item.slide != null)?.slide ?? undefined);
-    } catch (error) { setError(message(error)); }
-  }
-
   async function save() {
-    const view = selected ? views[selected] : undefined;
-    const revisionId = view?.revision?.id;
+    const revisionId = selectedView?.revision?.id;
     if (!selected || !revisionId || draft === savedDraft || saving) return true;
     setSaving(true); setError("");
     try {
@@ -218,30 +301,31 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
   }
 
   useEffect(() => {
-    if (!selected || draft === savedDraft || saving) return;
+    if (!editing || !selected || draft === savedDraft || saving) return;
     const timer = window.setTimeout(() => { void save(); }, 700);
     return () => window.clearTimeout(timer);
-  }, [draft, savedDraft, saving, selected]);
+  }, [draft, editing, savedDraft, saving, selected]);
 
   async function reset() {
-    const view = selected ? views[selected] : undefined;
-    if (!selected || !view?.revision?.id || busy) return;
+    const revisionId = selectedView?.revision?.id;
+    if (!selected || !revisionId || busy) return;
     setBusy(true); setError("");
     try {
-      const next = await resetContentBlock(courseId, selected, view.revision.id);
+      const next = await resetContentBlock(courseId, selected, revisionId);
       setViews(current => ({ ...current, [selected]: next }));
       setDraft(next.revision?.content ?? ""); setSavedDraft(next.revision?.content ?? "");
+      setRawRevisions(current => next.revision ? ({ ...current, [selected]: next.revision }) : current);
       setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selected ? next.block : block) } : current);
     } catch (error) { setError(message(error)); }
     finally { setBusy(false); }
   }
 
   async function undo() {
-    const view = selected ? views[selected] : undefined;
-    if (!selected || !view?.revision?.id || busy || saving || aiBusy) return;
+    const revisionId = selectedView?.revision?.id;
+    if (!selected || !revisionId || busy || saving || aiBusy) return;
     setBusy(true); setError("");
     try {
-      const next = await undoContentBlock(courseId, selected, view.revision.id);
+      const next = await undoContentBlock(courseId, selected, revisionId);
       setViews(current => ({ ...current, [selected]: next }));
       setDraft(next.revision?.content ?? ""); setSavedDraft(next.revision?.content ?? "");
       setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selected ? next.block : block) } : current);
@@ -251,9 +335,8 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
   }
 
   async function submitAi(instruction: string) {
-    const summary = selected ? (workspace?.blocks ?? []).find(block => block.id === selected) : undefined;
-    const view = selected ? views[selected] : undefined;
-    const revision = view?.revision;
+    const summary = selectedSummary;
+    const revision = selectedView?.revision;
     const prompt = instruction.trim();
     if (!selected || !summary || !revision || !prompt || aiBusy || saving) return;
     const placement = summary.placements[0];
@@ -301,108 +384,86 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
     finally { setAiBusy(false); }
   }
 
-  const blocks = useMemo(() => (workspace?.blocks ?? []).filter(block => block.included), [workspace]);
-  const outline = useMemo(() => buildContentOutline(blocks, pipeline.units), [blocks, pipeline.units]);
-  const hasOutline = outline.script.length > 0 || outline.taskGroups.length > 0;
+  const taskNodesFor = (unitId: string) => outline.taskGroups.find(group => group.scriptUnit?.id === unitId)?.tasks ?? [];
+
+  function renderReadingBlock(block: ContentBlockSummary, unitId?: string) {
+    const view = views[block.id];
+    const preview = view?.revision?.content;
+    return <article className="content-reading-block" key={block.id}>
+      <button type="button" className="content-reading-source" onClick={() => onSelectSource(block.id, unitId)}>
+        <Icon.File filename={block.name} size={15}/><span>{block.name}</span>{sourcePages(block) && <small>{sourcePages(block)}</small>}
+      </button>
+      {preview ? <div className="content-reading-markdown"><MarkdownRenderer value={preview}/></div> : <div className="content-preview-placeholder">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div>}
+    </article>;
+  }
+
+  function renderReadingNode(node: ContentUnitNode, depth = 0, task = false) {
+    const linkedTasks = task ? [] : taskNodesFor(node.unit.id);
+    return <section className="content-reading-unit" data-task={task||undefined} data-depth={depth} key={node.unit.id}>
+      <header className="content-reading-unit-head">
+        {task && <PencilLine size={14}/>}<h2>{unitLabel(node.unit)}</h2>{task && <span>Aufgabe</span>}
+      </header>
+      {node.blocks.map(block => renderReadingBlock(block, node.unit.id))}
+      {node.children.map(child => renderReadingNode(child, depth + 1, task))}
+      {linkedTasks.length > 0 && <div className="content-reading-task-group">
+        <div className="content-reading-task-label">Aufgaben</div>
+        {linkedTasks.map(item => renderReadingNode(item, depth + 1, true))}
+      </div>}
+    </section>;
+  }
+
+  function renderReadingSelection() {
+    if (selection.kind === "script") return <div className="content-reading-script">
+      {outline.script.map(node => renderReadingNode(node))}
+      {outline.taskGroups.filter(group => !group.scriptUnit).length > 0 && <section className="content-reading-unassigned-tasks">
+        <h2>Aufgaben</h2>{outline.taskGroups.filter(group => !group.scriptUnit).flatMap(group => group.tasks).map(node => renderReadingNode(node, 0, true))}
+      </section>}
+      {outline.unassignedBlocks.length > 0 && <section className="content-reading-unassigned"><h2>Weitere Inhalte</h2>{outline.unassignedBlocks.map(block => renderReadingBlock(block))}</section>}
+    </div>;
+
+    if (selection.kind === "unit") {
+      const scriptNode = findNode(outline.script, selection.id);
+      const taskNode = outline.taskGroups.flatMap(group => group.tasks).map(root => findNode([root], selection.id)).find((node): node is ContentUnitNode => !!node);
+      const node = scriptNode ?? taskNode;
+      if (!node) return <div className="content-authoring-empty">Dieser Eintrag enthält noch keinen aufbereiteten Inhalt.</div>;
+      return <div className="content-reading-script">{renderReadingNode(node, 0, unitKind(node.unit) === "tasks")}</div>;
+    }
+
+    return null;
+  }
+
   const stale = blocks.filter(block => block.stale).length;
-  const selectedSummary = blocks.find(block => block.id === selected);
-  const selectedView = selected ? views[selected] : undefined;
-  const originalUrl = selectedSummary ? originalMaterialUrl(selectedSummary) : undefined;
-  const isPdf = selectedSummary?.mimeType === "application/pdf" && !!originalUrl;
-  const activeSourcePage = hoveredSourcePage ?? sourcePage;
-  const selectedPlacement = selectedSummary?.placements[0];
-  const selectedUnit = selectedPlacement ? pipeline.units.find(unit => unit.id === selectedPlacement.unitId) : undefined;
+  const selectedTitle = selection.kind === "script"
+    ? "Gesamtes Skript"
+    : selection.kind === "unit"
+      ? pipeline.units.find(unit => unit.id === selection.id) ? unitLabel(pipeline.units.find(unit => unit.id === selection.id)!) : "Inhalt"
+      : selectedSummary?.name ?? pipeline.sources.find(item => item.source.id === selection.id)?.source.name ?? "Inhalt";
   const aiContextLabel = selectedSummary ? [selectedSummary.name, selectionText ? "Auswahl" : selectedUnit ? unitLabel(selectedUnit) : undefined, sourcePage ? `Seite ${sourcePage}` : undefined].filter(Boolean).join(" · ") : "Block auswählen";
   const aiProviderOptions = [
     { id: "codex", label: "Codex", selected: aiProvider === "codex" },
     { id: "chatgpt", label: "ChatGPT", selected: aiProvider === "chatgpt" },
   ];
 
-  function renderBlock(block: ContentBlockSummary, unit?: ContentUnitNode["unit"]) {
-    const active = block.id === selected;
-    const highlighted = block.id === hovered || active;
-    const cached = views[block.id];
-    const preview = cached?.revision?.content;
-    return <section key={block.id} className="content-source-block" data-active={active || undefined} data-highlighted={highlighted || undefined} data-review={surfaceMode === "review" || undefined}
-      onMouseEnter={() => setHovered(block.id)} onMouseLeave={() => setHovered(current => current === block.id ? undefined : current)}>
-      <button type="button" className="content-source-head" onClick={() => void openBlock(block.id)} aria-pressed={active}>
-        <Icon.File filename={block.name} size={16}/>
-        <span className="content-source-name">{block.name}</span>
-        {surfaceMode === "review" && unit && <span className="content-source-unit">{unitLabel(unit)}</span>}
-        {sourcePages(block) && <span className="content-source-pages">{sourcePages(block)}</span>}
-        <span className={`content-source-status${block.stale ? " stale" : ""}`}>{block.status === "ready" ? <Check size={13}/> : block.stale ? <AlertTriangle size={13}/> : null}{statusLabel(block)}</span>
-      </button>
-
-      {!active ? <button type="button" className="content-block-preview" onClick={() => void openBlock(block.id)}>
-        {preview ? <MarkdownRenderer value={preview}/> : <span className="content-preview-placeholder">{block.currentRevisionId ? "Zum Bearbeiten öffnen" : block.observedMaterialRevision ? "Rohfassung beim Aktualisieren erstellen" : "Quelle noch nicht extrahiert"}</span>}
-      </button> : <div className="content-block-active" ref={activeBlockRef}>
-        {surfaceMode === "review" && <div className="content-block-tabs" role="tablist" aria-label={`${block.name} Ansicht`}>
-          <button type="button" role="tab" aria-selected={blockMode === "edited"} onClick={() => setBlockMode("edited")}>Bearbeitet</button>
-          <button type="button" role="tab" aria-selected={blockMode === "pdf"} disabled={!isPdf} onClick={() => setBlockMode("pdf")}>PDF</button>
-          <button type="button" role="tab" aria-selected={blockMode === "compare"} disabled={!isPdf} onClick={() => setBlockMode("compare")}>Vergleich</button>
-        </div>}
-
-        {!selectedView && block.currentRevisionId ? <Loading label="Block wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : blockMode === "edited" || surfaceMode === "edit" ? <>
-          <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/>
-          <div className="content-block-footer">
-            <span>{saving ? "Speichert…" : draft === savedDraft ? `Revision ${selectedView.revision.id.slice(0, 8)}` : "Änderungen werden automatisch gespeichert"}</span>
-            <Button size="sm" variant="ghost" label="Auf Original zurücksetzen" disabled={busy || saving || !selectedView.revision} onPress={() => void reset()}/>
-          </div>
-        </> : blockMode === "pdf" && originalUrl ? <div className="content-pdf-viewer">
-          <PdfViewer source={originalUrl} title={block.name} initialPage={block.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Review the preserved source beside authored Study Space content"}}/>
-        </div> : blockMode === "compare" && originalUrl ? <>
-          <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
-            <button type="button" aria-pressed={comparePane === "pdf"} onClick={() => setComparePane("pdf")}>Original</button>
-            <button type="button" aria-pressed={comparePane === "current"} onClick={() => setComparePane("current")}>Aktuell</button>
-          </div>
-          <div className="content-compare">
-            <div className="content-compare-pane content-compare-pdf" data-mobile-visible={comparePane === "pdf" || undefined}>
-              <div className="content-compare-label">Original PDF</div>
-              <PdfViewer source={originalUrl} title={block.name} initialPage={block.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Compare preserved source with current rendered Study Space content"}}/>
-            </div>
-            <div className="content-compare-pane content-compare-current" data-mobile-visible={comparePane === "current" || undefined}>
-              <div className="content-compare-label">Aktueller Stand</div>
-              <div className="content-current-render"><ProvenancePreview content={draft} view={selectedView} activePage={activeSourcePage} onHoverPage={setHoveredSourcePage} onPinPage={setSourcePage}/></div>
-            </div>
-          </div>
-        </> : null}
-      </div>}
-    </section>;
-  }
-
-  function renderUnit(node: ContentUnitNode, depth = 0, tasks = false, primaryScriptUnitId?: string) {
-    const additionalLinks = tasks ? node.linkedScriptUnits.filter(unit => unit.id !== primaryScriptUnitId) : [];
-    return <section className="content-outline-unit" data-kind={tasks ? "tasks" : "script"} data-depth={depth} key={node.unit.id}>
-      <div className="content-outline-unit-head">
-        <h3 title={unitLabel(node.unit)}>{unitLabel(node.unit)}</h3>
-        {additionalLinks.length > 0 && <div className="content-task-links" aria-label="Weitere Skript-Zuordnungen">
-          {additionalLinks.map(unit => <span key={unit.id} title={unitLabel(unit)}>{unitLabel(unit)}</span>)}
-        </div>}
-      </div>
-      <div className="content-unit-blocks">
-        {node.blocks.length > 0 ? node.blocks.map(block => renderBlock(block, node.unit)) : <div className="content-unit-empty">Noch kein aufbereiteter Inhalt.</div>}
-      </div>
-      {node.children.length > 0 && <div className="content-outline-children">{node.children.map(child => renderUnit(child, depth + 1, tasks, primaryScriptUnitId))}</div>}
-    </section>;
-  }
-
   if (loading) return <div className="content-authoring-loading"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
-  return <div className="content-authoring" data-mode={surfaceMode}>
+  return <div className="content-authoring content-authoring-panel" data-editing={editing||undefined}>
     <header className="content-authoring-head">
       <div className="content-authoring-title">
-        <strong>Inhalt</strong>
-        <span>{saving ? "Speichert…" : draft !== savedDraft && selected ? "Nicht gespeichert" : "Gespeichert"}</span>
+        <strong>{selectedTitle}</strong>
+        {selected && <span>{saving ? "Speichert…" : draft !== savedDraft ? "Nicht gespeichert" : "Gespeichert"}</span>}
         {stale > 0 && <span className="content-authoring-warning"><AlertTriangle size={13}/>{stale} Quelle{stale === 1 ? "" : "n"} aktualisiert</span>}
       </div>
       <div className="content-authoring-actions">
-        <div className="content-mode-switch" role="group" aria-label="Inhaltsansicht">
-          <button type="button" aria-pressed={surfaceMode === "edit"} onClick={() => setSurfaceMode("edit")}><PencilLine size={14}/>Bearbeiten</button>
-          <button type="button" aria-pressed={surfaceMode === "review"} onClick={() => setSurfaceMode("review")}><GitCompareArrows size={14}/>Review</button>
-        </div>
         <Button size="sm" variant="ghost" icon="refresh" label={blocks.length ? "Inhalte aktualisieren" : "Rohfassung erstellen"} disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
       </div>
     </header>
+
+    {selectedSummary && <div className="content-view-tabs" role="tablist" aria-label={`${selectedSummary.name} Ansicht`}>
+      <button type="button" role="tab" aria-selected={tab === "content"} onClick={() => setTab("content")}>Inhalt</button>
+      <button type="button" role="tab" aria-selected={tab === "pdf-current"} disabled={!isPdf} onClick={() => { setTab("pdf-current"); setComparePane("left"); }}>PDF ↔ Jetzt</button>
+      <button type="button" role="tab" aria-selected={tab === "edited-raw"} disabled={!selectedView?.revision} onClick={() => { setTab("edited-raw"); setComparePane("left"); }}>Bearbeitet ↔ Raw</button>
+      <button type="button" role="tab" aria-selected={tab === "raw"} disabled={!selectedView?.revision} onClick={() => setTab("raw")}>Raw</button>
+    </div>}
 
     {error && <Notice>{error}</Notice>}
     {!blocks.length && <div className="content-materialize-hint">
@@ -414,29 +475,51 @@ export function ContentAuthoringView({ courseId, courseName, pipeline }: { cours
       <Button label="Rohfassung erstellen" size="sm" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
     </div>}
 
-    {hasOutline ? <div className="content-outline">
-      {outline.script.length > 0 && <section className="content-outline-area" data-kind="script">
-        <div className="content-outline-area-head"><h2>Skript</h2></div>
-        <div className="content-outline-units">{outline.script.map(node => renderUnit(node))}</div>
-      </section>}
-
-      {outline.taskGroups.length > 0 && <section className="content-outline-area" data-kind="tasks">
-        <div className="content-outline-area-head"><h2>Aufgaben</h2></div>
-        <div className="content-task-groups">
-          {outline.taskGroups.map(group => <section className="content-task-group" key={group.id}>
-            <h3 title={group.scriptUnit ? unitLabel(group.scriptUnit) : undefined}>{group.scriptUnit ? unitLabel(group.scriptUnit) : "Nicht zugeordnet"}</h3>
-            <div className="content-outline-units">{group.tasks.map(node => renderUnit(node, 0, true, group.scriptUnit?.id))}</div>
-          </section>)}
+    {selection.kind !== "source" ? renderReadingSelection() : !selectedSummary ? <div className="content-authoring-empty">Diese Datei ist noch nicht als Inhalt materialisiert.</div> : <div className="content-source-detail" ref={activeBlockRef}>
+      <div className="content-source-meta">
+        <Icon.File filename={selectedSummary.name} size={16}/><span>{statusLabel(selectedSummary)}</span>{sourcePages(selectedSummary) && <span>{sourcePages(selectedSummary)}</span>}{selectedSummary.stale && <AlertTriangle size={13}/>} {selectedSummary.status === "ready" && <Check size={13}/>}
+      </div>
+      {!selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : tab === "content" ? <>
+        {editing ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/> : <div className="content-current-render"><MarkdownRenderer value={draft}/></div>}
+        {editing && <div className="content-block-footer">
+          <span>{saving ? "Speichert…" : draft === savedDraft ? `Revision ${selectedView.revision.id.slice(0, 8)}` : "Änderungen werden automatisch gespeichert"}</span>
+          <Button size="sm" variant="ghost" label="Auf Raw zurücksetzen" disabled={busy || saving} onPress={() => void reset()}/>
+        </div>}
+      </> : tab === "pdf-current" && originalUrl ? <>
+        <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
+          <button type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>PDF</button>
+          <button type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Jetzt</button>
         </div>
-      </section>}
+        <div className="content-compare">
+          <div className="content-compare-pane content-compare-pdf" data-mobile-visible={comparePane === "left" || undefined}>
+            <div className="content-compare-label">Original PDF</div>
+            <PdfViewer source={originalUrl} title={selectedSummary.name} initialPage={selectedSummary.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Compare preserved source with current rendered Study Space content"}}/>
+          </div>
+          <div className="content-compare-pane content-compare-current" data-mobile-visible={comparePane === "right" || undefined}>
+            <div className="content-compare-label">Jetzt</div>
+            <div className="content-current-render"><ProvenancePreview content={draft} view={selectedView} activePage={activeSourcePage} onHoverPage={setHoveredSourcePage} onPinPage={setSourcePage}/></div>
+          </div>
+        </div>
+      </> : tab === "edited-raw" ? <>
+        <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
+          <button type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>Bearbeitet</button>
+          <button type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Raw</button>
+        </div>
+        <div className="content-compare content-compare-text">
+          <div className="content-compare-pane" data-mobile-visible={comparePane === "left" || undefined}>
+            <div className="content-compare-label">Bearbeitet</div>
+            <div className="content-current-render"><MarkdownRenderer value={draft}/></div>
+          </div>
+          <div className="content-compare-pane" data-mobile-visible={comparePane === "right" || undefined}>
+            <div className="content-compare-label">Raw</div>
+            {rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <div className="content-current-render"><MarkdownRenderer value={rawRevision?.content ?? ""}/></div>}
+          </div>
+        </div>
+      </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="content-raw"><code>{rawRevision?.content ?? ""}</code></pre> : null}
+    </div>}
 
-      {outline.unassignedBlocks.length > 0 && <section className="content-outline-area" data-kind="other">
-        <div className="content-outline-area-head"><h2>Weitere Inhalte</h2></div>
-        <div className="content-unit-blocks">{outline.unassignedBlocks.map(block => renderBlock(block))}</div>
-      </section>}
-    </div> : !blocks.length ? <div className="content-authoring-empty">Noch keine bestätigte Inhaltsstruktur.</div> : null}
-    {selectedSummary && selectedView?.revision ? <div className="content-ai-wrap">
-      {aiStatus ? <div className="content-ai-status" role="status"><span>{aiStatus}</span><div><Button size="sm" variant="ghost" label="Review" onPress={() => { setSurfaceMode("review"); setBlockMode(isPdf ? "compare" : "edited"); }}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div></div> : null}
+    {selectedSummary && selectedView?.revision && editing ? <div className="content-ai-wrap">
+      {aiStatus ? <div className="content-ai-status" role="status"><span>{aiStatus}</span><div><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div></div> : null}
       <div className="content-ai-context" title={aiContextLabel}>{aiContextLabel}</div>
       <Composer
         value={aiPrompt}
