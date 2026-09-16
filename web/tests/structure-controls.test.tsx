@@ -132,3 +132,33 @@ test("explicitly excluded nested sources are filtered with hidden items", () => 
   expect(html).not.toContain("2026_CDS303_Block1_1.pdf");
   expect(html).toContain("Ausgeblendete anzeigen (1)");
 });
+
+test("nested source checkbox reflects an explicit use decision, not merely a pending proposal", () => {
+  const nestedUnit = { ...unit, sourceGroupId: 10 };
+  const pendingState = { courseId: 7, revision: 1, units: [nestedUnit], suggestedUnits: [], sources: [nestedSource], history: [], pending: 1, blocked: 0, groups: [{ id: 10, title: "Block 1", order: 0, parentId: null }], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const pendingHtml = renderToStaticMarkup(<PipelineStructure state={pendingState} busy={false} onSave={async () => pendingState} onState={noop}
+    onOpenSource={noop} onFocus={noop} onContent={noop} />);
+  const pendingRow = pendingHtml.match(new RegExp(`<li[^>]*data-source-id="${nestedSource.source.id}"[\\s\\S]*?<\\/li>`))?.[0] ?? "";
+  const pendingCheckbox = pendingRow.match(/<input[^>]*type="checkbox"[^>]*>/)?.[0] ?? "";
+  expect(pendingCheckbox).not.toContain('checked=""');
+
+  const reviewedSource: PipelineSourceView = {
+    ...nestedSource,
+    status: "reviewed",
+    decision: {
+      sourceId: nestedSource.source.id,
+      sourceVersion: nestedSource.source.sourceVersion,
+      disposition: "use",
+      uses: [{ unitId: nestedUnit.id, role: "teaching", order: 0 }],
+      reason: "Bestätigt",
+      actor: "user",
+      decidedAt: "2026-09-16T00:00:00Z",
+    },
+  };
+  const reviewedState = { ...pendingState, sources: [reviewedSource], pending: 0 };
+  const reviewedHtml = renderToStaticMarkup(<PipelineStructure state={reviewedState} busy={false} onSave={async () => reviewedState} onState={noop}
+    onOpenSource={noop} onFocus={noop} onContent={noop} />);
+  const reviewedRow = reviewedHtml.match(new RegExp(`<li[^>]*data-source-id="${nestedSource.source.id}"[\\s\\S]*?<\\/li>`))?.[0] ?? "";
+  const reviewedCheckbox = reviewedRow.match(/<input[^>]*type="checkbox"[^>]*>/)?.[0] ?? "";
+  expect(reviewedCheckbox).toContain('checked=""');
+});

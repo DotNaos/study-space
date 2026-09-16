@@ -59,14 +59,19 @@ function MappingEditor({item,state,rootId,index,disabled,onMap,onAdvanced,onClos
 }
 
 export function MappingRow({item,state,rootId,index,disabled,onMap,onExclude,onOpen,compact=false}:{item:PipelineSourceView;state:PipelineState;rootId:string;index:number;disabled:boolean;onMap:(item:MappingItem)=>void;onExclude:(item:PipelineSourceView)=>void;onOpen:(item:PipelineSourceView)=>void;compact?:boolean}){
-  const [editing,setEditing]=useState(false);const current=mappingItem(item);const display=displayMapping(state,item,rootId,index);const use=primaryUse(item);const draggable=!!current&&current.disposition==="use"&&!!use?.unitId;
+  const [editing,setEditing]=useState(false);const current=mappingItem(item);const display=displayMapping(state,item,rootId,index);const use=primaryUse(item);const included=current?.disposition==="use";const proposal=proposalFor(state,item,rootId,index);const draggable=included&&!!use?.unitId;
   const {attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:item.source.id,disabled:disabled||!draggable});
   const MappingIcon=display.kind==="excluded"?EyeOff:display.kind==="open"?CircleAlert:roleIcon("role" in display?display.role:undefined);
   return <>
     <li ref={setNodeRef} data-source-id={item.source.id} data-status={item.status} data-mapping={display.kind} data-compact={compact||undefined} data-dragging={isDragging||undefined} style={{transform:CSS.Transform.toString(transform),transition}}>
-      {compact&&<span className="mapping-selection-checkbox" title={display.kind==="excluded"?"Wieder zuordnen":"Ausblenden"}>
-        <Checkbox label={`Quelle verwenden: ${item.source.name}`} checked={display.kind!=="excluded"} disabled={disabled}
-          onCheckedChange={checked=>{if(checked!==(display.kind!=="excluded"))onExclude(item);}}/>
+      {compact&&<span className="mapping-selection-checkbox" title={included?"Ausblenden":"Verwenden"}>
+        <Checkbox label={`Quelle verwenden: ${item.source.name}`} checked={included} disabled={disabled}
+          onCheckedChange={checked=>{
+            if(checked===included)return;
+            if(!checked){onExclude(item);return;}
+            if(proposal?.disposition==="use"){onMap(proposal);return;}
+            onOpen(item);
+          }}/>
       </span>}
       {!compact&&<button ref={setActivatorNodeRef} className="mapping-handle" type="button" disabled={!draggable||disabled} aria-label={`${item.source.name} sortieren`} {...attributes} {...listeners}><GripVertical size={15}/></button>}
       <button ref={compact?setActivatorNodeRef:undefined} className="mapping-source" type="button" onClick={()=>onOpen(item)} title={item.source.name} {...(compact?attributes:{})} {...(compact?listeners:{})}>
