@@ -271,17 +271,6 @@ export function CourseDetail({
             courseId={course.id}
             version={learning.state?.activeVersion}
             onSource={setSource}
-            content={
-              <LearningPanel
-                courseId={course.id}
-                preparationOpen
-                preparationHeader={false}
-                learning={learning}
-                materials={materials}
-                moodleConnected={moodleConnected}
-                onSource={setSource}
-              />
-            }
             onOpenLearning={(target) => {
               chooseTab("learning");
               setLearningTarget(target);
