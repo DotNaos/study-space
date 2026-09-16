@@ -17,27 +17,31 @@ const renderRow = (item: PipelineUnit, units = [item], disabled = false) => rend
     onChange={noop} onHide={noop} onOpen={noop} onParent={noop} onKind={noop} /></ul>,
 );
 
-test("visible rows have a directly accessible hide button, separate from their options", () => {
+test("visible rows use an always-visible checked visibility checkbox, separate from their options", () => {
   const html = renderRow(unit);
-  expect(html).toMatch(/<button[^>]*class="structure-icon structure-visibility"[^>]*aria-label="Ausblenden: Block 1"/);
+  expect(html).toContain('class="structure-visibility-checkbox"');
+  expect(html).toContain('type="checkbox"');
+  expect(html).toContain('checked=""');
+  expect(html).toContain("In Struktur verwenden: Block 1");
   expect(html).toContain('aria-label="Optionen: Block 1"');
   expect(html).toContain('aria-haspopup="dialog"');
   expect(html).not.toContain("structure-options");
   expect(html).not.toContain("Ursprünglicher Name");
 });
 
-test("hidden rows expose a restore button instead of a decorative eye", () => {
+test("hidden rows expose an unchecked visibility checkbox", () => {
   const html = renderRow({ ...unit, hidden: true });
-  expect(html).toMatch(/<button[^>]*class="structure-icon structure-visibility"[^>]*aria-label="Einblenden: Block 1"/);
+  expect(html).toContain('class="structure-visibility-checkbox"');
+  expect(html).toContain("In Struktur verwenden: Block 1");
   expect(html).toContain('data-hidden="true"');
-  expect(html).not.toContain("structure-hidden-icon");
+  expect(html).not.toMatch(/type="checkbox"[^>]*checked/);
 });
 
-test("visibility controls respect read-only saving and inherited hidden parents", () => {
-  expect(renderRow(unit, [unit], true)).toMatch(/class="structure-icon structure-visibility"[^>]*disabled=""/);
+test("visibility checkboxes respect read-only saving and inherited hidden parents", () => {
+  expect(renderRow(unit, [unit], true)).toMatch(/<input[^>]*disabled=""[^>]*type="checkbox"/);
   const child = { ...unit, id: "b".repeat(32), parentId: unit.id };
   const html = renderRow(child, [{ ...unit, hidden: true }, child]);
-  expect(html).toMatch(/class="structure-icon structure-visibility"[^>]*disabled=""/);
+  expect(html).toMatch(/<input[^>]*disabled=""[^>]*type="checkbox"/);
   expect(html).toContain("Zuerst den übergeordneten Eintrag einblenden");
 });
 
@@ -60,7 +64,7 @@ test("nested task rows do not repeat their implicit script assignment", () => {
     onChange={noop} onHide={noop} onOpen={noop} onParent={noop} onKind={noop} inlineChildren /></ul>);
   expect(html).not.toContain('class="structure-links"');
   expect(html).not.toContain("Block 1</button>");
-  expect(html).toContain('aria-label="Ausblenden: Aufgabe 1"');
+  expect(html).toContain("In Struktur verwenden: Aufgabe 1");
   expect(html).toContain('aria-label="Optionen: Aufgabe 1"');
 });
 
@@ -80,8 +84,20 @@ test("combined structure surface exposes content next and optional focus mode", 
   expect(html).toContain("Verschachtelt");
   expect(html).toContain('aria-label="Strukturansicht"');
   expect(html).toContain(">Fokus<");
+  expect(html).toContain('role="switch"');
+  expect(html).toContain('aria-checked="false"');
+  expect(html).toContain("Ausgeblendete anzeigen");
   expect(html).toContain("Inhalt");
   expect(html).not.toMatch(/<(details|summary)\b/);
+});
+
+test("hidden structure entries are filtered by default and counted by the reveal switch", () => {
+  const hidden = { ...unit, id: "b".repeat(32), title: "Ausgeblendeter Block", order: 1, hidden: true };
+  const state = { courseId: 7, revision: 1, units: [unit, hidden], suggestedUnits: [], sources: [], history: [], pending: 0, blocked: 0, groups: [], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
+    onOpenSource={noop} onFocus={noop} onContent={noop} />);
+  expect(html).not.toContain("Ausgeblendeter Block");
+  expect(html).toContain("Ausgeblendete anzeigen (1)");
 });
 
 

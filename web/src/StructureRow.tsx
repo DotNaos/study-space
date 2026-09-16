@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Button, Form, Input } from "@dotnaos/ui-base";
-import { ChevronDown, ChevronRight, Eye, EyeOff, GripVertical, MoreHorizontal } from "lucide-react";
+import { Button, Checkbox, Form, Input } from "@dotnaos/ui-base";
+import { ChevronDown, ChevronRight, GripVertical, MoreHorizontal } from "lucide-react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { PipelineUnit } from "./pipeline-api";
@@ -21,6 +21,7 @@ export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onH
   const script=units.filter(item=>unitKind(item)==="script");
   const links=(unit.scriptUnitIds??[]).map(id=>script.find(item=>item.id===id)).filter((item):item is PipelineUnit=>!!item);
   const visibilityAction = hidden ? "Einblenden" : "Ausblenden";
+  const visibilityTitle = inheritedHidden ? "Zuerst den übergeordneten Eintrag einblenden" : visibilityAction;
   const nestedToggle=inlineChildren&&nestedCount>0;
   const childToggle=!inlineChildren&&childUnits.length>0;
   return <>
@@ -41,10 +42,10 @@ export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onH
             {links.length?links.map(unitLabel).join(" · "):"Skript zuordnen"}
           </button>}
         </div>
-        <button type="button" className="structure-icon structure-visibility" onClick={()=>onHide(!unit.hidden)} disabled={disabled||inheritedHidden}
-          aria-label={`${visibilityAction}: ${unitLabel(unit)}`} title={inheritedHidden?"Zuerst den übergeordneten Eintrag einblenden":visibilityAction}>
-          {hidden?<EyeOff size={17} aria-hidden="true"/>:<Eye size={17} aria-hidden="true"/>}
-        </button>
+        <span className="structure-visibility-checkbox" title={visibilityTitle}>
+          <Checkbox label={`In Struktur verwenden: ${unitLabel(unit)}`} checked={!hidden} disabled={disabled||inheritedHidden}
+            onCheckedChange={checked=>onHide(!checked)}/>
+        </span>
         <button type="button" className="structure-icon structure-more" onClick={onToggle} disabled={disabled} aria-haspopup="dialog" aria-expanded={expanded} aria-label={`Optionen: ${unitLabel(unit)}`}><MoreHorizontal size={18} aria-hidden="true"/></button>
       </div>
       {inlineChildren && nestedOpen && children && <div className="structure-inline-children">{children}</div>}
