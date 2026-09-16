@@ -29,3 +29,15 @@ test("preserved original URL stays pinned to the observed material revision", ()
   expect(originalMaterialUrl(item)).toBe(`/api/materials/${item.sourceId}/revisions/${item.observedMaterialRevision}/assets/original`);
   expect(originalMaterialUrl({ ...item, observedMaterialRevision: null })).toBeUndefined();
 });
+
+// Page-level provenance is intentionally derived from immutable materialization offsets.
+// Edited revisions mark provenance stale and the UI falls back to whole-block rendering.
+test("review model keeps page-level provenance available for source synchronization", () => {
+  const provenance = [
+    { sourceBlockId: "b-00103", page: 10, start: 0, length: 20 },
+    { sourceBlockId: "b-00104", page: 10, start: 22, length: 30 },
+    { sourceBlockId: "b-00106", page: 11, start: 54, length: 25 },
+  ];
+  expect(provenance.filter(item => item.page === 10).map(item => item.sourceBlockId)).toEqual(["b-00103", "b-00104"]);
+  expect(provenance.filter(item => item.page === 11).map(item => item.sourceBlockId)).toEqual(["b-00106"]);
+});

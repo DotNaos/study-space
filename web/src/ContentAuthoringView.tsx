@@ -38,6 +38,54 @@ function sourcePages(block: ContentBlockSummary) {
   return first === last ? `S. ${first}` : `S. ${first}–${last}`;
 }
 
+function ProvenancePreview({
+  content,
+  view,
+  activePage,
+  onHoverPage,
+  onPinPage,
+}: {
+  content: string;
+  view: ContentBlockView;
+  activePage?: number;
+  onHoverPage: (page?: number) => void;
+  onPinPage: (page: number) => void;
+}) {
+  const provenance = view.revision?.provenance ?? [];
+  const trustworthy = view.revision?.provenanceStatus === "current" && provenance.length > 0;
+  if (!trustworthy) return <MarkdownRenderer value={content}/>;
+
+  const ranges = provenance
+    .filter(item => item.length > 0 && item.start >= 0 && item.start < content.length)
+    .map(item => ({ ...item, end: Math.min(content.length, item.start + item.length), page: item.page ?? item.slide }))
+    .filter(item => item.end > item.start)
+    .sort((left, right) => left.start - right.start);
+  if (!ranges.length) return <MarkdownRenderer value={content}/>;
+
+  const parts: Array<{ key: string; text: string; page?: number }> = [];
+  let cursor = 0;
+  for (const range of ranges) {
+    if (range.start > cursor) parts.push({ key: `gap-${cursor}`, text: content.slice(cursor, range.start) });
+    if (range.start < cursor) continue;
+    parts.push({ key: range.sourceBlockId, text: content.slice(range.start, range.end), page: range.page ?? undefined });
+    cursor = range.end;
+  }
+  if (cursor < content.length) parts.push({ key: `gap-${cursor}`, text: content.slice(cursor) });
+
+  return <div className="content-provenance-preview">
+    {parts.map(part => part.page ? <div
+      key={part.key}
+      className="content-provenance-hunk"
+      data-source-page={part.page}
+      data-active={activePage === part.page || undefined}
+      onMouseEnter={() => onHoverPage(part.page)}
+      onMouseLeave={() => onHoverPage(undefined)}
+      onClick={() => onPinPage(part.page!)}
+      title={`Original: Seite ${part.page}`}
+    ><MarkdownRenderer value={part.text}/></div> : <MarkdownRenderer key={part.key} value={part.text}/>)}
+  </div>;
+}
+
 export function ContentAuthoringView({ courseId, pipeline }: { courseId: number; pipeline: PipelineState }) {
   const [workspace, setWorkspace] = useState<ContentWorkspace>();
   const [selected, setSelected] = useState<string>();
@@ -52,6 +100,8 @@ export function ContentAuthoringView({ courseId, pipeline }: { courseId: number;
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [sourcePage, setSourcePage] = useState<number>();
+  const [hoveredSourcePage, setHoveredSourcePage] = useState<number>();
 
   const hydrate = useCallback(async (workspace: ContentWorkspace, signal?: AbortSignal) => {
     const available = workspace.blocks.filter(block => block.currentRevisionId);
@@ -94,15 +144,21 @@ export function ContentAuthoringView({ courseId, pipeline }: { courseId: number;
   }
 
   async function openBlock(id: string, force = false) {
-    setSelected(id); setBlockMode("edited"); setComparePane("pdf"); setError("");
-    if (!force && views[id]?.revision) {
-      const content = views[id].revision?.content ?? "";
+    setSelected(id); setBlockMode("edited"); setComparePane("pdf"); setError(""); setHoveredSourcePage(undefined);
+    const summary = workspace?.blocks.find(block => block.id === id);
+    const cachedRevision = views[id]?.revision;
+    const cachedPage = cachedRevision?.provenance.find(item => item.page != null)?.page ?? cachedRevision?.provenance.find(item => item.slide != null)?.slide ?? undefined;
+    setSourcePage(summary?.placements[0]?.firstPage ?? cachedPage);
+    if (!force && cachedRevision) {
+      const content = cachedRevision.content ?? "";
       setDraft(content); setSavedDraft(content); return;
     }
     try {
       const view = await readContentBlock(courseId, id);
       setViews(current => ({ ...current, [id]: view }));
       const content = view.revision?.content ?? "";
+      const loadedPage = view.revision?.provenance.find(item => item.page != null)?.page ?? view.revision?.provenance.find(item => item.slide != null)?.slide ?? undefined;
+      setSourcePage(summary?.placements[0]?.firstPage ?? loadedPage);
       setDraft(content); setSavedDraft(content);
     } catch (error) { setError(message(error)); }
   }
@@ -148,6 +204,7 @@ export function ContentAuthoringView({ courseId, pipeline }: { courseId: number;
   const selectedView = selected ? views[selected] : undefined;
   const originalUrl = selectedSummary ? originalMaterialUrl(selectedSummary) : undefined;
   const isPdf = selectedSummary?.mimeType === "application/pdf" && !!originalUrl;
+  const activeSourcePage = hoveredSourcePage ?? sourcePage;
 
   if (loading) return <div className="content-authoring-loading"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
@@ -220,7 +277,7 @@ export function ContentAuthoringView({ courseId, pipeline }: { courseId: number;
                 </div>
                 <div className="content-compare-pane content-compare-current" data-mobile-visible={comparePane === "current" || undefined}>
                   <div className="content-compare-label">Aktueller Stand</div>
-                  <div className="content-current-render"><MarkdownRenderer value={draft}/></div>
+                  <div className="content-current-render"><ProvenancePreview content={draft} view={selectedView} activePage={activeSourcePage} onHoverPage={setHoveredSourcePage} onPinPage={setSourcePage}/></div>
                 </div>
               </div>
             </> : null}
