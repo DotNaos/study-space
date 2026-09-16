@@ -5,11 +5,12 @@ import { Button, Icon } from "@dotnaos/ui-base";
 import { MarkdownEditor, MarkdownRenderer } from "@dotnaos/ui/markdown-editor";
 import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
 import { Composer, type AiOption } from "./ui-ai";
-import { AlertTriangle, Check, PencilLine } from "lucide-react";
+import { AlertTriangle, Check, Code2, Columns2, FileDiff, FileText, PencilLine, Rows3 } from "lucide-react";
 import { message } from "./api";
 import type { PipelineState } from "./pipeline-api";
 import { unitHidden, unitKind, unitLabel } from "./learning-structure";
 import { buildContentOutline, type ContentUnitNode } from "./content-authoring-model";
+import { TextDiff, type TextDiffMode } from "./TextDiff";
 import {
   materializeContent,
   originalMaterialUrl,
@@ -127,6 +128,7 @@ export function ContentAuthoringView({
   const [rawLoading, setRawLoading] = useState<string>();
   const [tab, setTab] = useState<ContentTab>("content");
   const [comparePane, setComparePane] = useState<"left" | "right">("left");
+  const [diffMode, setDiffMode] = useState<TextDiffMode>("split");
   const [draft, setDraft] = useState("");
   const [savedDraft, setSavedDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -459,10 +461,10 @@ export function ContentAuthoringView({
     </header>
 
     {selectedSummary && <div className="content-view-tabs" role="tablist" aria-label={`${selectedSummary.name} Ansicht`}>
-      <button type="button" role="tab" aria-selected={tab === "content"} onClick={() => setTab("content")}>Inhalt</button>
-      <button type="button" role="tab" aria-selected={tab === "pdf-current"} disabled={!isPdf} onClick={() => { setTab("pdf-current"); setComparePane("left"); }}>PDF ↔ Jetzt</button>
-      <button type="button" role="tab" aria-selected={tab === "edited-raw"} disabled={!selectedView?.revision} onClick={() => { setTab("edited-raw"); setComparePane("left"); }}>Bearbeitet ↔ Raw</button>
-      <button type="button" role="tab" aria-selected={tab === "raw"} disabled={!selectedView?.revision} onClick={() => setTab("raw")}>Raw</button>
+      <button type="button" role="tab" aria-label="Inhalt" title="Inhalt" aria-selected={tab === "content"} onClick={() => setTab("content")}><FileText size={16}/></button>
+      <button type="button" role="tab" aria-label="PDF mit bearbeitetem Inhalt vergleichen" title="PDF ↔ Bearbeitet" aria-selected={tab === "pdf-current"} disabled={!isPdf} onClick={() => { setTab("pdf-current"); setComparePane("left"); }}><Columns2 size={16}/></button>
+      <button type="button" role="tab" aria-label="Raw mit bearbeitetem Inhalt vergleichen" title="Git-Diff: Raw ↔ Bearbeitet" aria-selected={tab === "edited-raw"} disabled={!selectedView?.revision} onClick={() => { setTab("edited-raw"); setComparePane("left"); }}><FileDiff size={16}/></button>
+      <button type="button" role="tab" aria-label="Raw anzeigen" title="Raw" aria-selected={tab === "raw"} disabled={!selectedView?.revision} onClick={() => setTab("raw")}><Code2 size={16}/></button>
     </div>}
 
     {error && <Notice>{error}</Notice>}
@@ -501,20 +503,24 @@ export function ContentAuthoringView({
           </div>
         </div>
       </> : tab === "edited-raw" ? <>
-        <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
-          <button type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>Bearbeitet</button>
-          <button type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Raw</button>
-        </div>
-        <div className="content-compare content-compare-text">
-          <div className="content-compare-pane" data-mobile-visible={comparePane === "left" || undefined}>
-            <div className="content-compare-label">Bearbeitet</div>
-            <div className="content-current-render"><MarkdownRenderer value={draft}/></div>
-          </div>
-          <div className="content-compare-pane" data-mobile-visible={comparePane === "right" || undefined}>
-            <div className="content-compare-label">Raw</div>
-            {rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <div className="content-current-render"><MarkdownRenderer value={rawRevision?.content ?? ""}/></div>}
+        <div className="content-diff-toolbar">
+          {diffMode === "split" && <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
+            <button type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>Raw</button>
+            <button type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Bearbeitet</button>
+          </div>}
+          <div className="content-diff-mode" role="group" aria-label="Diff-Darstellung">
+            <button type="button" aria-label="Inline Diff" title="Inline" aria-pressed={diffMode === "inline"} onClick={() => setDiffMode("inline")}><Rows3 size={15}/></button>
+            <button type="button" aria-label="Side-by-side Diff" title="Side by side" aria-pressed={diffMode === "split"} onClick={() => setDiffMode("split")}><Columns2 size={15}/></button>
           </div>
         </div>
+        {rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <TextDiff
+          before={rawRevision?.content ?? ""}
+          after={draft}
+          mode={diffMode}
+          beforeLabel="Raw"
+          afterLabel="Bearbeitet"
+          mobileSide={comparePane === "left" ? "before" : "after"}
+        />}
       </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="content-raw"><code>{rawRevision?.content ?? ""}</code></pre> : null}
     </div>}
 
