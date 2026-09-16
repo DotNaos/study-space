@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using StudySpace.Api.Content;
 using StudySpace.Api.Learning;
 using StudySpace.Api.Pipeline;
 namespace StudySpace.Api.Mcp;
@@ -8,11 +9,16 @@ public sealed partial class StudyMcpTools
 {
     public object[] Definitions => ToolDefinitions.Concat(ReviewReadTools)
         .Concat(allowFeedbackWrites ? [FeedbackTool] : Array.Empty<object>())
-        .Concat(allowPipelineWrites ? [PipelineDecisionTool, PipelineStructureTool] : Array.Empty<object>()).ToArray();
+        .Concat(allowPipelineWrites ? [PipelineDecisionTool, PipelineStructureTool] : Array.Empty<object>())
+        .Concat(allowContentWrites ? [ContentEditTool] : Array.Empty<object>()).ToArray();
     private static readonly object[] ReviewReadTools = [
         Tool("study_pipeline", "Read observed Moodle sources, reviewed learning units, pending/stale decisions and revision tokens. No import, model job or write is started. Use source_id for full bounded source evidence.", new {
             type = "object", additionalProperties = false, required = new[] { "course_id" },
             properties = new { course_id = Integer(1, long.MaxValue), source_id = String(64, 64), offset = Integer(0, 10000), max_items = Integer(1, 50) }
+        }),
+        Tool("study_content", "Read the current source-bound authored content workspace or one exact editable content block. This does not mutate the immutable source/extraction. Use block_id to load the current editable revision before writing.", new {
+            type = "object", additionalProperties = false, required = new[] { "course_id" },
+            properties = new { course_id = Integer(1, long.MaxValue), block_id = String(64, 64), max_chars = Integer(500, 100000) }
         }),
         Tool("study_attempts", "Read submitted Study Space answer attempts and their feedback. Returns a bounded index by default; use attempt_id to read the exact answer, task/version and answer hash before writing feedback. Drafts are not exposed unless include_drafts is true.", new {
             type = "object", additionalProperties = false, required = new[] { "course_id" },
@@ -22,6 +28,9 @@ public sealed partial class StudyMcpTools
     private static object WritableTool(string name, string description, object inputSchema) => new {
         name, description, inputSchema, annotations = new { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = false }
     };
+    private static readonly object ContentEditTool = WritableTool("study_content_edit", "Replace one exact editable Study Space MDX block using optimistic revision checking. Explicit deployment opt-in required. The immutable source/extraction is never changed. Read study_content first and pass its current revision id.", Schema("""
+        {"type":"object","additionalProperties":false,"required":["course_id","block_id","expected_revision_id","content","reason","actor"],"properties":{"course_id":{"type":"integer","minimum":1},"block_id":{"type":"string","pattern":"^[a-f0-9]{64}$"},"expected_revision_id":{"type":"string","pattern":"^[a-f0-9]{32}$"},"content":{"type":"string","maxLength":100000},"reason":{"type":"string","minLength":1,"maxLength":2000},"actor":{"type":"string","minLength":1,"maxLength":100}}}
+        """));
     private static readonly object FeedbackTool = WritableTool("study_feedback", "Append learning feedback to one exact submitted attempt only. Requires explicit deployment opt-in. Does not change answers, tasks, script, Moodle submissions or grades. Read study_attempts first and use its exact attempt revision and answer hash.", Schema("""
         {"type":"object","additionalProperties":false,"required":["course_id","attempt_id","attempt_revision","answer_hash","reviewer","outcome","comment"],"properties":{"course_id":{"type":"integer","minimum":1},"attempt_id":{"type":"string","pattern":"^[a-f0-9]{32}$"},"attempt_revision":{"type":"integer","minimum":1},"answer_hash":{"type":"string","pattern":"^[a-f0-9]{64}$"},"reviewer":{"type":"string","minLength":1,"maxLength":100},"outcome":{"type":"string","enum":["correct","partly-correct","needs-work","uncertain"]},"comment":{"type":"string","minLength":1,"maxLength":12000}}}
         """));
@@ -47,6 +56,72 @@ public sealed partial class StudyMcpTools
                 textTruncated = item.Source.Text.Length > (id is null ? 500 : 30000), item.Status, item.Decision, item.SectionIds, item.ExerciseIds
             }).ToArray() };
     }
+    private async Task<object> ContentRead(JsonElement args, CancellationToken ct)
+    {
+        var course = Long(args, "course_id", 1, long.MaxValue);
+        var blockId = OptionalString(args, "block_id", 64);
+        if (blockId is null)
+        {
+            var workspace = await Get<ContentWorkspace>($"/api/content/courses/{course}", ct);
+            return new
+            {
+                workspace.CourseId,
+                workspace.PipelineRevision,
+                blocks = workspace.Blocks.Select(block => new
+                {
+                    block.Id,
+                    block.SourceId,
+                    block.Name,
+                    block.MimeType,
+                    block.CurrentRevisionId,
+                    block.Included,
+                    block.Stale,
+                    block.Status,
+                    block.Placements,
+                    block.ObservedSourceVersion,
+                    block.ObservedMaterialRevision,
+                }).ToArray(),
+            };
+        }
+        if (!System.Text.RegularExpressions.Regex.IsMatch(blockId, "^[a-f0-9]{64}$")) throw new StudyMcpException("Invalid content block ID.");
+        var maxChars = Int(args, "max_chars", 30000, 500, 100000);
+        var view = await Get<ContentBlockView>($"/api/content/courses/{course}/blocks/{blockId}", ct);
+        var revision = view.Revision;
+        var text = revision?.Content ?? "";
+        return new
+        {
+            courseId = course,
+            block = view.Block,
+            revision = revision is null ? null : new
+            {
+                revision.Id,
+                revision.ParentRevisionId,
+                revision.CreatedAt,
+                revision.Actor,
+                revision.Reason,
+                revision.Kind,
+                revision.SourceVersion,
+                revision.MaterialRevision,
+                content = Clip(text, maxChars),
+                contentTruncated = text.Length > maxChars,
+                revision.Provenance,
+                revision.ProvenanceStatus,
+            },
+        };
+    }
+
+    private async Task<object> ContentWrite(JsonElement args, CancellationToken ct)
+    {
+        if (!allowContentWrites) throw new StudyMcpException("Content writes are disabled. Enable STUDY_MCP_ALLOW_CONTENT_WRITES explicitly.");
+        var course = Long(args, "course_id", 1, long.MaxValue);
+        var blockId = RequiredString(args, "block_id", 64);
+        var revisionId = RequiredString(args, "expected_revision_id", 32);
+        if (!System.Text.RegularExpressions.Regex.IsMatch(blockId, "^[a-f0-9]{64}$") || !System.Text.RegularExpressions.Regex.IsMatch(revisionId, "^[a-f0-9]{32}$"))
+            throw new StudyMcpException("Invalid content or revision ID.");
+        var body = new ContentEditRequest(revisionId, RequiredString(args, "content", 100000), RequiredString(args, "reason", 2000), RequiredString(args, "actor", 100));
+        return await Post($"/api/content/courses/{course}/blocks/{blockId}", HttpMethod.Put, body, ct);
+    }
+
     private async Task<object> AttemptsRead(JsonElement args, CancellationToken ct)
     {
         var course = Long(args, "course_id", 1, long.MaxValue);

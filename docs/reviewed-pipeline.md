@@ -79,6 +79,7 @@ Write tools remain separately disabled by default:
 
 - `STUDY_MCP_ALLOW_PIPELINE_WRITES=true` exposes `study_pipeline_structure` and `study_pipeline_decide`.
 - `STUDY_MCP_ALLOW_FEEDBACK_WRITES=true` exposes `study_feedback` for appending feedback to an exact submitted attempt.
+- `STUDY_MCP_ALLOW_CONTENT_WRITES=true` exposes `study_content_edit`; `study_content` remains read-only and is always available for loading the current source-bound MDX revision before an edit.
 
 The MCP RPC transport accepts JSON requests from connector/agent backends and rejects requests carrying a browser Origin header. Browser interaction uses the protected application API, not direct MCP RPC. This prevents browser-origin requests from reaching an opt-in write tool; it does not replace deployment/network access control.
 

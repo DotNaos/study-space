@@ -93,3 +93,20 @@ public sealed record ContentResetRequest(
     string ExpectedRevisionId,
     string Reason,
     string Actor = "user");
+
+public sealed record ContentUndoRequest(
+    string ExpectedRevisionId,
+    string Reason,
+    string Actor = "user");
+
+public sealed record ContentAgentRequest(
+    string ExpectedRevisionId,
+    string Instruction,
+    bool ConsentToCodex,
+    string? SelectionText = null,
+    int? Page = null,
+    string[]? SourceBlockIds = null);
+
+public sealed record ContentAgentResult(
+    ContentBlockView View,
+    string Summary);

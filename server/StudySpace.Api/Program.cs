@@ -91,9 +91,11 @@ app.Use(async (context, next) =>
             System.Text.RegularExpressions.Regex.IsMatch(context.Request.Path.Value ?? "", @"^/api/providers/moodle/courses/[1-9][0-9]*/artwork$");
         var sectionEdit = HttpMethods.IsPut(context.Request.Method) &&
             System.Text.RegularExpressions.Regex.IsMatch(context.Request.Path.Value ?? "", @"^/api/learning/courses/[1-9][0-9]*/sections/[a-f0-9]{32,64}$");
+        var contentEdit = (HttpMethods.IsPut(context.Request.Method) || HttpMethods.IsPost(context.Request.Method)) &&
+            System.Text.RegularExpressions.Regex.IsMatch(context.Request.Path.Value ?? "", @"^/api/content/courses/[1-9][0-9]*/blocks/[a-f0-9]{64}(/agent)?$");
         if (context.Request.Path.StartsWithSegments("/api/pipeline") && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } planLimit)
             planLimit.MaxRequestBodySize = 128 * 1024;
-        if (sectionEdit && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } editLimit)
+        if ((sectionEdit || contentEdit) && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } editLimit)
             editLimit.MaxRequestBodySize = 128 * 1024;
         if (artworkUpload && context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } bodyLimit)
             bodyLimit.MaxRequestBodySize = MoodleCourseImages.MaximumBytes;

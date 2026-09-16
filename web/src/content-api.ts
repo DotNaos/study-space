@@ -60,6 +60,18 @@ export type ContentBlockView = {
   revision?: ContentRevision | null;
 };
 
+
+export type ContentAgentResult = {
+  view: ContentBlockView;
+  summary: string;
+};
+
+export type ContentAgentContext = {
+  selectionText?: string;
+  page?: number;
+  sourceBlockIds?: string[];
+};
+
 export const contentPath = (courseId: number) => `/api/content/courses/${courseId}`;
 export const readContentWorkspace = (courseId: number, signal?: AbortSignal) =>
   api<ContentWorkspace>(contentPath(courseId), { signal });
@@ -98,3 +110,26 @@ export function originalMaterialUrl(block: ContentBlockSummary) {
   if (!block.observedMaterialRevision) return undefined;
   return `/api/materials/${encodeURIComponent(block.sourceId)}/revisions/${encodeURIComponent(block.observedMaterialRevision)}/assets/original`;
 }
+
+export const runContentAgent = (courseId: number, blockId: string, expectedRevisionId: string, instruction: string, context: ContentAgentContext = {}) =>
+  api<ContentAgentResult>(`${contentPath(courseId)}/blocks/${blockId}/agent`, {
+    method: "POST",
+    body: JSON.stringify({
+      expectedRevisionId,
+      instruction,
+      consentToCodex: true,
+      selectionText: context.selectionText || null,
+      page: context.page ?? null,
+      sourceBlockIds: context.sourceBlockIds ?? [],
+    }),
+  });
+
+export const undoContentBlock = (courseId: number, blockId: string, expectedRevisionId: string) =>
+  api<ContentBlockView>(`${contentPath(courseId)}/blocks/${blockId}/undo`, {
+    method: "POST",
+    body: JSON.stringify({
+      expectedRevisionId,
+      actor: "user",
+      reason: "Letzte Bearbeitung im Block-Editor rückgängig gemacht.",
+    }),
+  });

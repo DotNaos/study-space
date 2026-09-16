@@ -269,6 +269,7 @@ export function CourseDetail({
         <Suspense fallback={<Loading label="Aufbereitung wird geöffnet …" />}>
           <PipelineView
             courseId={course.id}
+            courseName={course.name}
             version={learning.state?.activeVersion}
             onSource={setSource}
             onOpenLearning={(target) => {
