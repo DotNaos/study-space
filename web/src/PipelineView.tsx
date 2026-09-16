@@ -1,4 +1,3 @@
-import { PreparationSteps } from "./PreparationSteps";
 import { SourceMappingBoard } from "./SourceMappingBoard";
 import type { PipelineUnit } from "./pipeline-api";
 import "./preparation-flow.css";
@@ -12,7 +11,7 @@ import type { LearningTarget, LearningVersion } from "./learning-api";
 import type { SourceSelection } from "./SourceViewer";
 import { SafeMarkdown } from "./SafeMarkdown";
 import { Loading, Notice } from "./shared";
-import { PipelineReview, PipelineStructure } from "./PipelineReview";
+import { PipelineReview } from "./PipelineReview";
 import {
   groupSources,
   isOpen,
@@ -27,7 +26,7 @@ import {
   type PipelineState,
 } from "./pipeline-api";
 import "./pipeline.css";
-import { ContentAuthoringView } from "./ContentAuthoringView";
+import { PreparationWorkspace } from "./PreparationWorkspace";
 
 export function PipelineView({
   courseId,
@@ -240,7 +239,7 @@ export function PipelineView({
     );
   }
   const currentMappingRoot = route.kind === "mapping-unit" ? route.id : undefined;
-  const combinedStructure = route.kind === "overview" || route.kind === "structure";
+  const combinedPreparation = route.kind === "overview" || route.kind === "structure" || route.kind === "content";
   const groups =
     state?.groups.filter(
       (candidate) =>
@@ -249,10 +248,7 @@ export function PipelineView({
     ) ?? [];
   return (
     <section className="pipeline-view" aria-label="Kursaufbereitung">
-      {state && <PreparationSteps tab={route.kind === "content" ? "content" : "structure"} open={state.pending} disabled={busy}
-        onStructure={()=>void go({kind:"structure"})}
-        onContent={()=>void go({kind:"content"})} />}
-      {!combinedStructure && route.kind !== "content" && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
+      {!combinedPreparation && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
         <div className="pipeline-breadcrumb">
           <Button
             variant="ghost"
@@ -291,17 +287,15 @@ export function PipelineView({
       {state?.problem && <Notice>{state.problem}</Notice>}
       {!state ? (
         !error && <Loading label="Quellenstruktur wird gelesen …" />
-      ) : route.kind === "content" ? (
-        <ContentAuthoringView courseId={courseId} courseName={courseName} pipeline={state}/>
-      ) : combinedStructure ? (
-        <PipelineStructure
+      ) : combinedPreparation ? (
+        <PreparationWorkspace
+          courseId={courseId}
+          courseName={courseName}
           state={state}
           busy={busy}
           onSave={saveStructure}
           onState={setState}
-          onOpenSource={(source,unitId)=>{ mappingReturn.current=unitId; void go({kind:"source",id:source.source.id}); }}
           onFocus={()=>void go({kind:"mapping"})}
-          onContent={()=>void go({kind:"content"})}
           onGuard={registerGuard}
         />
       ) : route.kind === "mapping" || route.kind === "mapping-unit" ? (

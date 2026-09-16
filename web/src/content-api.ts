@@ -60,7 +60,6 @@ export type ContentBlockView = {
   revision?: ContentRevision | null;
 };
 
-
 export type ContentAgentResult = {
   view: ContentBlockView;
   summary: string;
@@ -86,6 +85,8 @@ export const materializeContent = (courseId: number, expectedPipelineRevision: n
   });
 export const readContentBlock = (courseId: number, blockId: string, signal?: AbortSignal) =>
   api<ContentBlockView>(`${contentPath(courseId)}/blocks/${blockId}`, { signal });
+export const readContentRevision = (courseId: number, blockId: string, revisionId: string, signal?: AbortSignal) =>
+  api<ContentRevision>(`${contentPath(courseId)}/blocks/${blockId}/revisions/${revisionId}`, { signal });
 export const saveContentBlock = (courseId: number, blockId: string, expectedRevisionId: string, content: string) =>
   api<ContentBlockView>(`${contentPath(courseId)}/blocks/${blockId}`, {
     method: "PUT",
