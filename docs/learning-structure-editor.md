@@ -6,9 +6,9 @@ The editor keeps the observed Moodle hierarchy separate from a user-owned learni
 
 ## Editing
 
-Drag the visible handle to reorder siblings. Pointer, touch and keyboard sensors are enabled; keyboard users pick up/drop with Space and cancel with Escape. Editing a name or clicking its eye does not initiate dragging. Children retain their parent and move with the logical unit. Open a parent's child list to sort that level.
+Drag the visible handle to reorder siblings. Pointer, touch and keyboard sensors are enabled; keyboard users pick up/drop with Space and cancel with Escape. Editing a name or changing its inclusion checkbox does not initiate dragging. Children retain their parent and move with the logical unit. Open a parent's child list to sort that level.
 
-Every row has a directly clickable eye to hide or restore it. **Ausgeblendete** reveals hidden entries. An entry hidden only through its parent must first have the parent restored; the control explains this rather than pretending the child can become visible independently. Hiding is reversible and does not open the options dialog.
+Every row has an always-visible checkbox for inclusion in the active learning structure. Checked means visible/included; unchecking hides the entry. A separate **Ausgeblendete anzeigen** switch controls whether unchecked entries stay filtered from the tree or are revealed for restoration, so large courses can be reduced to the selected structure. An entry hidden only through its parent stays unchecked and disabled until the parent is restored. Hiding is reversible and does not open the options dialog.
 
 The three-dot button opens the existing styled application dialog, not a large expanded body inside the list. The dialog contains the full display name, parent selection, task-to-script links and movement between the script and task areas. Original names are shown separately when a custom name differs, with a reset action. The name otherwise already displays the original, so it is not repeated below every entry. Long selection labels stay single-line and are searchable in longer lists.
 
@@ -36,7 +36,7 @@ These fields are accepted by the application API. The opt-in MCP structure tool 
 
 ## Validation
 
-Backend regressions cover separate hierarchy types, original-name preservation, aliases, reversible hiding, retained source decisions and learner state, and revision conflicts. Frontend regressions cover sibling drag ordering, unchanged descendants, label reset, hidden-parent visibility and task movement, plus direct eye-button semantics, disabled states and styled disclosures. Browser QA uses the isolated synthetic workflow fixture to check pointer/keyboard/touch visibility controls, options dialogs, new-row focus and persistence. Production checks are read-only.
+Backend regressions cover separate hierarchy types, original-name preservation, aliases, reversible hiding, retained source decisions and learner state, and revision conflicts. Frontend regressions cover sibling drag ordering, unchanged descendants, label reset, hidden-parent visibility and task movement, plus direct inclusion-checkbox semantics, disabled states, hidden-item filtering and styled disclosures. Browser QA uses the isolated synthetic workflow fixture to check pointer/keyboard/touch visibility controls, options dialogs, new-row focus and persistence. Production checks are read-only.
 
 
 ## Guided preparation and automatic saves (v0.2.28)
