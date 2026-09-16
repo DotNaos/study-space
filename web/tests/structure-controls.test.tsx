@@ -52,6 +52,7 @@ test("nested structure rows keep content inline with the chevron in the leading 
   </StructureRow></ul>);
   expect(html).toContain('aria-label="Block 1 einklappen"');
   expect(html).toContain('class="structure-icon structure-leading structure-nested-toggle"');
+  expect(html.indexOf('class="structure-visibility-checkbox"')).toBeLessThan(html.indexOf('aria-label="Block 1 einklappen"'));
   expect(html).not.toContain('class="structure-handle structure-drag-only"');
   expect(html).not.toContain('title="3 Inhalte"');
   expect(html).toContain('class="structure-inline-children"');
@@ -87,6 +88,8 @@ test("combined structure surface exposes content next and optional focus mode", 
   expect(html).toContain('role="switch"');
   expect(html).toContain('aria-checked="false"');
   expect(html).toContain("Ausgeblendete anzeigen");
+  expect(html).toContain("Alle auswählen");
+  expect(html).toContain("Alle abwählen");
   expect(html).toContain("Inhalt");
   expect(html).not.toMatch(/<(details|summary)\b/);
 });
@@ -109,6 +112,23 @@ test("nested sources use their containing section and component-library file ico
   expect(html).toContain('data-compact="true"');
   expect(html).toContain("2026_CDS303_Block1_1.pdf");
   expect(html).toContain('data-ui-component="Icon.File"');
+  expect(html).toContain('class="mapping-selection-checkbox"');
+  expect(html).toContain("Quelle verwenden: 2026_CDS303_Block1_1.pdf");
+  expect(html).not.toContain('class="mapping-eye"');
   expect(html).not.toContain('class="mapping-handle"');
   expect(html).not.toContain('class="mapping-value"');
+});
+
+test("explicitly excluded nested sources are filtered with hidden items", () => {
+  const nestedUnit = { ...unit, sourceGroupId: 10 };
+  const excluded: PipelineSourceView = {
+    ...nestedSource,
+    status: "excluded",
+    decision: { sourceId: nestedSource.source.id, sourceVersion: nestedSource.source.sourceVersion, disposition: "exclude", uses: [], reason: "Hidden", actor: "user", decidedAt: "2026-09-16T00:00:00Z" },
+  };
+  const state = { courseId: 7, revision: 1, units: [nestedUnit], suggestedUnits: [], sources: [excluded], history: [], pending: 0, blocked: 0, groups: [{ id: 10, title: "Block 1", order: 0, parentId: null }], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
+    onOpenSource={noop} onFocus={noop} onContent={noop} />);
+  expect(html).not.toContain("2026_CDS303_Block1_1.pdf");
+  expect(html).toContain("Ausgeblendete anzeigen (1)");
 });

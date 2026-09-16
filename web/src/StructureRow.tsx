@@ -28,6 +28,10 @@ export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onH
     <li ref={setNodeRef} data-unit-id={unit.id} data-hidden={hidden||undefined} data-dragging={isDragging||undefined}
       style={{transform:CSS.Transform.toString(transform),transition}}>
       <div className="structure-line">
+        <span className="structure-visibility-checkbox" title={visibilityTitle}>
+          <Checkbox label={`In Struktur verwenden: ${unitLabel(unit)}`} checked={!hidden} disabled={disabled||inheritedHidden}
+            onCheckedChange={checked=>onHide(!checked)}/>
+        </span>
         {nestedToggle?<button type="button" className="structure-icon structure-leading structure-nested-toggle" ref={setActivatorNodeRef} {...attributes} {...listeners}
           onClick={onToggleNested} disabled={disabled} aria-expanded={nestedOpen} aria-label={`${unitLabel(unit)} ${nestedOpen?"einklappen":"ausklappen"}`} title={nestedOpen?"Einklappen":"Ausklappen"}>
           <ChevronDown size={16} aria-hidden="true" className={nestedOpen?"structure-chevron-open":undefined}/>
@@ -42,10 +46,6 @@ export function StructureRow({unit,units,disabled,expanded,onToggle,onChange,onH
             {links.length?links.map(unitLabel).join(" · "):"Skript zuordnen"}
           </button>}
         </div>
-        <span className="structure-visibility-checkbox" title={visibilityTitle}>
-          <Checkbox label={`In Struktur verwenden: ${unitLabel(unit)}`} checked={!hidden} disabled={disabled||inheritedHidden}
-            onCheckedChange={checked=>onHide(!checked)}/>
-        </span>
         <button type="button" className="structure-icon structure-more" onClick={onToggle} disabled={disabled} aria-haspopup="dialog" aria-expanded={expanded} aria-label={`Optionen: ${unitLabel(unit)}`}><MoreHorizontal size={18} aria-hidden="true"/></button>
       </div>
       {inlineChildren && nestedOpen && children && <div className="structure-inline-children">{children}</div>}
