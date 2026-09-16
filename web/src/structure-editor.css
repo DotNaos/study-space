@@ -120,3 +120,8 @@
 .structure-view-tabs > button[data-active] { background:var(--color-bg-1); color:var(--color-text); }
 .structure-view-tabs > button:hover { color:var(--color-text); background:var(--color-bg-1); }
 @media(max-width:520px){.structure-view-tabs > button span{display:none}.structure-view-tabs > button{width:2.25rem;justify-content:center;padding:0}}
+
+/* Source names must remain visible in the compact embedded structure list. */
+.structure-mapping-rows .mapping-source{width:100%}
+.structure-mapping-rows .mapping-source>span:last-child{flex:1 1 auto;width:0;min-width:0}
+.structure-mapping-rows .mapping-source strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
