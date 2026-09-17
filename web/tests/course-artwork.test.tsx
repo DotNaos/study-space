@@ -15,11 +15,13 @@ test("versioned course image paths remain same-origin and reject injected versio
   expect(courseImagePath({ ...course, imageUrl: "https://external.test/cover.png" })).toBeUndefined();
 });
 
-test("missing course artwork uses ImageOff rather than a book or invented cover", () => {
+test("missing course artwork uses deterministic generated artwork", () => {
   const html = renderToStaticMarkup(createElement(CourseArtwork, { course }));
-  expect(html).toContain("lucide-image-off");
-  expect(html).not.toContain("lucide-book");
+  const repeated = renderToStaticMarkup(createElement(CourseArtwork, { course }));
+  expect(html).toContain("data-generated-course-artwork");
+  expect(html).not.toContain("lucide-image-off");
   expect(html).not.toContain("<img");
+  expect(repeated).toBe(html);
 });
 
 test("file artwork is supplied by the published component library", () => {
