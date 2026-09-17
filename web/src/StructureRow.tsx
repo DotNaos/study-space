@@ -11,13 +11,13 @@ import { StructurePicker } from "./StructurePicker";
 export function StructureRow({
   unit, units, disabled, expanded, onToggle, onChange, onHide, onOpen, onParent, onKind,
   inlineChildren=false, nestedOpen=false, nestedCount=0, onToggleNested, children,
-  editing=true, selected=false, onSelect, visibilityMode=false, onVisibilityToggle, inlineVisibility=true,
+  editing=true, selected=false, onSelect, visibilityMode=false, onVisibilityToggle, inlineVisibility=true, sourceCount=0,
 }: {
   unit:PipelineUnit;units:PipelineUnit[];disabled:boolean;expanded:boolean;onToggle:()=>void;
   onChange:(patch:Partial<PipelineUnit>)=>void;onHide:(hidden:boolean)=>void;onOpen:()=>void;
   onParent:(id:string|null)=>void;onKind:()=>void;inlineChildren?:boolean;nestedOpen?:boolean;nestedCount?:number;
   onToggleNested?:()=>void;children?:ReactNode;editing?:boolean;selected?:boolean;onSelect?:()=>void;
-  visibilityMode?:boolean;onVisibilityToggle?:()=>void;inlineVisibility?:boolean;
+  visibilityMode?:boolean;onVisibilityToggle?:()=>void;inlineVisibility?:boolean;sourceCount?:number;
 }) {
   const editingControls=editing&&!visibilityMode;
   const {attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:unit.id,disabled:disabled||!editingControls});
@@ -66,6 +66,7 @@ export function StructureRow({
               {links.length?links.map(unitLabel).join(" · "):"Skript zuordnen"}
             </button>}
           </div>
+          {sourceCount > 0 && <span className="structure-source-count">{sourceCount} {sourceCount === 1 ? "Quelle" : "Quellen"}</span>}
           <button type="button" className="structure-icon structure-more" onClick={onToggle} disabled={disabled} aria-haspopup="dialog" aria-expanded={expanded} aria-label={`Optionen: ${unitLabel(unit)}`}><MoreHorizontal size={18} aria-hidden="true"/></button>
         </> : <>
           {nestedToggle ? <button type="button" className="structure-icon structure-leading structure-nested-toggle" onClick={onToggleNested} aria-expanded={nestedOpen} aria-label={`${unitLabel(unit)} ${nestedOpen?"einklappen":"ausklappen"}`} title={nestedOpen?"Einklappen":"Ausklappen"}>

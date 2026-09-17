@@ -10,6 +10,7 @@ import { message } from "./api";
 import type { PipelineState } from "./pipeline-api";
 import { unitHidden, unitKind, unitLabel } from "./learning-structure";
 import { buildContentOutline, type ContentUnitNode } from "./content-authoring-model";
+import { sourcePlacement } from "./source-placement";
 import { TextDiff, type TextDiffMode } from "./TextDiff";
 import {
   materializeContent,
@@ -260,11 +261,10 @@ export function ContentAuthoringView({
   }, [ensureRawRevision, rawRevisions, selected, selectedView?.revision]);
 
   const contentCandidateCount = useMemo(() => pipeline.sources.filter(item => {
-    if (!item.source.present || item.decision?.disposition !== "use") return false;
-    return item.decision.uses.some(use => {
-      const unit = pipeline.units.find(candidate => candidate.id === use.unitId);
-      return !!unit && !unitHidden(unit, pipeline.units);
-    });
+    if (!item.source.present) return false;
+    const placement = sourcePlacement(pipeline, item);
+    const unit = placement.currentUnitId ? pipeline.units.find(candidate => candidate.id === placement.currentUnitId) : undefined;
+    return !placement.hidden && !!unit && !unitHidden(unit, pipeline.units);
   }).length, [pipeline]);
   const canMaterialize = contentCandidateCount > 0 || blocks.length > 0;
 
@@ -272,8 +272,8 @@ export function ContentAuthoringView({
     if (busy) return;
     if (!canMaterialize) {
       setError(pipeline.pending > 0
-        ? `${pipeline.pending} Quellen sind noch offen. Bestätige in der Struktur zuerst mindestens eine Quellenzuordnung.`
-        : "Keine bestätigte Quelle ist einer sichtbaren Lerneinheit zugeordnet.");
+        ? `${pipeline.pending} Quellen sind noch offen. Ordne sie unter Quellen zu oder blende sie aus.`
+        : "Keine sichtbare Quelle ist einem sichtbaren Struktur-Eintrag zugeordnet.");
       return;
     }
     setBusy(true); setError("");
@@ -495,8 +495,8 @@ export function ContentAuthoringView({
     {!blocks.length && <div className="content-materialize-hint">
       <span>{contentCandidateCount === 0
         ? pipeline.pending > 0
-          ? `${pipeline.pending} Quellen sind noch offen. Bestätige in der Struktur zuerst mindestens eine Quellenzuordnung.`
-          : "Keine bestätigte Quelle ist einer sichtbaren Lerneinheit zugeordnet."
+          ? `${pipeline.pending} Quellen sind noch offen. Ordne sie unter Quellen zu oder blende sie aus.`
+          : "Keine sichtbare Quelle ist einem sichtbaren Struktur-Eintrag zugeordnet."
         : "Noch keine editierbare Rohfassung aus der bestätigten Struktur."}</span>
       <Button label="Rohfassung erstellen" size="sm" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
     </div>}

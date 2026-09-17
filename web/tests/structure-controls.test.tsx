@@ -171,6 +171,7 @@ test("embedded authoring structure keeps sources out of the tree and hides perma
   expect(html).toContain("Sichtbarkeit");
   expect(html).not.toContain("2026_CDS303_Block1_1.pdf");
   expect(html).not.toContain('class="structure-visibility-checkbox"');
+  expect(html).not.toContain('class="structure-branch-label">Aufgaben');
 });
 
 test("visibility mode keeps the checkbox in a fixed trailing column and preserves inherited child state", () => {
@@ -182,4 +183,14 @@ test("visibility mode keeps the checkbox in a fixed trailing column and preserve
   expect(html).toContain('class="structure-visibility-checkbox structure-visibility-checkbox-right"');
   expect(html).toMatch(/<input[^>]*checked=""[^>]*disabled=""[^>]*type="checkbox"|<input[^>]*disabled=""[^>]*type="checkbox"[^>]*checked=""/);
   expect(html.indexOf("structure-visibility-row")).toBeLessThan(html.indexOf("structure-visibility-checkbox-right"));
+});
+
+test("embedded tasks are highlighted inline without a separate task branch label", () => {
+  const task: PipelineUnit = { id: "c".repeat(32), title: "Aufgabe 1", parentId: null, order: 0, kind: "tasks", hidden: false, scriptUnitIds: [unit.id] };
+  const state = { courseId: 7, revision: 1, units: [unit, task], suggestedUnits: [], sources: [], history: [], pending: 0, blocked: 0, groups: [], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
+    onOpenSource={noop} onFocus={noop} embedded editing onSelectUnit={noop} />);
+  expect(html).toContain('data-kind="tasks"');
+  expect(html).toContain("Aufgabe 1");
+  expect(html).not.toContain('class="structure-branch-label">Aufgaben');
 });

@@ -150,12 +150,16 @@ public sealed class ContentService(ContentStore content, LearningStore learning,
             var ordered = PipelineService.OrderedUnits(plan.Units);
             var unitOrder = ordered.Select((unit, index) => (unit.Id, index)).ToDictionary(value => value.Id, value => value.index);
             var units = plan.Units.ToDictionary(unit => unit.Id);
-            var sources = plan.Sources.ToDictionary(source => source.Id);
             var candidates = new List<Candidate>();
-            foreach (var decision in plan.Decisions.Where(decision => decision.Disposition == "use"))
+            foreach (var source in plan.Sources.Where(source => source.Present))
             {
-                if (!sources.TryGetValue(decision.SourceId, out var source) || !source.Present) continue;
-                var placements = decision.Uses
+                var decision = plan.Decisions.SingleOrDefault(item => item.SourceId == source.Id);
+                if (decision?.Disposition == "exclude") continue;
+                var uses = decision?.Disposition == "use" ? decision.Uses :
+                    plan.Units.FirstOrDefault(unit => unit.SourceGroupId == source.SectionId && !LearningStructure.IsHidden(unit, plan.Units)) is { } defaultUnit
+                        ? [new SourceUse(defaultUnit.Id, LearningStructure.Kind(defaultUnit) == "tasks" ? "task" : "teaching", Order: 0)]
+                        : [];
+                var placements = uses
                     .Where(use => units.TryGetValue(use.UnitId, out var unit) && !LearningStructure.IsHidden(unit, plan.Units))
                     .OrderBy(use => unitOrder.GetValueOrDefault(use.UnitId, int.MaxValue))
                     .ThenBy(use => use.Order ?? int.MaxValue)

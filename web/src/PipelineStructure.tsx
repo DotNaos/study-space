@@ -169,6 +169,7 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
   const actions:MappingActions={disabled:busy||structureBusy||mappingBlocked||!editing,enqueue:mappings.enqueue,before:beforeMapping,onOpen:onOpenSource};
 
   function row(unit:PipelineUnit,children?:ReactNode){
+    const sourceCount=sourceItems(state,displayUnits,unit).filter(item=>item.decision?.disposition!=="exclude").length;
     const sources=embedded?[]:sourceItems(state,displayUnits,unit).filter(item=>showHidden||item.decision?.disposition!=="exclude");
     const childUnits=displayUnits.filter(item=>item.parentId===unit.id&&(visibilityMode||showHidden||!unitHidden(item,displayUnits)));
     const taskChildren=unitKind(unit)==="script"?displayUnits.filter(item=>unitKind(item)==="tasks"&&linkedTaskOwner(displayUnits,item,visibilityMode)===unit.id&&(visibilityMode||showHidden||!unitHidden(item,displayUnits))):[];
@@ -176,7 +177,7 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
     return <StructureRow key={unit.id} unit={unit} units={displayUnits} disabled={disabled} expanded={expanded===unit.id} onToggle={()=>setExpanded(expanded===unit.id?undefined:unit.id)}
       onChange={patch=>change(unit.id,patch)} onHide={hidden=>change(unit.id,{hidden})} onOpen={()=>{}} onParent={parent=>setUnits(current=>moveParent(current,unit.id,parent))}
       onKind={()=>setUnits(current=>moveKind(current,unit.id,unitKind(unit)==="script"?"tasks":"script"))} inlineChildren nestedOpen={openUnits.has(unit.id)} nestedCount={nestedCount} onToggleNested={()=>toggleOpen(unit.id)}
-      editing={editing} selected={selectedUnitId===unit.id} onSelect={()=>onSelectUnit?.(unit)} visibilityMode={visibilityMode} onVisibilityToggle={()=>toggleVisibility(unit.id)} inlineVisibility={!embedded}>
+      editing={editing} selected={selectedUnitId===unit.id} onSelect={()=>onSelectUnit?.(unit)} visibilityMode={visibilityMode} onVisibilityToggle={()=>toggleVisibility(unit.id)} inlineVisibility={!embedded} sourceCount={sourceCount}>
       {children}
     </StructureRow>;
   }
@@ -186,7 +187,8 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
       const sources=embedded?null:<NestedSources state={state} unit={unit} units={displayUnits} actions={actions} showHidden={showHidden} selectedSourceId={selectedSourceId}/>;
       const childScripts=displayUnits.filter(item=>item.parentId===unit.id&&unitKind(item)===unitKind(unit)&&(visibilityMode||showHidden||!unitHidden(item,displayUnits))).sort((a,b)=>a.order-b.order);
       const tasks=unitKind(unit)==="script"?displayUnits.filter(item=>unitKind(item)==="tasks"&&linkedTaskOwner(displayUnits,item,visibilityMode)===unit.id&&(visibilityMode||showHidden||!unitHidden(item,displayUnits))).sort((a,b)=>a.order-b.order):[];
-      const nested=<>{sources}{childScripts.length?level(childScripts,`${unit.id}-children`):null}{tasks.length?<div className="structure-task-branch"><div className="structure-branch-label">Aufgaben</div>{level(tasks,`${unit.id}-tasks`)}</div>:null}</>;
+      const taskBranch = tasks.length ? embedded ? level(tasks,`${unit.id}-tasks`) : <div className="structure-task-branch"><div className="structure-branch-label">Aufgaben</div>{level(tasks,`${unit.id}-tasks`)}</div> : null;
+      const nested=<>{sources}{childScripts.length?level(childScripts,`${unit.id}-children`):null}{taskBranch}</>;
       return row(unit,nested);
     })}</ul></SortableContext></DndContext>;
   }
@@ -195,7 +197,7 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
     <div className="prepare-section-heading"><h2>Struktur</h2><div className="structure-heading-actions"><StructureSaveStatus status={mappingBusy?"saving":mappings.snapshot.status==="saved"?status:mappings.snapshot.status} onRetry={()=>{void retry();mappings.retry();}} onConflict={()=>void compare()}/></div></div>
     {embedded && <button type="button" className="structure-all-button" data-selected={allSelected||undefined} onClick={onSelectAll}><BookOpen size={15}/><span>Gesamtes Skript</span></button>}
     {editing && embedded ? <div className="structure-embedded-toolbar"><button type="button" className="structure-visibility-mode" aria-pressed={visibilityMode} onClick={()=>visibilityMode?cancelVisibility():startVisibility()}>Sichtbarkeit</button></div> : editing && <div className="structure-toolbar"><div className="structure-view-tabs" role="group" aria-label="Strukturansicht"><button type="button" data-active><ListTree size={16}/><span>Verschachtelt</span></button><button type="button" onClick={onFocus}><Focus size={16}/><span>Fokus</span></button></div><div className="structure-toolbar-actions"><Button size="sm" variant="ghost" label="Alle auswählen" disabled={disabled||!canCheckAll} onPress={()=>void setAllIncluded(true)}/><Button size="sm" variant="ghost" label="Alle abwählen" disabled={disabled||!canUncheckAll} onPress={()=>void setAllIncluded(false)}/><button type="button" className="structure-hidden-toggle" role="switch" aria-checked={showHidden} onClick={()=>setShowHidden(value=>!value)}><span className="structure-hidden-switch" aria-hidden="true"><span/></span><span>Ausgeblendete anzeigen{hiddenCount?` (${hiddenCount})`:""}</span></button></div></div>}
-    <div ref={listRef}>{level(roots,"script-roots")}{standaloneTasks.length?<div className="structure-standalone-tasks"><div className="structure-branch-label">Aufgaben</div>{level(standaloneTasks,"standalone-tasks")}</div>:null}</div>
+    <div ref={listRef}>{level(roots,"script-roots")}{standaloneTasks.length ? embedded ? level(standaloneTasks,"standalone-tasks") : <div className="structure-standalone-tasks"><div className="structure-branch-label">Aufgaben</div>{level(standaloneTasks,"standalone-tasks")}</div> : null}</div>
     {!roots.length&&!standaloneTasks.length&&<p className="pipeline-muted">Noch keine sichtbare Struktur.</p>}
     {editing && !visibilityMode && <div className="structure-add-actions"><Button size="sm" variant="ghost" icon="plus" label="Lerneinheit" disabled={disabled} onPress={()=>add("script")}/><Button size="sm" variant="ghost" icon="plus" label="Aufgabe" disabled={disabled} onPress={()=>add("tasks")}/></div>}
     {embedded && visibilityMode && <div className="structure-visibility-footer"><Button size="sm" variant="ghost" label="Abbrechen" onPress={cancelVisibility}/><Button size="sm" label={visibilityChanges===1?"1 Änderung übernehmen":`${visibilityChanges} Änderungen übernehmen`} disabled={visibilityChanges===0||disabled} onPress={applyVisibility}/></div>}

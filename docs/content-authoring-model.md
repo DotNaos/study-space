@@ -2,6 +2,20 @@
 
 Status: **accepted target design, 2026-09-16**. Tracking issue: [#111](https://github.com/DotNaos/study-space/issues/111).
 
+## Implementation status
+
+PR [#112](https://github.com/DotNaos/study-space/pull/112) implements the first migration through the generic placement projection:
+
+- primary course navigation is **Inhalt** + **Quellen**; legacy Lernen/Graph remain internal/advanced routes rather than primary tabs;
+- `Inhalt` has read/edit states, with a rendered heading TOC in read mode and the authored structure in edit mode;
+- the edit structure contains no nested source/file rows, shows contextual source counts, and has staged visibility editing;
+- mobile read mode opens the TOC from a compact control instead of rendering a second column;
+- `Quellen` exposes one source inventory with current/default placement, move, hide, reset, refresh, and secondary graph access;
+- pipeline projection exposes provider-agnostic `defaultPlacementId`, `currentPlacementId`, and `hidden`; old stored source decisions remain readable and no duplicate placement store is introduced;
+- legacy plans without explicit source decisions materialize/generate from the imported default placement, while explicit move/hide decisions continue to override it.
+
+User-uploaded source creation and the future source-segment layer remain follow-ups.
+
 Study Space should expose one primary course-content experience instead of separate `Lernen`, `Aufbereitung`, and `Graph` destinations that represent overlapping projections of the same course.
 
 ## Course navigation

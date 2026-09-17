@@ -23,3 +23,24 @@ test("view mode derives a rendered heading TOC while edit mode owns the structur
   expect(content).toContain('querySelectorAll<HTMLElement>("h1,h2,h3,h4")');
   expect(content).toContain('heading.classList.add("content-toc-anchor")');
 });
+
+test("Quellen owns generic placement controls and keeps graph secondary", () => {
+  const sources = readFileSync(new URL("../src/CourseSourcesView.tsx", import.meta.url), "utf8");
+  expect(sources).toContain("Quellenverzeichnis");
+  expect(sources).toContain("Standard:");
+  expect(sources).toContain("Auf Standard zurücksetzen");
+  expect(sources).toContain("Quelle neu zugeordnet.");
+  expect(sources).toContain("Quelle ausgeblendet.");
+  expect(sources).toContain('label="Graph"');
+  expect(sources).not.toContain("Moodle placement");
+  expect(sources).not.toContain("Moodle-Zuordnung");
+});
+
+test("mobile content exposes the rendered TOC through one compact control", () => {
+  const workspace = readFileSync(new URL("../src/PreparationWorkspace.tsx", import.meta.url), "utf8");
+  const css = readFileSync(new URL("../src/preparation-workspace.css", import.meta.url), "utf8");
+  expect(workspace).toContain("preparation-toc-mobile-button");
+  expect(workspace).toContain('title="Inhaltsverzeichnis"');
+  expect(css).toContain(".preparation-toc-mobile-button { display:flex;");
+  expect(css).toContain(".preparation-toc-panel { display:none;");
+});

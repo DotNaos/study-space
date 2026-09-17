@@ -135,3 +135,4 @@
 .structure-visibility-checkbox-right > label { width:2rem; min-height:2rem; }
 .structure-visibility-footer { position:sticky; bottom:0; z-index:2; display:flex; justify-content:flex-end; gap:.4rem; margin:.5rem -.65rem -.8rem; padding:.55rem .65rem max(.55rem,env(safe-area-inset-bottom)); border-top:1px solid var(--color-border); background:color-mix(in srgb,var(--color-bg) 96%,var(--color-bg-1)); }
 .structure-list > li[data-hidden] .structure-name-button { opacity:.55; }
+.structure-source-count { flex-shrink:0; padding:.12rem .35rem; border-radius:999px; background:var(--color-bg-1); color:var(--color-text-muted); font-size:.62rem; white-space:nowrap; }

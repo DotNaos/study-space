@@ -41,7 +41,7 @@ public static partial class LearningStructure
             var sourceId = prior?.SourceGroupId ?? unit.SourceGroupId;
             var group = groups.FirstOrDefault(group => group.Id == sourceId);
             if (sourceId is not null && group is null && prior is null)
-                throw new ApiFailure("pipeline_invalid", "Die Moodle-Gruppe ist nicht bekannt.", 400);
+                throw new ApiFailure("pipeline_invalid", "Die Quellengruppe ist nicht bekannt.", 400);
             return unit with { Title = group?.Title ?? prior?.Title ?? unit.Title.Trim(), SourceGroupId = sourceId,
                 Kind = unit.Kind ?? prior?.Kind ?? "script", Hidden = unit.Hidden ?? prior?.Hidden ?? false,
                 CustomTitle = string.IsNullOrWhiteSpace(unit.CustomTitle) ? null : unit.CustomTitle.Trim(),
