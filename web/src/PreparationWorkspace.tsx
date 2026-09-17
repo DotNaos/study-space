@@ -1,22 +1,31 @@
 import "./preparation-workspace.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ListTree, PencilLine } from "lucide-react";
+import { Check, ListTree, PanelLeftOpen, PanelRightOpen, PencilLine } from "lucide-react";
 import type { PipelineSourceView, PipelineState, PipelineUnit } from "./pipeline-api";
 import { unitHidden, unitKind } from "./learning-structure";
 import type { StructureSave } from "./structure-autosave";
-import { PipelineStructure } from "./PipelineStructure";
 import { ContentAuthoringView, type ContentSelection, type ContentTocItem } from "./ContentAuthoringView";
 import { DialogShell } from "./DialogShell";
+import { AuthoringExplorer } from "./AuthoringExplorer";
+
+const EXPLORER_WIDTH_KEY = "study-space:authoring-explorer-width";
+
+function initialExplorerWidth() {
+  if (typeof window === "undefined") return 320;
+  const value = Number(window.localStorage.getItem(EXPLORER_WIDTH_KEY));
+  return Number.isFinite(value) && value >= 240 && value <= 560 ? value : 320;
+}
 
 export function PreparationWorkspace({
   courseId,
   courseName,
   state,
   busy,
-  onSave,
-  onState,
-  onFocus,
+  onSave: _onSave,
+  onState: _onState,
+  onFocus: _onFocus,
   onGuard,
+  onRefresh,
 }: {
   courseId: number;
   courseName: string;
@@ -26,6 +35,7 @@ export function PreparationWorkspace({
   onState: (state: PipelineState) => void;
   onFocus: () => void;
   onGuard?: (guard: (() => Promise<boolean>) | null) => void;
+  onRefresh: () => void;
 }) {
   const firstUnit = useMemo(() => state.units
     .filter(unit => unitKind(unit) === "script" && unit.parentId === null && !unitHidden(unit, state.units))
@@ -35,14 +45,26 @@ export function PreparationWorkspace({
   const [toc, setToc] = useState<ContentTocItem[]>([]);
   const [activeToc, setActiveToc] = useState<string>();
   const [tocOpen, setTocOpen] = useState(false);
+  const [explorerWidth, setExplorerWidth] = useState(initialExplorerWidth);
+  const [explorerCollapsed, setExplorerCollapsed] = useState(false);
+  const [viewCollapsed, setViewCollapsed] = useState(false);
   const updateToc = useCallback((items: ContentTocItem[]) => setToc(items), []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem(EXPLORER_WIDTH_KEY, String(explorerWidth));
+  }, [explorerWidth]);
+
+  useEffect(() => {
+    onGuard?.(null);
+    return () => onGuard?.(null);
+  }, [onGuard]);
 
   useEffect(() => {
     if (selection.kind === "unit" && !state.units.some(unit => unit.id === selection.id && !unitHidden(unit, state.units))) {
       setSelection(editing && firstUnit ? { kind: "unit", id: firstUnit.id } : { kind: "script" });
     }
     if (selection.kind === "source" && !state.sources.some(item => item.source.id === selection.id && item.source.present)) {
-      setSelection(editing && firstUnit ? { kind: "unit", id: firstUnit.id } : { kind: "script" });
+      setSelection({ kind: "script" });
     }
   }, [editing, firstUnit, selection, state.sources, state.units]);
 
@@ -71,8 +93,11 @@ export function PreparationWorkspace({
     setEditing(current => {
       const next = !current;
       setTocOpen(false);
-      if (next && selection.kind === "script" && firstUnit) setSelection({ kind: "unit", id: firstUnit.id });
-      if (!next) setSelection({ kind: "script" });
+      setSelection({ kind: "script" });
+      if (!next) {
+        setExplorerCollapsed(false);
+        setViewCollapsed(false);
+      }
       return next;
     });
   }
@@ -83,6 +108,24 @@ export function PreparationWorkspace({
 
   const selectSource = (item: PipelineSourceView, unitId?: string) => setSelection({ kind: "source", id: item.source.id, unitId });
   const selectUnit = (unit: PipelineUnit) => setSelection({ kind: "unit", id: unit.id });
+
+  function beginResize(event: import("react").PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = explorerWidth;
+    const move = (next: PointerEvent) => {
+      const width = Math.min(560, Math.max(240, startWidth + next.clientX - startX));
+      setExplorerWidth(width);
+    };
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      document.body.classList.remove("authoring-resizing");
+    };
+    document.body.classList.add("authoring-resizing");
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+  }
 
   return <section className="preparation-workspace" data-editing={editing || undefined}>
     <header className="preparation-workspace-head">
@@ -98,44 +141,58 @@ export function PreparationWorkspace({
       </div>
     </header>
 
-    <div className="preparation-workspace-panels">
+    {editing ? <div className="preparation-authoring-shell">
+      {explorerCollapsed ? <div className="preparation-collapsed-rail" data-side="left">
+        <button type="button" className="preparation-panel-restore" onClick={() => { setExplorerCollapsed(false); setViewCollapsed(false); }} title="Explorer öffnen" aria-label="Explorer öffnen"><PanelLeftOpen size={15}/></button>
+      </div> : <aside className="preparation-explorer-panel" style={{ width: viewCollapsed ? "auto" : explorerWidth }}>
+        <AuthoringExplorer
+          courseId={courseId}
+          state={state}
+          selection={selection}
+          refreshing={busy}
+          onRefresh={onRefresh}
+          onSelectScript={() => setSelection({ kind: "script" })}
+          onSelectUnit={selectUnit}
+          onSelectSource={selectSource}
+          onCollapse={() => { setExplorerCollapsed(true); setViewCollapsed(false); }}
+        />
+      </aside>}
+
+      {!explorerCollapsed && !viewCollapsed && <div className="preparation-panel-splitter" role="separator" aria-orientation="vertical" aria-label="Explorer-Breite ändern" onPointerDown={beginResize}><span/></div>}
+
+      {viewCollapsed ? <div className="preparation-collapsed-rail" data-side="right">
+        <button type="button" className="preparation-panel-restore" onClick={() => { setViewCollapsed(false); setExplorerCollapsed(false); }} title="View öffnen" aria-label="View öffnen"><PanelRightOpen size={15}/></button>
+      </div> : <main className="preparation-content-panel preparation-authoring-view" aria-label="Inhalt">
+        <ContentAuthoringView
+          courseId={courseId}
+          courseName={courseName}
+          pipeline={state}
+          selection={selection}
+          editing
+          onSelectSource={(id, unitId) => setSelection({ kind: "source", id, unitId })}
+          onTocChange={updateToc}
+          onCollapseView={() => { setViewCollapsed(true); setExplorerCollapsed(false); }}
+        />
+      </main>}
+    </div> : <div className="preparation-workspace-panels">
       <main className="preparation-content-panel" aria-label="Inhalt">
         <ContentAuthoringView
           courseId={courseId}
           courseName={courseName}
           pipeline={state}
           selection={selection}
-          editing={editing}
+          editing={false}
           onSelectSource={(id, unitId) => setSelection({ kind: "source", id, unitId })}
           onTocChange={updateToc}
         />
       </main>
-      {!editing && <aside className="preparation-toc-panel" aria-label="Inhaltsverzeichnis">
+      <aside className="preparation-toc-panel" aria-label="Inhaltsverzeichnis">
         <div className="preparation-toc-sticky">
           <h2>Inhaltsverzeichnis</h2>
           {tocList()}
         </div>
-      </aside>}
-      {editing && <aside className="preparation-structure-panel" aria-label="Struktur">
-        <PipelineStructure
-          state={state}
-          busy={busy}
-          onSave={onSave}
-          onState={onState}
-          onOpenSource={selectSource}
-          onFocus={onFocus}
-          onContent={() => {}}
-          onGuard={onGuard}
-          embedded
-          editing
-          allSelected={selection.kind === "script"}
-          selectedUnitId={selection.kind === "unit" ? selection.id : undefined}
-          selectedSourceId={selection.kind === "source" ? selection.id : undefined}
-          onSelectAll={() => setSelection({ kind: "script" })}
-          onSelectUnit={selectUnit}
-        />
-      </aside>}
-    </div>
+      </aside>
+    </div>}
     {tocOpen && <DialogShell title="Inhaltsverzeichnis" onClose={() => setTocOpen(false)}><div className="preparation-toc-dialog">{tocList(true)}</div></DialogShell>}
   </section>;
 }

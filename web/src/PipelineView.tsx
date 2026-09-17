@@ -297,6 +297,7 @@ export function PipelineView({
           onState={setState}
           onFocus={()=>void go({kind:"mapping"})}
           onGuard={registerGuard}
+          onRefresh={() => void change("/sync", "POST", {}).catch(() => {})}
         />
       ) : route.kind === "mapping" || route.kind === "mapping-unit" ? (
         <>

@@ -5,7 +5,7 @@ import { Button, Icon } from "@dotnaos/ui-base";
 import { MarkdownEditor, MarkdownRenderer } from "@dotnaos/ui/markdown-editor";
 import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
 import { Composer, type AiOption } from "./ui-ai";
-import { AlertTriangle, Check, Code2, Columns2, FileDiff, FileText, PencilLine, Rows3 } from "lucide-react";
+import { AlertTriangle, Check, Code2, Columns2, FileDiff, FileText, PanelRightClose, PencilLine, Rows3 } from "lucide-react";
 import { message } from "./api";
 import type { PipelineState } from "./pipeline-api";
 import { unitHidden, unitKind, unitLabel } from "./learning-structure";
@@ -118,6 +118,7 @@ export function ContentAuthoringView({
   editing,
   onSelectSource,
   onTocChange,
+  onCollapseView,
 }: {
   courseId: number;
   courseName: string;
@@ -126,6 +127,7 @@ export function ContentAuthoringView({
   editing: boolean;
   onSelectSource: (id: string, unitId?: string) => void;
   onTocChange?: (items: ContentTocItem[]) => void;
+  onCollapseView?: () => void;
 }) {
   const [workspace, setWorkspace] = useState<ContentWorkspace>();
   const [views, setViews] = useState<Record<string, ContentBlockView>>({});
@@ -541,6 +543,7 @@ export function ContentAuthoringView({
       {editing && <div className="content-authoring-actions">
         <Button size="sm" variant="ghost" icon="refresh" label={blocks.length ? "Inhalte aktualisieren" : "Rohfassung erstellen"} disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
         {stale > 0 && <Button size="sm" variant="ghost" label="Aktualisierte Raw-Fassungen übernehmen" disabled={busy || saving || aiBusy} onPress={() => void rebuildStale()}/>}
+        {onCollapseView && <button type="button" className="content-panel-collapse" onClick={onCollapseView} aria-label="View einklappen" title="Collapse View"><PanelRightClose size={14}/></button>}
       </div>}
     </header>
 
