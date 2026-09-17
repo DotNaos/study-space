@@ -1,5 +1,5 @@
 import "./authoring-explorer.css";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
 import { Icon } from "@dotnaos/ui-base";
 import {
   AlertCircle,
@@ -12,7 +12,7 @@ import {
   PanelLeftClose,
   RefreshCw,
 } from "lucide-react";
-import { api } from "./api";
+import { api, message } from "./api";
 import {
   readContentBlock,
   readContentRevision,
@@ -25,12 +25,9 @@ import {
   materialDocumentPath,
   type MaterialDocument,
 } from "./material-api";
-import type {
-  PipelineSourceView,
-  PipelineState,
-  PipelineUnit,
-} from "./pipeline-api";
-import { sourcePlacement } from "./source-placement";
+import { pipelinePath, type MappingItem, type PipelineSourceView, type PipelineState, type PipelineUnit } from "./pipeline-api";
+import { placementRole, sourcePlacement } from "./source-placement";
+import type { StructureSave } from "./structure-autosave";
 import type { ContentSelection } from "./ContentAuthoringView";
 
 type HeadingNode = {
@@ -187,12 +184,20 @@ function SourceCard({
   selected,
   compact = false,
   onSelect,
+  onDragStart,
+  onDragEnd,
+  menu,
+  moving = false,
 }: {
   item: PipelineSourceView;
   preview?: SourcePreview;
   selected: boolean;
   compact?: boolean;
   onSelect: () => void;
+  onDragStart: (event: DragEvent<HTMLElement>) => void;
+  onDragEnd: () => void;
+  menu?: ReactNode;
+  moving?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const metadata = preview?.extraction;
@@ -201,7 +206,10 @@ function SourceCard({
       className="authoring-source-card"
       data-selected={selected || undefined}
       data-compact={compact || undefined}
-      draggable
+      data-moving={moving || undefined}
+      draggable={!moving}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
     >
       <div className="authoring-source-card-head">
         {!compact ? (
@@ -227,6 +235,7 @@ function SourceCard({
           </summary>
           <div>
             <button type="button" onClick={onSelect}>Open</button>
+            {menu}
           </div>
         </details>
       </div>
@@ -259,6 +268,9 @@ export function AuthoringExplorer({
   onSelectScript,
   onSelectUnit,
   onSelectSource,
+  onSave,
+  onState,
+  disabled = false,
   onCollapse,
 }: {
   courseId: number;
@@ -269,9 +281,16 @@ export function AuthoringExplorer({
   onSelectScript: () => void;
   onSelectUnit: (unit: PipelineUnit) => void;
   onSelectSource: (item: PipelineSourceView, unitId?: string) => void;
+  onSave: StructureSave;
+  onState: (state: PipelineState) => void;
+  disabled?: boolean;
   onCollapse: () => void;
 }) {
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
+  const [dragSourceId, setDragSourceId] = useState<string>();
+  const [dropTarget, setDropTarget] = useState<string>();
+  const [movingSourceId, setMovingSourceId] = useState<string>();
+  const [moveError, setMoveError] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -359,10 +378,159 @@ export function AuthoringExplorer({
       });
   }
 
+  const scriptUnits = useMemo(() => visibleUnits
+    .filter((unit) => unitKind(unit) === "script")
+    .sort((a, b) => a.order - b.order), [visibleUnits]);
+
+  function dragStart(item: PipelineSourceView, event: DragEvent<HTMLElement>) {
+    if (disabled || movingSourceId) { event.preventDefault(); return; }
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("application/x-study-source", item.source.id);
+    event.dataTransfer.setData("text/plain", item.source.id);
+    setDragSourceId(item.source.id);
+    setMoveError("");
+  }
+
+  function dragEnd() {
+    setDragSourceId(undefined);
+    setDropTarget(undefined);
+  }
+
+  function sourceFromDrag(event: DragEvent<HTMLElement>) {
+    const id = event.dataTransfer.getData("application/x-study-source") || dragSourceId;
+    return id ? state.sources.find((item) => item.source.id === id) : undefined;
+  }
+
+  function allowDrop(event: DragEvent<HTMLElement>, target: string) {
+    const carriesSource = !!dragSourceId || Array.from(event.dataTransfer.types).includes("application/x-study-source");
+    if (!carriesSource || disabled || movingSourceId) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+    if (dropTarget !== target) setDropTarget(target);
+  }
+
+  async function saveMapping(item: PipelineSourceView, target: PipelineUnit | undefined, baseState = state) {
+    const mapping: MappingItem = target ? {
+      sourceId: item.source.id,
+      sourceVersion: item.source.sourceVersion,
+      disposition: "use",
+      uses: [{
+        unitId: target.id,
+        role: placementRole(item, target),
+        order: baseState.sources.filter((candidate) => sourcePlacement(baseState, candidate).currentUnitId === target.id).length,
+      }],
+    } : {
+      sourceId: item.source.id,
+      sourceVersion: item.source.sourceVersion,
+      disposition: "exclude",
+      uses: [],
+    };
+    return api<PipelineState>(`${pipelinePath(courseId)}/mapping`, {
+      method: "POST",
+      body: JSON.stringify({
+        expectedRevision: baseState.revision,
+        items: [mapping],
+        actor: "user",
+        reason: target ? "Quelle im Explorer verschoben." : "Quelle im Explorer nach Ignored verschoben.",
+      }),
+    });
+  }
+
+  async function moveToUnit(item: PipelineSourceView, target: PipelineUnit) {
+    if (disabled || movingSourceId) return;
+    setMovingSourceId(item.source.id); setMoveError("");
+    try {
+      const next = await saveMapping(item, target);
+      onState(next);
+      onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, target.id);
+    } catch (error) { setMoveError(message(error)); }
+    finally { setMovingSourceId(undefined); dragEnd(); }
+  }
+
+  async function moveToIgnored(item: PipelineSourceView) {
+    if (disabled || movingSourceId) return;
+    setMovingSourceId(item.source.id); setMoveError("");
+    try {
+      const next = await saveMapping(item, undefined);
+      onState(next);
+      onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item);
+    } catch (error) { setMoveError(message(error)); }
+    finally { setMovingSourceId(undefined); dragEnd(); }
+  }
+
+  async function moveToTasks(item: PipelineSourceView, script: PipelineUnit) {
+    if (disabled || movingSourceId) return;
+    setMovingSourceId(item.source.id); setMoveError("");
+    try {
+      const taskId = crypto.randomUUID().replaceAll("-", "");
+      const siblings = state.units.filter((unit) => unitKind(unit) === "tasks");
+      const title = item.source.name.replace(/\.[^.]+$/, "") || "Task";
+      const task: PipelineUnit = {
+        id: taskId,
+        title,
+        customTitle: title,
+        parentId: null,
+        order: Math.max(-1, ...siblings.map((unit) => unit.order)) + 1,
+        kind: "tasks",
+        hidden: false,
+        sourceGroupId: null,
+        scriptUnitIds: [script.id],
+      };
+      const structured = await onSave([...state.units, task], state.revision);
+      onState(structured);
+      const savedTask = structured.units.find((unit) => unit.id === taskId) ?? task;
+      const next = await saveMapping(item, savedTask, structured);
+      onState(next);
+      onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, savedTask.id);
+    } catch (error) { setMoveError(message(error)); }
+    finally { setMovingSourceId(undefined); dragEnd(); }
+  }
+
+  function dropOnUnit(event: DragEvent<HTMLElement>, unit: PipelineUnit) {
+    event.preventDefault(); event.stopPropagation();
+    const item = sourceFromDrag(event);
+    if (item) void moveToUnit(item, unit);
+  }
+
+  function dropOnTasks(event: DragEvent<HTMLElement>, script: PipelineUnit) {
+    event.preventDefault(); event.stopPropagation();
+    const item = sourceFromDrag(event);
+    if (item) void moveToTasks(item, script);
+  }
+
+  function dropOnIgnored(event: DragEvent<HTMLElement>) {
+    event.preventDefault(); event.stopPropagation();
+    const item = sourceFromDrag(event);
+    if (item) void moveToIgnored(item);
+  }
+
+  function sourceMenu(item: PipelineSourceView) {
+    const placement = sourcePlacement(state, item);
+    const current = placement.currentUnitId ? state.units.find((unit) => unit.id === placement.currentUnitId) : undefined;
+    const currentScript = current && unitKind(current) === "script" ? current : current ? taskOwner(visibleUnits, current) : undefined;
+    return <>
+      {currentScript && unitKind(current!) === "script" && <button type="button" onClick={() => void moveToTasks(item, currentScript)}>Move to Tasks</button>}
+      {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}>Move to Content</button>}
+      {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}>Move to Ignored</button>}
+      <span className="authoring-source-menu-label">Move to…</span>
+      {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
+        <button type="button" onClick={() => void moveToUnit(item, unit)}>{unitLabel(unit)}</button>
+        <button type="button" onClick={() => void moveToTasks(item, unit)}>{unitLabel(unit)} / Tasks</button>
+      </span>)}
+    </>;
+  }
+
   function renderTask(task: PipelineUnit) {
     const sources = sourcesFor(task.id);
     return (
-      <li className="authoring-task-item" key={task.id} draggable>
+      <li
+        className="authoring-task-item"
+        key={task.id}
+        data-drop-active={dropTarget === `task:${task.id}` || undefined}
+        onDragOver={(event) => allowDrop(event, `task:${task.id}`)}
+        onDragLeave={() => dropTarget === `task:${task.id}` && setDropTarget(undefined)}
+        onDrop={(event) => dropOnUnit(event, task)}
+      >
         <button
           type="button"
           data-selected={selection.kind === "unit" && selection.id === task.id || undefined}
@@ -381,6 +549,10 @@ export function AuthoringExplorer({
                 selected={selection.kind === "source" && selection.id === item.source.id}
                 compact
                 onSelect={() => onSelectSource(item, task.id)}
+                onDragStart={(event) => dragStart(item, event)}
+                onDragEnd={dragEnd}
+                menu={sourceMenu(item)}
+                moving={movingSourceId === item.source.id}
               />
             ))}
           </div>
@@ -398,7 +570,15 @@ export function AuthoringExplorer({
       .filter((candidate) => unitKind(candidate) === "tasks" && taskOwner(visibleUnits, candidate)?.id === unit.id)
       .sort((a, b) => a.order - b.order);
     return (
-      <section className="authoring-unit" data-depth={depth} key={unit.id} draggable>
+      <section
+        className="authoring-unit"
+        data-depth={depth}
+        key={unit.id}
+        data-drop-active={dropTarget === `content:${unit.id}` || undefined}
+        onDragOver={(event) => { event.stopPropagation(); allowDrop(event, `content:${unit.id}`); }}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `content:${unit.id}`) setDropTarget(undefined); }}
+        onDrop={(event) => dropOnUnit(event, unit)}
+      >
         <button
           type="button"
           className="authoring-unit-title"
@@ -416,10 +596,21 @@ export function AuthoringExplorer({
               preview={previews[item.source.id]}
               selected={selection.kind === "source" && selection.id === item.source.id}
               onSelect={() => onSelectSource(item, unit.id)}
+              onDragStart={(event) => dragStart(item, event)}
+              onDragEnd={dragEnd}
+              menu={sourceMenu(item)}
+              moving={movingSourceId === item.source.id}
             />
           ))}
           {children.map((child) => renderUnit(child, depth + 1))}
-          <div className="authoring-task-section" data-empty={!tasks.length || undefined}>
+          <div
+            className="authoring-task-section"
+            data-empty={!tasks.length || undefined}
+            data-drop-active={dropTarget === `tasks:${unit.id}` || undefined}
+            onDragOver={(event) => { event.stopPropagation(); allowDrop(event, `tasks:${unit.id}`); }}
+            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `tasks:${unit.id}`) setDropTarget(undefined); }}
+            onDrop={(event) => dropOnTasks(event, unit)}
+          >
             <div className="authoring-task-section-title">Tasks</div>
             {tasks.length ? (
               <ul>{tasks.map(renderTask)}</ul>
@@ -452,6 +643,7 @@ export function AuthoringExplorer({
         </div>
       </header>
 
+      {moveError && <div className="authoring-explorer-error" role="alert">{moveError}</div>}
       <div className="authoring-explorer-scroll">
         <button
           type="button"
@@ -467,7 +659,14 @@ export function AuthoringExplorer({
           {scriptRoots.map((unit) => renderUnit(unit))}
         </div>
 
-        <section className="authoring-ignored" aria-label="Ignored">
+        <section
+          className="authoring-ignored"
+          aria-label="Ignored"
+          data-drop-active={dropTarget === "ignored" || undefined}
+          onDragOver={(event) => allowDrop(event, "ignored")}
+          onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === "ignored") setDropTarget(undefined); }}
+          onDrop={dropOnIgnored}
+        >
           <div className="authoring-ignored-title">
             <span>Ignored</span>
             {ignored.length > 0 && <small>{ignored.length}</small>}
@@ -482,6 +681,10 @@ export function AuthoringExplorer({
                   selected={selection.kind === "source" && selection.id === item.source.id}
                   compact
                   onSelect={() => onSelectSource(item)}
+                  onDragStart={(event) => dragStart(item, event)}
+                  onDragEnd={dragEnd}
+                  menu={sourceMenu(item)}
+                  moving={movingSourceId === item.source.id}
                 />
               ))}
             </div>

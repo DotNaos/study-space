@@ -21,8 +21,8 @@ export function PreparationWorkspace({
   courseName,
   state,
   busy,
-  onSave: _onSave,
-  onState: _onState,
+  onSave,
+  onState,
   onFocus: _onFocus,
   onGuard,
   onRefresh,
@@ -154,6 +154,9 @@ export function PreparationWorkspace({
           onSelectScript={() => setSelection({ kind: "script" })}
           onSelectUnit={selectUnit}
           onSelectSource={selectSource}
+          onSave={onSave}
+          onState={onState}
+          disabled={busy}
           onCollapse={() => { setExplorerCollapsed(true); setViewCollapsed(false); }}
         />
       </aside>}
