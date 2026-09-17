@@ -45,6 +45,7 @@ export function App() {
   const [settings, setSettings] = useState<Settings>({
     displayName: "Study Space",
     locale: "de",
+    mcpContentWritesEnabled: true,
   });
   const [status, setStatus] = useState<SystemStatus>();
   const [statusChecked, setStatusChecked] = useState(false);

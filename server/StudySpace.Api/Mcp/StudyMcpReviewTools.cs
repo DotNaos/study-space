@@ -28,7 +28,7 @@ public sealed partial class StudyMcpTools
     private static object WritableTool(string name, string description, object inputSchema) => new {
         name, description, inputSchema, annotations = new { readOnlyHint = false, destructiveHint = false, idempotentHint = false, openWorldHint = false }
     };
-    private static readonly object ContentEditTool = WritableTool("study_content_edit", "Replace one exact editable Study Space MDX block using optimistic revision checking. Explicit deployment opt-in required. The immutable source/extraction is never changed. Read study_content first and pass its current revision id.", Schema("""
+    private static readonly object ContentEditTool = WritableTool("study_content_edit", "Replace one exact editable Study Space MDX block using optimistic revision checking. Enabled by default and configurable in Study Space settings. The immutable source/extraction is never changed. Read study_content first and pass its current revision id.", Schema("""
         {"type":"object","additionalProperties":false,"required":["course_id","block_id","expected_revision_id","content","reason","actor"],"properties":{"course_id":{"type":"integer","minimum":1},"block_id":{"type":"string","pattern":"^[a-f0-9]{64}$"},"expected_revision_id":{"type":"string","pattern":"^[a-f0-9]{32}$"},"content":{"type":"string","maxLength":100000},"reason":{"type":"string","minLength":1,"maxLength":2000},"actor":{"type":"string","minLength":1,"maxLength":100}}}
         """));
     private static readonly object FeedbackTool = WritableTool("study_feedback", "Append learning feedback to one exact submitted attempt only. Requires explicit deployment opt-in. Does not change answers, tasks, script, Moodle submissions or grades. Read study_attempts first and use its exact attempt revision and answer hash.", Schema("""
@@ -112,7 +112,9 @@ public sealed partial class StudyMcpTools
 
     private async Task<object> ContentWrite(JsonElement args, CancellationToken ct)
     {
-        if (!allowContentWrites) throw new StudyMcpException("Content writes are disabled. Enable STUDY_MCP_ALLOW_CONTENT_WRITES explicitly.");
+        if (!allowContentWrites) throw new StudyMcpException("Content writes are disabled by the Study Space deployment configuration.");
+        var settings = await Get<McpSettings>("/api/settings", ct);
+        if (!settings.McpContentWritesEnabled) throw new StudyMcpException("Content writes are disabled in Study Space settings.");
         var course = Long(args, "course_id", 1, long.MaxValue);
         var blockId = RequiredString(args, "block_id", 64);
         var revisionId = RequiredString(args, "expected_revision_id", 32);
@@ -121,6 +123,8 @@ public sealed partial class StudyMcpTools
         var body = new ContentEditRequest(revisionId, RequiredString(args, "content", 100000), RequiredString(args, "reason", 2000), RequiredString(args, "actor", 100));
         return await Post($"/api/content/courses/{course}/blocks/{blockId}", HttpMethod.Put, body, ct);
     }
+
+    private sealed record McpSettings(bool McpContentWritesEnabled);
 
     private async Task<object> AttemptsRead(JsonElement args, CancellationToken ct)
     {

@@ -16,4 +16,5 @@ public sealed class AppSettings
     public int Id { get; set; } = 1;
     public string DisplayName { get; set; } = "Study Space";
     public string Locale { get; set; } = "de";
+    public bool McpContentWritesEnabled { get; set; } = true;
 }

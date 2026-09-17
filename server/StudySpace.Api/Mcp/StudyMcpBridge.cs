@@ -21,7 +21,7 @@ public static class StudyMcpBridge
         {
             BaseAddress = upstream,
             Timeout = TimeSpan.FromSeconds(30),
-        }, Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_FEEDBACK_WRITES") == "true", Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_PIPELINE_WRITES") == "true", Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_CONTENT_WRITES") == "true"));
+        }, Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_FEEDBACK_WRITES") == "true", Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_PIPELINE_WRITES") == "true", ContentWritesEnabled()));
         var app = builder.Build();
         app.Use(async (context, next) =>
         {
@@ -134,9 +134,16 @@ public static class StudyMcpBridge
 
     private static bool AllowedHost(string host) => host is "app" or "localhost" ||
         IPAddress.TryParse(host, out var address) && IPAddress.IsLoopback(address);
+
+    private static bool ContentWritesEnabled()
+    {
+        if (bool.TryParse(Environment.GetEnvironmentVariable("STUDY_MCP_DISABLE_CONTENT_WRITES"), out var disabled) && disabled) return false;
+        var legacy = Environment.GetEnvironmentVariable("STUDY_MCP_ALLOW_CONTENT_WRITES");
+        return !bool.TryParse(legacy, out var allowed) || allowed;
+    }
 }
 
-public sealed partial class StudyMcpTools(HttpClient client, bool allowFeedbackWrites = false, bool allowPipelineWrites = false, bool allowContentWrites = false)
+public sealed partial class StudyMcpTools(HttpClient client, bool allowFeedbackWrites = false, bool allowPipelineWrites = false, bool allowContentWrites = true)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private const int DefaultItems = 20;
