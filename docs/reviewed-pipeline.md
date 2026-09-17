@@ -76,15 +76,15 @@ Feedback outcomes are `correct`, `partly-correct`, `needs-work`, `uncertain`. St
 
 `study_pipeline` and `study_attempts` are read-only MCP tools. The latter defaults to submitted attempts and exposes the exact answer hash/revision when a specific attempt is requested. Structure and source review use the same API validations as the UI.
 
-Write tools remain separately disabled by default:
+Write capabilities use different defaults according to their scope:
 
 - `STUDY_MCP_ALLOW_PIPELINE_WRITES=true` exposes `study_pipeline_structure` and `study_pipeline_decide`.
 - `STUDY_MCP_ALLOW_FEEDBACK_WRITES=true` exposes `study_feedback` for appending feedback to an exact submitted attempt.
-- `STUDY_MCP_ALLOW_CONTENT_WRITES=true` exposes `study_content_edit`; `study_content` remains read-only and is always available for loading the current source-bound MDX revision before an edit.
+- `study_content_edit` is exposed by default because it only replaces the editable MDX layer with optimistic revision checking; `study_content` remains read-only and is always available for loading the current source-bound revision before an edit. The user can disable content edits in Study Space settings. Deployments can additionally use `STUDY_MCP_DISABLE_CONTENT_WRITES=true` as a hard kill switch. `STUDY_MCP_ALLOW_CONTENT_WRITES=false` remains accepted as a legacy opt-out.
 
 The MCP RPC transport accepts JSON requests from connector/agent backends and rejects requests carrying a browser Origin header. Browser interaction uses the protected application API, not direct MCP RPC. This prevents browser-origin requests from reaching an opt-in write tool; it does not replace deployment/network access control.
 
-These variables belong to the MCP service's deployment environment. Enabling them does not grant arbitrary host, source, answer or Moodle writes. Disabled tools are absent from discovery and rejected on invocation. Tool clients must refresh discovery after an authorized capability change. Merely viewing a source or asking a question never confirms a mapping or submits an answer.
+These variables belong to the MCP service's deployment environment. Enabling them does not grant arbitrary host, source, answer or Moodle writes. Deployment-disabled tools are absent from discovery and rejected on invocation; the user setting is checked again when a content edit is invoked. Tool clients must refresh discovery after a deployment capability change. Merely viewing a source or asking a question never confirms a mapping or submits an answer.
 
 ## Verification and remaining work
 

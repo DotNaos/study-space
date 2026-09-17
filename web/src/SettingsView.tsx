@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, Input } from "@dotnaos/ui-base";
+import { Button, Checkbox, Input } from "@dotnaos/ui-base";
 import { Server, Settings2 } from "lucide-react";
 import { api, message, type Settings, type SystemStatus } from "./api";
 import { Notice } from "./shared";
@@ -14,6 +14,7 @@ export function SettingsView({
   onSaved: (value: Settings) => void;
 }) {
   const [name, setName] = useState(settings.displayName);
+  const [mcpContentWritesEnabled, setMcpContentWritesEnabled] = useState(settings.mcpContentWritesEnabled);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
@@ -25,7 +26,7 @@ export function SettingsView({
     try {
       const result = await api<Settings>("/api/settings", {
         method: "PUT",
-        body: JSON.stringify({ ...settings, displayName: name.trim() }),
+        body: JSON.stringify({ ...settings, displayName: name.trim(), mcpContentWritesEnabled }),
       });
       onSaved(result);
       setSaved(true);
@@ -66,6 +67,20 @@ export function SettingsView({
         <p className="text-xs text-text-muted">
           Wird in der Navigation angezeigt. Die Webadresse bleibt gleich.
         </p>
+        <div className="border-t border-border pt-4">
+          <Checkbox
+            label="MCP-Inhaltsbearbeitung erlauben"
+            checked={mcpContentWritesEnabled}
+            disabled={busy}
+            onCheckedChange={() => {
+              setMcpContentWritesEnabled((value) => !value);
+              setSaved(false);
+            }}
+          />
+          <p className="mt-2 text-xs text-text-muted">
+            Erlaubt Agenten, ausschließlich die editierbare MDX-Schicht mit Revisionsprüfung zu ändern. Quellen und Extraktionen bleiben unveränderlich.
+          </p>
+        </div>
         <Button
           type="submit"
           variant="primary"

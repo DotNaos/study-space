@@ -60,7 +60,7 @@ The first processing profile limits individual files to 32 MiB, generated source
 
 ## Use Study Space from an assistant
 
-Each installed release includes a dedicated **read-only Study MCP** so an assistant can use the canonical Study Space data without consuming the in-app Codex runtime. `study doctor` prints its loopback-only endpoint. The MCP exposes courses, course structure, prepared-material coverage, extracted source blocks, saved script/exercises, and bounded search. Solutions and saved answer drafts require an explicit tool argument.
+Each installed release includes a dedicated **Study MCP** so an assistant can use the canonical Study Space data without consuming the in-app Codex runtime. `study doctor` prints its loopback-only endpoint. Read tools expose courses, course structure, prepared-material coverage, extracted source blocks, saved script/exercises, and bounded search. Solutions and saved answer drafts require an explicit tool argument. Editing the source-bound MDX layer is enabled by default, requires the current revision for optimistic concurrency, and can be disabled in Study Space settings; immutable source/extraction data is never changed by that edit tool.
 
 The MCP container receives no Moodle/Codex credentials, database credentials, Study Space volumes, Docker socket, or host filesystem access; it can only issue `GET` requests to the app over the private Compose network. Connect the loopback MCP through an authenticated connector such as OpenAI Secure MCP Tunnel rather than publishing it directly. See [Study MCP](docs/study-mcp.md) for the tool and security contract.
 

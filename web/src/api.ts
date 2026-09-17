@@ -6,7 +6,7 @@ export type SystemStatus = {
   publicUrl: string;
   database: "ready" | "unavailable";
 };
-export type Settings = { displayName: string; locale: string };
+export type Settings = { displayName: string; locale: string; mcpContentWritesEnabled: boolean };
 export type Connection = {
   status: "disconnected" | "connected" | "expired";
   siteUrl?: string | null;

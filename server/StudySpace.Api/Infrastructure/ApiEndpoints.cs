@@ -17,7 +17,7 @@ public static class ApiEndpoints
             database = await db.Database.CanConnectAsync(ct) ? "ready" : "unavailable"
         }));
         app.MapGet("/api/settings", async (StudyDb db, CancellationToken ct) =>
-        { var settings = await db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new AppSettings(); return Results.Ok(new { settings.DisplayName, settings.Locale }); });
+        { var settings = await db.Settings.AsNoTracking().SingleOrDefaultAsync(ct) ?? new AppSettings(); return Results.Ok(new { settings.DisplayName, settings.Locale, settings.McpContentWritesEnabled }); });
         app.MapPut("/api/settings", async (SettingsRequest request, StudyDb db, CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(request.DisplayName) || request.DisplayName.Length > 100 || request.Locale is not ("de" or "en"))
@@ -25,8 +25,9 @@ public static class ApiEndpoints
             var settings = await db.Settings.SingleOrDefaultAsync(ct);
             if (settings is null) { settings = new AppSettings(); db.Settings.Add(settings); }
             settings.DisplayName = request.DisplayName.Trim(); settings.Locale = request.Locale;
+            settings.McpContentWritesEnabled = request.McpContentWritesEnabled ?? settings.McpContentWritesEnabled;
             await db.SaveChangesAsync(ct);
-            return Results.Ok(new { settings.DisplayName, settings.Locale });
+            return Results.Ok(new { settings.DisplayName, settings.Locale, settings.McpContentWritesEnabled });
         });
         app.MapGet("/api/config", (ProjectConfigurationStore store, CancellationToken ct) => store.Read(ct));
         app.MapPut("/api/config", (ProjectConfiguration request, ProjectConfigurationStore store, CancellationToken ct) => store.Write(request, ct));
@@ -87,5 +88,5 @@ public static class ApiEndpoints
         context.Response.Headers["Content-Security-Policy"] = "default-src 'none'; frame-ancestors 'none'; sandbox";
         return Results.File(file.Bytes, file.ContentType, fileDownloadName: preview ? null : file.Name, enableRangeProcessing: true);
     }
-    public sealed record SettingsRequest(string DisplayName, string Locale);
+    public sealed record SettingsRequest(string DisplayName, string Locale, bool? McpContentWritesEnabled);
 }
