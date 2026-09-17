@@ -214,7 +214,7 @@ test("visibility mode exposes source files with their own trailing checkboxes", 
   expect(html).toContain('class="structure-source-visibility-list"');
   expect(html).toContain("2026_CDS303_Block1_1.pdf");
   expect(html).toContain("Hidden.pdf");
-  expect(html).toContain('class="structure-source-visibility-checkbox"');
+  expect(html).toContain('class="structure-visibility-checkbox structure-source-visibility-checkbox"');
   expect(html).toContain("Quelle verwenden: 2026_CDS303_Block1_1.pdf");
   expect(html).toContain("Quelle verwenden: Hidden.pdf");
   expect((html.match(/type="checkbox"/g) ?? []).length).toBe(2);
