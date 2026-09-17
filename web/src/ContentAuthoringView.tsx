@@ -136,6 +136,8 @@ export function ContentAuthoringView({
   const [diffMode, setDiffMode] = useState<TextDiffMode>("split");
   const [draft, setDraft] = useState("");
   const [savedDraft, setSavedDraft] = useState("");
+  const [draftBlockId, setDraftBlockId] = useState<string>();
+  const [draftRevisionId, setDraftRevisionId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -205,6 +207,7 @@ export function ContentAuthoringView({
   const activeSourcePage = hoveredSourcePage ?? sourcePage;
   const selectedPlacement = selectedSummary?.placements[0];
   const selectedUnit = selectedPlacement ? pipeline.units.find(unit => unit.id === selectedPlacement.unitId) : undefined;
+  const draftReady = !!selected && draftBlockId === selected && !!draftRevisionId;
 
   const ensureRawRevision = useCallback(async (blockId: string, revision: ContentRevision) => {
     if (rawRevisions[blockId]) return;
@@ -230,30 +233,50 @@ export function ContentAuthoringView({
     setAiStatus("");
     setSelectionText("");
     setHoveredSourcePage(undefined);
-    if (!selected) {
-      setDraft("");
-      setSavedDraft("");
-      return;
-    }
-    const summary = blocks.find(block => block.id === selected);
-    const cached = views[selected];
-    if (cached?.revision) {
-      const content = cached.revision.content ?? "";
-      setDraft(content);
-      setSavedDraft(content);
-      setSourcePage(summary?.placements[0]?.firstPage ?? cached.revision.provenance.find(item => item.page != null)?.page ?? cached.revision.provenance.find(item => item.slide != null)?.slide ?? undefined);
-      void ensureRawRevision(selected, cached.revision);
-      return;
-    }
-    if (!summary?.currentRevisionId) return;
-    void readContentBlock(courseId, selected).then(view => {
-      setViews(current => ({ ...current, [selected]: view }));
-      const content = view.revision?.content ?? "";
-      setDraft(content);
-      setSavedDraft(content);
-      if (view.revision) void ensureRawRevision(selected, view.revision);
-    }).catch(error => setError(message(error)));
+    setDraft("");
+    setSavedDraft("");
+    setDraftBlockId(undefined);
+    setDraftRevisionId(undefined);
+    setSourcePage(undefined);
   }, [selected]);
+
+  useEffect(() => {
+    if (!selected || !selectedSummary?.currentRevisionId) return;
+    const currentRevisionId = selectedSummary.currentRevisionId;
+    const cached = selectedView;
+
+    const hydrateDraft = (view: ContentBlockView) => {
+      const revision = view.revision;
+      if (!revision) return;
+      const sameBlock = draftBlockId === selected;
+      if (sameBlock && draft !== savedDraft && draftRevisionId !== revision.id) {
+        setError("Der Inhalt wurde außerhalb dieses Editors geändert. Deine lokale Änderung wurde nicht automatisch überschrieben.");
+        return;
+      }
+      const content = revision.content ?? "";
+      setDraft(content);
+      setSavedDraft(content);
+      setDraftBlockId(selected);
+      setDraftRevisionId(revision.id);
+      setSourcePage(selectedSummary.placements[0]?.firstPage ?? revision.provenance.find(item => item.page != null)?.page ?? revision.provenance.find(item => item.slide != null)?.slide ?? undefined);
+      void ensureRawRevision(selected, revision);
+    };
+
+    if (cached?.revision?.id === currentRevisionId) {
+      if (draftBlockId !== selected || draftRevisionId !== currentRevisionId) hydrateDraft(cached);
+      return;
+    }
+
+    const controller = new AbortController();
+    void readContentBlock(courseId, selected, controller.signal).then(view => {
+      if (controller.signal.aborted) return;
+      setViews(current => ({ ...current, [selected]: view }));
+      hydrateDraft(view);
+    }).catch(error => {
+      if (!controller.signal.aborted) setError(message(error));
+    });
+    return () => controller.abort();
+  }, [courseId, selected, selectedSummary?.currentRevisionId, selectedView?.revision?.id]);
 
   useEffect(() => {
     if (!selected || !selectedView?.revision || rawRevisions[selected]) return;
@@ -286,6 +309,7 @@ export function ContentAuthoringView({
         setViews(current => ({ ...current, [selected]: view }));
         const content = view.revision?.content ?? "";
         setDraft(content); setSavedDraft(content);
+        setDraftBlockId(selected); setDraftRevisionId(view.revision?.id);
         setRawRevisions(current => { const nextRaw = { ...current }; delete nextRaw[selected]; return nextRaw; });
         if (view.revision) void ensureRawRevision(selected, view.revision);
       }
@@ -296,11 +320,17 @@ export function ContentAuthoringView({
   async function save() {
     const revisionId = selectedView?.revision?.id;
     if (!selected || !revisionId || draft === savedDraft || saving) return true;
+    if (draftBlockId !== selected || !draftRevisionId || draftRevisionId !== revisionId) {
+      setError("Die bearbeitete Fassung basiert nicht mehr auf der aktuellen Revision. Lade den Block neu, bevor du speicherst.");
+      return false;
+    }
     setSaving(true); setError("");
     try {
-      const next = await saveContentBlock(courseId, selected, revisionId, draft);
+      const next = await saveContentBlock(courseId, selected, draftRevisionId, draft);
       setViews(current => ({ ...current, [selected]: next }));
       setSavedDraft(next.revision?.content ?? draft);
+      setDraftBlockId(selected);
+      setDraftRevisionId(next.revision?.id ?? draftRevisionId);
       setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selected ? next.block : block) } : current);
       return true;
     } catch (error) { setError(message(error)); return false; }
@@ -308,10 +338,10 @@ export function ContentAuthoringView({
   }
 
   useEffect(() => {
-    if (!editing || !selected || draft === savedDraft || saving) return;
+    if (!editing || !selected || draftBlockId !== selected || !draftRevisionId || draftRevisionId !== selectedView?.revision?.id || draft === savedDraft || saving) return;
     const timer = window.setTimeout(() => { void save(); }, 700);
     return () => window.clearTimeout(timer);
-  }, [draft, editing, savedDraft, saving, selected]);
+  }, [draft, draftBlockId, draftRevisionId, editing, savedDraft, saving, selected, selectedView?.revision?.id]);
 
   async function reset() {
     const revisionId = selectedView?.revision?.id;
@@ -321,6 +351,7 @@ export function ContentAuthoringView({
       const next = await resetContentBlock(courseId, selected, revisionId);
       setViews(current => ({ ...current, [selected]: next }));
       setDraft(next.revision?.content ?? ""); setSavedDraft(next.revision?.content ?? "");
+      setDraftBlockId(selected); setDraftRevisionId(next.revision?.id);
       setRawRevisions(current => next.revision ? ({ ...current, [selected]: next.revision }) : current);
       setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selected ? next.block : block) } : current);
     } catch (error) { setError(message(error)); }
@@ -335,6 +366,7 @@ export function ContentAuthoringView({
       const next = await undoContentBlock(courseId, selected, revisionId);
       setViews(current => ({ ...current, [selected]: next }));
       setDraft(next.revision?.content ?? ""); setSavedDraft(next.revision?.content ?? "");
+      setDraftBlockId(selected); setDraftRevisionId(next.revision?.id);
       setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selected ? next.block : block) } : current);
       setAiStatus("Letzte Bearbeitung rückgängig gemacht.");
     } catch (error) { setError(message(error)); }
@@ -385,6 +417,7 @@ export function ContentAuthoringView({
       const next = result.view;
       setViews(current => ({ ...current, [selected]: next }));
       setDraft(next.revision?.content ?? draft); setSavedDraft(next.revision?.content ?? draft);
+      setDraftBlockId(selected); setDraftRevisionId(next.revision?.id);
       setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selected ? next.block : block) } : current);
       setAiPrompt(""); setAiStatus(result.summary);
     } catch (error) { setError(message(error)); }
@@ -505,7 +538,7 @@ export function ContentAuthoringView({
       <div className="content-source-meta">
         <Icon.File filename={selectedSummary.name} size={16}/><span>{statusLabel(selectedSummary)}</span>{sourcePages(selectedSummary) && <span>{sourcePages(selectedSummary)}</span>}{selectedSummary.stale && <AlertTriangle size={13}/>} {selectedSummary.status === "ready" && <Check size={13}/>}
       </div>
-      {!selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : tab === "content" ? <>
+      {!selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : !draftReady ? <Loading label="Bearbeitete Fassung wird geladen …"/> : tab === "content" ? <>
         {editing ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/> : <div className="content-current-render"><MarkdownRenderer value={draft}/></div>}
         {editing && <div className="content-block-footer">
           <span>{saving ? "Speichert…" : draft === savedDraft ? `Revision ${selectedView.revision.id.slice(0, 8)}` : "Änderungen werden automatisch gespeichert"}</span>

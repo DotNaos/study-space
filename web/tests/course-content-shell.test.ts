@@ -53,3 +53,12 @@ test("edit-mode unit content exposes an explicit path into block editor, diff an
   expect(content).toContain('<Composer');
   expect(content).toContain('<MarkdownEditor');
 });
+
+test("content drafts hydrate from the loaded revision before autosave", () => {
+  const content = readFileSync(new URL("../src/ContentAuthoringView.tsx", import.meta.url), "utf8");
+  expect(content).toContain("draftBlockId");
+  expect(content).toContain("draftRevisionId");
+  expect(content).toContain("selectedSummary?.currentRevisionId, selectedView?.revision?.id");
+  expect(content).toContain("draftRevisionId !== selectedView?.revision?.id");
+  expect(content).toContain('Bearbeitete Fassung wird geladen …');
+});
