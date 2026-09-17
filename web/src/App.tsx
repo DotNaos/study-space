@@ -55,7 +55,6 @@ export function App() {
     mcpContentWritesEnabled: true,
   });
   const [status, setStatus] = useState<SystemStatus>();
-  const [statusChecked, setStatusChecked] = useState(false);
   const [settingsReady, setSettingsReady] = useState(false);
   const [settingsError, setSettingsError] = useState(false);
   const loadSettings = useCallback(() => {
@@ -90,8 +89,7 @@ export function App() {
     const refreshStatus = () => {
       void api<SystemStatus>("/api/status")
         .then(setStatus)
-        .catch(() => setStatus(undefined))
-        .finally(() => setStatusChecked(true));
+        .catch(() => setStatus(undefined));
     };
     refreshStatus();
     const timer = setInterval(refreshStatus, 30000);
@@ -205,34 +203,29 @@ export function App() {
           />
 
           <Sidenav.Footer>
-            <Container className="flex flex-col gap-3" part="unstyled">
-              <Container
-                className="flex items-center group-data-[collapsed=true]/sidenav:justify-center"
-                part="unstyled"
+            <Container
+              className="flex min-w-0 items-center gap-2 group-data-[collapsed=true]/sidenav:flex-col"
+              part="unstyled"
+            >
+              <button
+                type="button"
+                className="flex min-w-0 flex-1 items-center gap-2 rounded-xl px-1 py-1 text-left transition-colors hover:bg-control-hover focus-visible:outline-2 focus-visible:outline-focus-ring group-data-[collapsed=true]/sidenav:flex-none group-data-[collapsed=true]/sidenav:p-0"
+                onClick={() => navigate("/settings")}
+                title={connection?.displayName || "Benutzer"}
               >
-                <ThemeToggle />
-              </Container>
-              <Container
-                className="flex min-w-0 items-start gap-2 text-xs text-text-muted group-data-[collapsed=true]/sidenav:justify-center"
-                part="unstyled"
-                title={status?.hostname || undefined}
-              >
-                <Icon
-                  name={status?.database === "ready" ? "check-circle" : "alert-circle"}
-                  size="s"
-                  color={status?.database === "ready" ? "success" : "warning"}
-                />
-                <span className="min-w-0 group-data-[collapsed=true]/sidenav:hidden">
-                  <span className="block">
-                    {status?.database === "ready"
-                      ? "Auf deinem Rechner"
-                      : statusChecked
-                        ? "Installation nicht bereit"
-                        : "Verbindung wird geprüft"}
-                  </span>
-                  {status?.hostname && <span className="mt-1 block truncate">{status.hostname}</span>}
+                <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-bg-2 text-xs font-semibold text-text">
+                  {(connection?.displayName || "U").trim().slice(0, 1).toLocaleUpperCase()}
                 </span>
-              </Container>
+                <span className="min-w-0 flex-1 group-data-[collapsed=true]/sidenav:hidden">
+                  <span className="block truncate text-sm font-medium text-text">
+                    {connection?.displayName || "Benutzer"}
+                  </span>
+                  <span className="mt-0.5 block truncate text-[11px] text-text-muted">
+                    {connection?.siteName || "Moodle"}
+                  </span>
+                </span>
+              </button>
+              <ThemeToggle />
             </Container>
           </Sidenav.Footer>
         </Sidenav>

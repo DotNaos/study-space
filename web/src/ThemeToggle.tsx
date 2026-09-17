@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
+import { Moon, Sun } from "lucide-react";
+
 const themeKey = "study-space:theme";
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState(
     document.documentElement.dataset.theme === "dark" ? "dark" : "light",
   );
+
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
     function systemChanged() {
@@ -19,6 +21,7 @@ export function ThemeToggle() {
     media.addEventListener("change", systemChanged);
     return () => media.removeEventListener("change", systemChanged);
   }, []);
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
@@ -26,17 +29,15 @@ export function ThemeToggle() {
       .querySelector('meta[name="theme-color"]')
       ?.setAttribute("content", theme === "dark" ? "#111111" : "#ffffff");
   }, [theme]);
-  const label =
-    theme === "dark" ? "Hellen Modus aktivieren" : "Dunklen Modus aktivieren";
+
+  const label = theme === "dark" ? "Hellen Modus aktivieren" : "Dunklen Modus aktivieren";
   return (
-    <Button
-      variant="icon"
-      size="sm"
-      icon="palette"
-      accessibilityLabel={label}
+    <button
+      type="button"
+      className="inline-flex size-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-control-hover hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring"
+      aria-label={label}
       title={label}
-      pressed={theme === "dark"}
-      onPress={() => {
+      onClick={() => {
         const next = theme === "dark" ? "light" : "dark";
         try {
           localStorage.setItem(themeKey, next);
@@ -45,6 +46,8 @@ export function ThemeToggle() {
         }
         setTheme(next);
       }}
-    />
+    >
+      {theme === "dark" ? <Sun size={17} aria-hidden="true" /> : <Moon size={17} aria-hidden="true" />}
+    </button>
   );
 }
