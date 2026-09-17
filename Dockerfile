@@ -10,13 +10,17 @@ RUN set -eu; case "$TARGETARCH" in \
     printf '%s  /tmp/codex.tar.gz\n' "$checksum" | sha256sum -c -; \
     mkdir -p /opt/codex && tar -xzf /tmp/codex.tar.gz -C /opt/codex && rm /tmp/codex.tar.gz
 
+FROM rust:1.98-bookworm AS pdf-inspector
+RUN cargo install pdf-inspector --version 1.20.0 --locked --root /opt/pdf-inspector
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0-noble AS checks
 RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils=24.02.0-1ubuntu9.9 tesseract-ocr=5.3.4-1build5 \
     tesseract-ocr-eng=1:4.1.0-2 tesseract-ocr-deu=1:4.1.0-2 && rm -rf /var/lib/apt/lists/*
+COPY --from=pdf-inspector /opt/pdf-inspector/bin/pdf2md /usr/local/bin/pdf2md
 WORKDIR /source
 COPY server/ ./server/
-ENV STUDY_RUN_MATERIAL_TOOLS=1
+ENV STUDY_RUN_MATERIAL_TOOLS=1 STUDY_PDF_INSPECTOR_VERSION=1.20.0
 ENTRYPOINT ["dotnet", "test", "server/StudySpace.Api.Tests/StudySpace.Api.Tests.csproj", "-c", "Release", "-p:RestoreLockedMode=true"]
 
 FROM oven/bun:1.3.9 AS web
@@ -57,12 +61,13 @@ USER root
 RUN apt-get update && apt-get install -y --no-install-recommends curl \
     poppler-utils=24.02.0-1ubuntu9.9 tesseract-ocr=5.3.4-1build5 \
     tesseract-ocr-eng=1:4.1.0-2 tesseract-ocr-deu=1:4.1.0-2 && rm -rf /var/lib/apt/lists/*
+COPY --from=pdf-inspector /opt/pdf-inspector/bin/pdf2md /usr/local/bin/pdf2md
 WORKDIR /app
 COPY --from=server --chown=1654:1654 /publish .
 COPY --from=codex /opt/codex /opt/codex
 ARG VERSION=development
 ARG COMMIT=unknown
-ENV ASPNETCORE_HTTP_PORTS=8080 STUDY_VERSION=$VERSION STUDY_COMMIT=$COMMIT
+ENV ASPNETCORE_HTTP_PORTS=8080 STUDY_VERSION=$VERSION STUDY_COMMIT=$COMMIT STUDY_PDF_INSPECTOR_VERSION=1.20.0
 LABEL org.opencontainers.image.source="https://github.com/DotNaos/study-space" org.opencontainers.image.version=$VERSION org.opencontainers.image.revision=$COMMIT
 USER 1654:1654
 EXPOSE 8080

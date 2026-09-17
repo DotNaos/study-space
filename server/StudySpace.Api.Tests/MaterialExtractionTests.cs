@@ -50,7 +50,7 @@ public sealed class MaterialExtractionTests : IDisposable
         await Assert.ThrowsAsync<ApiFailure>(() => Extractor.Extract(new(bomb, "application/octet-stream", "huge.docx"), default));
         Assert.Equal(415, (await Assert.ThrowsAsync<ApiFailure>(() => Extractor.Extract(new([1, 2, 0, 255], "application/octet-stream", "unknown.bin"), default))).Status);
     }
-    [MaterialToolsFact] public async Task RealPopplerPreservesTextFormulaTableAndPageCoordinates()
+    [MaterialToolsFact] public async Task RealPdfInspectorPreservesTextFormulaAndPageCoordinates()
     {
         var result = await Extractor.Extract(new(MaterialFixtures.Pdf(), "application/pdf", "biology.pdf"), default);
         Assert.Contains(result.Blocks, block => block.Text.Contains("Cell membrane") && block.Page == 1 && block.Bounds is not null);
@@ -60,7 +60,8 @@ public sealed class MaterialExtractionTests : IDisposable
         Assert.Contains(result.Provenance, item => item.Engine == "pdftoppm" && item.ResultHash == MaterialStore.Hash(result.Assets[0].Bytes));
         Assert.Equal("page-image", Assert.Single(result.Assets).Kind);
         Assert.Equal(1, result.Assets[0].Page); Assert.Equal("image/png", MaterialFormat.Detect(result.Assets[0].Bytes, "page.png", null));
-        Assert.Contains(result.Provenance, item => item.Engine == "pdftotext" && item.Version.Contains("24.02.0"));
+        Assert.Contains(result.Provenance, item => item.Engine == "pdf2md" && item.Version.Contains("pdf-inspector 1.20.0"));
+        Assert.DoesNotContain(result.Provenance, item => item.Engine == "pdftotext");
         Assert.DoesNotContain(result.Provenance, item => item.Engine == "tesseract");
     }
     [MaterialToolsFact] public async Task RealOcrReadsImageAndScannedPdfWithRecordedEngine()

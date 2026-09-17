@@ -10,19 +10,26 @@ public sealed class MaterialToolRunner
     private readonly Dictionary<string, string> versions = new(StringComparer.Ordinal);
     public async Task<MaterialToolResult> Run(string tool, string[] arguments, string workingDirectory, TimeSpan timeout, CancellationToken ct)
     {
-        if (tool is not ("pdfinfo" or "pdftotext" or "pdftoppm" or "tesseract")) throw new InvalidOperationException("Unknown material tool.");
+        if (tool is not ("pdfinfo" or "pdf2md" or "pdftoppm" or "tesseract")) throw new InvalidOperationException("Unknown material tool.");
         if (!versions.TryGetValue(tool, out var version))
         {
-            var probe = await Execute(tool, tool == "tesseract" ? ["--version"] : ["-v"], workingDirectory, TimeSpan.FromSeconds(5), ct);
-            version = (probe.Stdout + "\n" + probe.Stderr).Split('\n').FirstOrDefault(line => !string.IsNullOrWhiteSpace(line))?.Trim() ?? "unknown";
-            version = version[..Math.Min(version.Length, 180)];
-            if (tool == "tesseract")
+            if (tool == "pdf2md")
             {
-                foreach (var language in new[] { "eng", "deu" })
+                version = "pdf-inspector " + (Environment.GetEnvironmentVariable("STUDY_PDF_INSPECTOR_VERSION") ?? "unknown");
+            }
+            else
+            {
+                var probe = await Execute(tool, tool == "tesseract" ? ["--version"] : ["-v"], workingDirectory, TimeSpan.FromSeconds(5), ct);
+                version = (probe.Stdout + "\n" + probe.Stderr).Split('\n').FirstOrDefault(line => !string.IsNullOrWhiteSpace(line))?.Trim() ?? "unknown";
+                version = version[..Math.Min(version.Length, 180)];
+                if (tool == "tesseract")
                 {
-                    var model = Path.Combine(Tessdata, language + ".traineddata");
-                    if (!File.Exists(model)) throw new ApiFailure("material_ocr_model_missing", "A required pinned OCR language model is unavailable.", 503);
-                    version += "; " + language + "=" + MaterialStore.Hash(await File.ReadAllBytesAsync(model, ct));
+                    foreach (var language in new[] { "eng", "deu" })
+                    {
+                        var model = Path.Combine(Tessdata, language + ".traineddata");
+                        if (!File.Exists(model)) throw new ApiFailure("material_ocr_model_missing", "A required pinned OCR language model is unavailable.", 503);
+                        version += "; " + language + "=" + MaterialStore.Hash(await File.ReadAllBytesAsync(model, ct));
+                    }
                 }
             }
             versions[tool] = version;

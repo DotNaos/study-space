@@ -236,6 +236,6 @@ public sealed class StudyMcpTests
         private static MaterialDocument Document() => new("material-1", "revision-1", "Sheet.pdf", "application/pdf",
             [new("block-1", "text", "Matrix multiplication and row operations.", 0, 1, null, null)],
             [new("original", "original", "application/pdf", "Sheet.pdf", "/api/materials/material-1/revisions/revision-1/assets/original", "hash", 4)],
-            [new("pdftotext", "fixture", 1, "hash")], [], true);
+            [new("pdf2md", "pdf-inspector 1.20.0", 1, "hash")], [], true);
     }
 }
