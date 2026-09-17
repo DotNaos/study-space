@@ -92,7 +92,7 @@ export function CoursesView({
   }
   const groups = groupCourses(courses || [], query);
   return (
-    <div className="max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-baseline gap-2.5">
           <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">

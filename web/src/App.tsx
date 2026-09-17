@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Icon, type IconName } from "@dotnaos/ui-base";
+import { Button, Container, Icon, type IconName } from "@dotnaos/ui-base";
+import { Sidenav } from "@dotnaos/ui/layout";
 import {
   api,
   message,
@@ -25,8 +26,14 @@ const navigationItems: {
   { id: "settings", label: "Einstellungen", icon: "settings" },
 ];
 
+const SIDEBAR_COLLAPSED_KEY = "study-space:sidenav-collapsed";
+
 export function App() {
   const { route, navigate } = useRoute();
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  });
   const [connection, setConnection] = useState<Connection>();
   const [connectionError, setConnectionError] = useState("");
   const refreshConnection = useCallback(async () => {
@@ -99,33 +106,36 @@ export function App() {
           : "Quellen";
     document.title = `${title} · ${settings.displayName}`;
   }, [route.page, settings.displayName]);
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? "1" : "0");
+    } catch {
+      /* Sidebar preference is best effort. */
+    }
+  }, [sidebarCollapsed]);
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[208px_minmax(0,1fr)]">
+    <div className={`min-h-screen md:grid ${sidebarCollapsed ? "md:grid-cols-[64px_minmax(0,1fr)]" : "md:grid-cols-[288px_minmax(0,1fr)]"}`}>
       <a
         href="#main"
         className="sr-only z-50 rounded-md bg-bg-0 p-3 focus:not-sr-only focus:fixed focus:left-4 focus:top-4"
       >
         Zum Inhalt springen
       </a>
-      <aside className="flex min-h-14 items-center gap-1 border-b border-border/60 bg-bg-0 px-3 py-1.5 md:sticky md:top-0 md:h-dvh md:flex-col md:items-stretch md:border-r md:border-b-0 md:px-4 md:py-6">
-        <div className="mr-auto flex items-center gap-2 md:mr-0 md:px-2">
+
+      <aside className="flex min-h-14 items-center gap-1 border-b border-border/60 bg-bg-0 px-3 py-1.5 md:hidden">
+        <div className="mr-auto flex items-center gap-2">
           <img
             src="/study-space-logo.png"
             alt=""
-            width={32}
-            height={32}
+            width={28}
+            height={28}
             decoding="async"
-            className="size-8 shrink-0 object-contain"
+            className="size-7 shrink-0 object-contain"
             aria-hidden="true"
           />
-          <span className="sr-only text-sm font-medium tracking-tight md:not-sr-only">
-            {settings.displayName}
-          </span>
+          <span className="text-sm font-medium tracking-tight">{settings.displayName}</span>
         </div>
-        <nav
-          aria-label="Hauptnavigation"
-          className="flex items-center gap-1 md:mt-8 md:flex-col md:items-stretch"
-        >
+        <nav aria-label="Hauptnavigation" className="flex items-center gap-1">
           {navigationItems.map((item) => (
             <AppLink
               key={item.id}
@@ -134,39 +144,98 @@ export function App() {
               aria-current={route.page === item.id ? "page" : undefined}
               aria-label={item.label}
               title={item.label}
-              className={`flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-md px-3 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring md:justify-start ${route.page === item.id ? "bg-bg-1 font-medium" : "text-text-muted hover:bg-bg-1 hover:text-text"}`}
+              className={`flex min-h-10 min-w-10 items-center justify-center rounded-md transition-colors focus-visible:outline-2 focus-visible:outline-focus-ring ${route.page === item.id ? "bg-bg-1" : "text-text-muted hover:bg-bg-1 hover:text-text"}`}
             >
-              <Icon
-                name={item.icon}
-                size="s"
-                color={route.page === item.id ? "text" : "muted"}
-              />
-              <span className={route.page === item.id ? "hidden min-[360px]:inline md:inline" : "hidden md:inline"}>{item.label}</span>
+              <Icon name={item.icon} size="s" color={route.page === item.id ? "text" : "muted"} />
             </AppLink>
           ))}
         </nav>
-        <div className="shrink-0 md:mt-3 md:self-start md:px-1"><ThemeToggle /></div>
-        <div className="mt-auto hidden pt-8 md:block">
-          <div className="flex items-center gap-2 text-xs text-text-muted">
-            <Icon
-              name={status?.database === "ready" ? "check-circle" : "alert-circle"}
-              size="s"
-              color={status?.database === "ready" ? "success" : "warning"}
+        <ThemeToggle />
+      </aside>
+
+      <aside className="sticky top-0 hidden h-dvh min-h-0 border-r border-border/60 bg-bg-0 md:block">
+        <Sidenav collapsed={sidebarCollapsed} label="Hauptnavigation">
+          <Sidenav.Header>
+            <Container
+              className="flex min-w-0 flex-1 items-center gap-2 group-data-[collapsed=true]/sidenav:justify-center"
+              part="unstyled"
+            >
+              <img
+                src="/study-space-logo.png"
+                alt=""
+                width={28}
+                height={28}
+                decoding="async"
+                className="size-7 shrink-0 object-contain"
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1 truncate text-sm font-medium tracking-tight group-data-[collapsed=true]/sidenav:hidden">
+                {settings.displayName}
+              </span>
+            </Container>
+            <Sidenav.Toggle
+              collapsed={sidebarCollapsed}
+              onPress={() => setSidebarCollapsed((value) => !value)}
             />
-            <span>
-              {status?.database === "ready"
-                ? "Auf deinem Rechner"
-                : statusChecked
-                  ? "Installation nicht bereit"
-                  : "Verbindung wird geprüft"}
-            </span>
-          </div>
-          {status?.hostname && (
-            <p className="mt-1.5 truncate pl-4 text-xs text-text-muted">
-              {status.hostname}
-            </p>
-          )}
-        </div>
+          </Sidenav.Header>
+
+          <Sidenav.Item
+            action="navigate-courses"
+            icon="list"
+            label="Kurse"
+            active={route.page === "courses"}
+            tooltip="Kurse"
+            onPress={() => navigate("/courses")}
+          />
+          <Sidenav.Item
+            action="navigate-sources"
+            icon="paperclip"
+            label="Quellen"
+            active={route.page === "sources"}
+            tooltip="Quellen"
+            onPress={() => navigate("/sources")}
+          />
+          <Sidenav.Item
+            action="navigate-settings"
+            icon="settings"
+            label="Einstellungen"
+            active={route.page === "settings"}
+            tooltip="Einstellungen"
+            onPress={() => navigate("/settings")}
+          />
+
+          <Sidenav.Footer>
+            <Container className="flex flex-col gap-3" part="unstyled">
+              <Container
+                className="flex items-center group-data-[collapsed=true]/sidenav:justify-center"
+                part="unstyled"
+              >
+                <ThemeToggle />
+              </Container>
+              <Container
+                className="flex min-w-0 items-start gap-2 text-xs text-text-muted group-data-[collapsed=true]/sidenav:justify-center"
+                part="unstyled"
+                title={status?.hostname || undefined}
+              >
+                <Icon
+                  name={status?.database === "ready" ? "check-circle" : "alert-circle"}
+                  size="s"
+                  color={status?.database === "ready" ? "success" : "warning"}
+                />
+                <span className="min-w-0 group-data-[collapsed=true]/sidenav:hidden">
+                  <span className="block">
+                    {status?.database === "ready"
+                      ? "Auf deinem Rechner"
+                      : statusChecked
+                        ? "Installation nicht bereit"
+                        : "Verbindung wird geprüft"}
+                  </span>
+                  {status?.hostname && <span className="mt-1 block truncate">{status.hostname}</span>}
+                </span>
+              </Container>
+            </Container>
+          </Sidenav.Footer>
+        </Sidenav>
       </aside>
       <main
         id="main"
