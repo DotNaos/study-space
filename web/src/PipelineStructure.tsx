@@ -61,7 +61,7 @@ export function EmbeddedSourceVisibility({state,unit,units,draft,disabled,onTogg
       <button type="button" className="structure-source-visibility-row" disabled={disabled||inheritedHidden} onClick={()=>onToggle(item.source.id)} title={title}>
         <Icon.File filename={item.source.name} size={14}/><span>{item.source.name}</span>
       </button>
-      <span className="structure-source-visibility-checkbox" title={title}>
+      <span className="structure-visibility-checkbox structure-source-visibility-checkbox" title={title}>
         <Checkbox label={`Quelle verwenden: ${item.source.name}`} checked={!hidden} disabled={disabled||inheritedHidden} onCheckedChange={()=>onToggle(item.source.id)}/>
       </span>
     </li>;

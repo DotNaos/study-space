@@ -151,5 +151,6 @@
 .structure-source-visibility-row:hover:not(:disabled) { background:var(--color-bg-1); color:var(--color-text); }
 .structure-source-visibility-row:disabled { cursor:not-allowed; opacity:.5; }
 .structure-source-visibility-row span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.structure-source-visibility-checkbox { display:grid; width:2.25rem; min-width:2.25rem; place-items:center; justify-self:end; }
+.structure-source-visibility-checkbox { display:flex; width:2.25rem; min-width:2.25rem; min-height:2rem; place-items:initial; justify-self:end; }
+.structure-source-visibility-checkbox > label { width:2.25rem; min-height:2rem; }
 .structure-source-visibility-list li[data-hidden=true] .structure-source-visibility-row { opacity:.55; }
