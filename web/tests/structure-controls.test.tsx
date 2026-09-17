@@ -162,3 +162,35 @@ test("nested source checkbox reflects an explicit use decision, not merely a pen
   const reviewedCheckbox = reviewedRow.match(/<input[^>]*type="checkbox"[^>]*>/)?.[0] ?? "";
   expect(reviewedCheckbox).toContain('checked=""');
 });
+
+test("embedded authoring structure keeps sources out of the tree and hides permanent visibility checkboxes", () => {
+  const nestedUnit = { ...unit, sourceGroupId: 10 };
+  const state = { courseId: 7, revision: 1, units: [nestedUnit], suggestedUnits: [], sources: [nestedSource], history: [], pending: 1, blocked: 0, groups: [{ id: 10, title: "Block 1", order: 0, parentId: null }], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
+    onOpenSource={noop} onFocus={noop} embedded editing onSelectUnit={noop} />);
+  expect(html).toContain("Sichtbarkeit");
+  expect(html).not.toContain("2026_CDS303_Block1_1.pdf");
+  expect(html).not.toContain('class="structure-visibility-checkbox"');
+  expect(html).not.toContain('class="structure-branch-label">Aufgaben');
+});
+
+test("visibility mode keeps the checkbox in a fixed trailing column and preserves inherited child state", () => {
+  const child = { ...unit, id: "b".repeat(32), title: "Kind", parentId: unit.id, hidden: false };
+  const hiddenParent = { ...unit, hidden: true };
+  const html = renderToStaticMarkup(<ul><StructureRow unit={child} units={[hiddenParent, child]} disabled={false} expanded={false} onToggle={noop}
+    onChange={noop} onHide={noop} onOpen={noop} onParent={noop} onKind={noop} visibilityMode onVisibilityToggle={noop} /></ul>);
+  expect(html).toContain('data-visibility-mode="true"');
+  expect(html).toContain('class="structure-visibility-checkbox structure-visibility-checkbox-right"');
+  expect(html).toMatch(/<input[^>]*checked=""[^>]*disabled=""[^>]*type="checkbox"|<input[^>]*disabled=""[^>]*type="checkbox"[^>]*checked=""/);
+  expect(html.indexOf("structure-visibility-row")).toBeLessThan(html.indexOf("structure-visibility-checkbox-right"));
+});
+
+test("embedded tasks are highlighted inline without a separate task branch label", () => {
+  const task: PipelineUnit = { id: "c".repeat(32), title: "Aufgabe 1", parentId: null, order: 0, kind: "tasks", hidden: false, scriptUnitIds: [unit.id] };
+  const state = { courseId: 7, revision: 1, units: [unit, task], suggestedUnits: [], sources: [], history: [], pending: 0, blocked: 0, groups: [], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
+    onOpenSource={noop} onFocus={noop} embedded editing onSelectUnit={noop} />);
+  expect(html).toContain('data-kind="tasks"');
+  expect(html).toContain("Aufgabe 1");
+  expect(html).not.toContain('class="structure-branch-label">Aufgaben');
+});

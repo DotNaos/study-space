@@ -27,6 +27,37 @@ public sealed class PipelineTests : IDisposable
         Assert.Equal("pending", view.Sources[0].Status); Assert.Equal("not-imported", view.Sources[0].Source.Acquisition);
         Assert.False(view.Persisted); Assert.Empty(store.Courses());
     }
+    [Fact] public void SourceProjectionExposesDefaultCurrentPlacementAndHiddenState()
+    {
+        var unit = Unit with { SourceGroupId = 10 };
+        var source = inventory.Source;
+        var observed = new PipelineObservation([new(10, "Week 1", 0)], [source], source.SourceVersion, null);
+        var plan = new PipelinePlan { Units = [unit] };
+        var view = PipelineService.Project(7, plan, observed, null);
+        Assert.Equal(unit.Id, view.Sources[0].DefaultPlacementId);
+        Assert.Equal(unit.Id, view.Sources[0].CurrentPlacementId);
+        Assert.False(view.Sources[0].Hidden);
+
+        plan.Decisions = [new SourceDecision(source.Id, source.SourceVersion, "exclude", [], "hide", "user", DateTimeOffset.UtcNow)];
+        view = PipelineService.Project(7, plan, observed, null);
+        Assert.Equal(unit.Id, view.Sources[0].DefaultPlacementId);
+        Assert.Null(view.Sources[0].CurrentPlacementId);
+        Assert.True(view.Sources[0].Hidden);
+    }
+    [Fact] public async Task DefaultPlacementProjectsAndClearRestoresIt()
+    {
+        var defaultUnit = Unit with { SourceGroupId = 10 };
+        var state = await service.Structure(7, new(0, [defaultUnit, OtherUnit], "Use imported hierarchy by default"), default);
+        Assert.Null(state.Sources[0].Decision);
+        Assert.Equal(defaultUnit.Id, state.Sources[0].DefaultPlacementId);
+        Assert.Equal(defaultUnit.Id, state.Sources[0].CurrentPlacementId);
+
+        state = await service.Map(7, new(state.Revision, [new PlanMappingItem(inventory.Source.Id, inventory.Source.SourceVersion, "use", [new SourceUse(OtherUnit.Id, "teaching", Order: 0)])]), default);
+        Assert.Equal(OtherUnit.Id, state.Sources[0].CurrentPlacementId);
+        state = await service.Map(7, new(state.Revision, [new PlanMappingItem(inventory.Source.Id, inventory.Source.SourceVersion, "clear", [])]), default);
+        Assert.Equal(defaultUnit.Id, state.Sources[0].CurrentPlacementId);
+        Assert.Null(state.Sources[0].Decision);
+    }
     [Fact] public async Task DecisionsAreExplicitManyToManyAndConcurrentWritesConflict()
     {
         var state = await service.Structure(7, new(0, [Unit, OtherUnit], "Two parallel topics"), default);

@@ -392,7 +392,7 @@ export function PipelineView({
                 </>
               ) : (
                 <>
-                  <h2>{unit ? "Zugeordnete Quellen" : "Moodle-Quellen"}</h2>
+                  <h2>{unit ? "Zugeordnete Quellen" : "Quellenbestand"}</h2>
                   <Checkbox
                     checked={openOnly}
                     onCheckedChange={setOpenOnly}

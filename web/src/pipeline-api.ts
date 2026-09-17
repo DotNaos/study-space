@@ -46,6 +46,9 @@ export type PipelineSourceView = {
   sectionIds: string[];
   exerciseIds: string[];
   unmappedBlocks?: number;
+  defaultPlacementId?: string | null;
+  currentPlacementId?: string | null;
+  hidden?: boolean;
 };
 export type PipelineGroup = {
   id: number;

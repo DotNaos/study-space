@@ -19,7 +19,7 @@ public sealed class PipelineMappingBoardTests
         response.EnsureSuccessStatusCode();
         var hidden = (await response.Content.ReadFromJsonAsync<PipelineView>())!;
         Assert.Equal("structure-hidden", hidden.Sources.Single(item => item.Source.Id == WorkflowApiFixture.Id('a')).Status);
-        Assert.Equal(3, hidden.Pending);
+        Assert.Equal(1, hidden.Pending);
 
         response = await client.PutAsJsonAsync(Path + "/structure", new PlanStructureRequest(hidden.Revision, [general with { Hidden = false }, week], "Restore"));
         response.EnsureSuccessStatusCode();

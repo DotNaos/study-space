@@ -41,22 +41,22 @@ export function MaterialPreparation({
   const coverage = snapshot?.coverage;
   return (
     <section
-      aria-label="Materialabdeckung"
+      aria-label="Quellenabdeckung"
       className="space-y-4 border-b border-border py-5"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-sm font-medium">
             {coverage?.total
-              ? `${coverage.ready} von ${coverage.total} Materialien erfasst`
-              : "Materialien für deinen Lernbereich"}
+              ? `${coverage.ready} von ${coverage.total} Quellen erfasst`
+              : "Quellen für deinen Lernbereich"}
           </h2>
           <p className="mt-1 text-xs leading-5 text-text-muted">
             {running
               ? "Die Inhalte werden auf deinem Rechner vorbereitet."
               : coverage?.ready
                 ? coverage.complete
-                  ? "Alle erkannten Materialien sind vollständig erfasst."
+                  ? "Alle erkannten Quellen sind vollständig erfasst."
                   : "Teilweise erfasst: Nicht lesbare oder fehlende Inhalte werden nicht ergänzt."
                 : "Erfasse zuerst die Kursinhalte. Das läuft lokal, ohne Übertragung an OpenAI."}
           </p>
@@ -75,8 +75,8 @@ export function MaterialPreparation({
               busy
                 ? "Wird gestartet …"
                 : coverage?.total
-                  ? "Materialien aktualisieren"
-                  : "Materialien erfassen"
+                  ? "Quellen aktualisieren"
+                  : "Quellen erfassen"
             }
             disabled={busy || !connected}
             onPress={() => void materials.importMaterials()}
@@ -94,13 +94,13 @@ export function MaterialPreparation({
           <div className="flex items-center gap-2 text-xs text-text-muted">
             <Spinner size="s" />
             {snapshot.job.total > 0
-              ? `${snapshot.job.completed} von ${snapshot.job.total} Materialien verarbeitet`
-              : "Materialien werden gesammelt …"}
+              ? `${snapshot.job.completed} von ${snapshot.job.total} Quellen verarbeitet`
+              : "Quellen werden gesammelt …"}
           </div>
           {snapshot.job.total > 0 && (
             <progress
               className="h-1 w-full accent-accent"
-              aria-label="Materialien verarbeitet"
+              aria-label="Quellen verarbeitet"
               value={snapshot.job.completed}
               max={snapshot.job.total}
             />
@@ -121,7 +121,7 @@ export function MaterialPreparation({
       )}
       {snapshot?.job?.error && !error && <Notice>{snapshot.job.error}</Notice>}
       {!snapshot && !error && (
-        <Loading label="Gespeicherte Materialien werden geprüft …" />
+        <Loading label="Gespeicherte Quellen werden geprüft …" />
       )}
       {!!snapshot?.materials.length && (
         <details open={expanded || undefined} className="group">
@@ -130,7 +130,7 @@ export function MaterialPreparation({
               size={14}
               className="transition-transform group-open:rotate-180"
             />
-            Materialien und Hinweise
+            Quellen und Hinweise
             {coverage && !coverage.complete && (
               <span className="text-warning">· Unvollständig</span>
             )}

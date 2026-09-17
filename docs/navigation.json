@@ -17,6 +17,7 @@
       "label": "Learning and content",
       "icon": "graduation-cap",
       "children": [
+        { "type": "page", "slug": "content-authoring-model", "label": "Content and authoring model", "icon": "file-pen-line" },
         { "type": "page", "slug": "reviewed-pipeline", "label": "Course preparation", "icon": "workflow" },
         { "type": "page", "slug": "learning-structure-editor", "label": "Structure editor", "icon": "blocks" },
         {

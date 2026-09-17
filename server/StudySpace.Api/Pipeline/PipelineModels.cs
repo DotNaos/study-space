@@ -27,7 +27,8 @@ public sealed class PipelinePlan
     public DateTimeOffset? SyncedAt { get; set; }
 }
 public sealed record PipelineSourceView(PipelineSource Source, string Status, SourceDecision? Decision,
-    string[] SectionIds, string[] ExerciseIds, int UnmappedBlocks = 0);
+    string[] SectionIds, string[] ExerciseIds, int UnmappedBlocks = 0,
+    string? DefaultPlacementId = null, string? CurrentPlacementId = null, bool Hidden = false);
 public sealed record PipelineView(long CourseId, long Revision, string ObservedHash, bool Persisted, string? Problem,
     PipelineGroup[] Groups, PipelineSourceView[] Sources, PipelineUnit[] Units, PipelineUnit[] SuggestedUnits,
     PipelineEvent[] History, int Pending, int Blocked, string[] UnattributedSections);

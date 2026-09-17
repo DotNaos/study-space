@@ -9,6 +9,7 @@ Documentation belongs to this repository. Distinguish accepted target behavior f
 
 ## Learning and content
 
+- [Content and authoring model](content-authoring-model.md): accepted target for one `Inhalt` surface, view/edit mode, structure vs. rendered TOC, generic source placement, and the `Quellen` inventory.
 - [Course preparation](reviewed-pipeline.md): source-level review/drill-down, generation routing, restricted MDX editing, task reconciliation, submissions and scoped agent feedback.
 - [Structure editor](learning-structure-editor.md): separate script/tasks, drag sorting, reversible hiding and local display names.
 

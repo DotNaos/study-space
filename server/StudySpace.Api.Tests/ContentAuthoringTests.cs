@@ -111,6 +111,22 @@ public sealed class ContentAuthoringTests : IDisposable
     }
 
     [Fact]
+    public async Task LegacySourceWithoutDecisionMaterializesAtDefaultStructurePlacement()
+    {
+        await Seed();
+        await learning.WithCourse(7, async state =>
+        {
+            state.Pipeline.Decisions = [];
+            await learning.Save(state);
+            return true;
+        });
+        var workspace = await service.Materialize(7, new(3, "Use default source placement"));
+        var block = Assert.Single(workspace.Blocks);
+        Assert.Equal(Unit.Id, Assert.Single(block.Placements).UnitId);
+        Assert.Equal("teaching", block.Placements[0].Role);
+    }
+
+    [Fact]
     public async Task HiddenReviewedUnitsDoNotMaterializeContent()
     {
         await Seed(hidden: true);

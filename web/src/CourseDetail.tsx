@@ -4,15 +4,11 @@ import { Button } from "@dotnaos/ui-base";
 import { ArrowLeft, CalendarDays, ImagePlus } from "lucide-react";
 import { api, message, type Course, type CourseSection } from "./api";
 import { AppLink, type Navigate } from "./navigation";
-import { cleanCourseText } from "./course-content";
 import { courseSemester, courseSubtitle } from "./course-library";
 import { CourseArtwork } from "./CourseArtwork";
-import { CourseActivities } from "./CourseActivities";
-import { Loading, Notice, linkClass } from "./shared";
-import type { ResourcePreview } from "./resource-preview";
+import { Loading, linkClass } from "./shared";
 import { useLearningCourse, type LearningTarget } from "./learning-api";
 import { useMaterialSnapshot } from "./material-api";
-import { MaterialPreparation } from "./MaterialPreparation";
 import type { SourceSelection } from "./SourceViewer";
 const PipelineView = lazy(() =>
   import("./PipelineView").then((module) => ({ default: module.PipelineView })),
@@ -32,14 +28,11 @@ const LearningPanel = lazy(() =>
     default: module.LearningPanel,
   })),
 );
+const CourseSourcesView = lazy(() =>
+  import("./CourseSourcesView").then((module) => ({ default: module.CourseSourcesView })),
+);
 const SourceViewer = lazy(() =>
   import("./SourceViewer").then((module) => ({ default: module.SourceViewer })),
-);
-
-const ResourceViewer = lazy(() =>
-  import("./ResourceViewer").then((module) => ({
-    default: module.ResourceViewer,
-  })),
 );
 
 export function CourseDetail({
@@ -56,7 +49,6 @@ export function CourseDetail({
   const [artworkOpen, setArtworkOpen] = useState(false);
   const [sections, setSections] = useState<CourseSection[]>();
   const [error, setError] = useState("");
-  const [preview, setPreview] = useState<ResourcePreview>();
   const [source, setSource] = useState<SourceSelection>();
   const [learningTarget, setLearningTarget] = useState<LearningTarget>();
   const [tab, setTab] = useState<
@@ -67,7 +59,10 @@ export function CourseDetail({
       : typeof window !== "undefined" &&
           window.location.hash.startsWith("#graph")
         ? "graph"
-        : "materials",
+        : typeof window !== "undefined" &&
+            window.location.hash.startsWith("#section-")
+          ? "materials"
+          : "pipeline",
   );
   const [tabChosen, setTabChosen] = useState(
     () =>
@@ -79,18 +74,8 @@ export function CourseDetail({
   const learning = useLearningCourse(course.id);
   const materials = useMaterialSnapshot(course.id);
   useEffect(() => {
-    if (!tabChosen && !learning.loading)
-      setTab(
-        learning.state?.activeVersion || learning.state?.job
-          ? "learning"
-          : "materials",
-      );
-  }, [
-    learning.loading,
-    learning.state?.activeVersionId,
-    learning.state?.job?.id,
-    tabChosen,
-  ]);
+    if (!tabChosen && !learning.loading) setTab("pipeline");
+  }, [learning.loading, tabChosen]);
   useEffect(() => {
     const followGraph = () => {
       if (window.location.hash.startsWith("#graph")) {
@@ -143,22 +128,6 @@ export function CourseDetail({
   useEffect(() => {
     void load();
   }, [load]);
-  useEffect(() => {
-    if (!sections || tab !== "materials") return;
-    const scrollToSection = () => {
-      const id = window.location.hash.slice(1);
-      if (/^section-[1-9][0-9]*$/.test(id))
-        document.getElementById(id)?.scrollIntoView({ block: "start" });
-    };
-    const frame = requestAnimationFrame(scrollToSection);
-    window.addEventListener("hashchange", scrollToSection);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("hashchange", scrollToSection);
-    };
-  }, [sections, tab]);
-  const sectionName = (section: CourseSection, index: number) =>
-    cleanCourseText(section.name) || `Abschnitt ${index + 1}`;
   return (
     <div
       data-learning-course
@@ -228,37 +197,17 @@ export function CourseDetail({
           size="sm"
           variant="ghost"
           icon="list"
-          label="Lernen"
-          pressed={tab === "learning"}
-          onPress={() => {
-            chooseTab("learning");
-          }}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="folder-open"
-          label="Materialien"
-          pressed={tab === "materials"}
-          onPress={() => {
-            chooseTab("materials");
-          }}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="list-filter"
-          label="Aufbereitung"
+          label="Inhalt"
           pressed={tab === "pipeline"}
           onPress={() => chooseTab("pipeline")}
         />
         <Button
           size="sm"
           variant="ghost"
-          icon="git-branch"
-          label="Graph"
-          pressed={tab === "graph"}
-          onPress={() => chooseTab("graph")}
+          icon="folder-open"
+          label="Quellen"
+          pressed={tab === "materials"}
+          onPress={() => chooseTab("materials")}
         />
       </div>
       {!tabChosen && learning.loading ? (
@@ -266,7 +215,7 @@ export function CourseDetail({
           <Loading label="Kurs wird geöffnet …" />
         </div>
       ) : tab === "pipeline" ? (
-        <Suspense fallback={<Loading label="Aufbereitung wird geöffnet …" />}>
+        <Suspense fallback={<Loading label="Inhalt wird geöffnet …" />}>
           <PipelineView
             courseId={course.id}
             courseName={course.name}
@@ -324,97 +273,15 @@ export function CourseDetail({
           />
         </Suspense>
       ) : (
-        <div className="mt-5">
-          {!moodleConnected ? (
-            <MaterialPreparation
-              materials={materials}
-              connected={false}
-              onSource={setSource}
-              expanded
-            />
-          ) : error ? (
-            <div className="space-y-4">
-              <Notice>{error}</Notice>
-              <Button label="Erneut laden" onPress={() => void load()} />
-            </div>
-          ) : !sections ? (
-            <Loading label="Kursinhalte werden geladen …" />
-          ) : sections.length === 0 ? (
-            <p className="text-sm text-text-muted">
-              In diesem Kurs sind noch keine Inhalte verfügbar.
-            </p>
-          ) : (
-            <div className="flex flex-col gap-5 xl:flex-row xl:gap-8">
-              {sections.length > 1 && (
-                <nav
-                  aria-label="Kursabschnitte"
-                  className="min-w-0 border-b border-border pb-3 xl:sticky xl:top-8 xl:max-h-[calc(100vh-4rem)] xl:w-44 xl:shrink-0 xl:self-start xl:overflow-y-auto xl:border-0 xl:pb-0"
-                >
-                  <p className="mb-3 hidden text-xs font-medium uppercase tracking-wider text-text-muted xl:block">
-                    In diesem Kurs
-                  </p>
-                  <ol className="flex gap-5 overflow-x-auto pb-1 xl:block xl:space-y-1 xl:overflow-visible">
-                    {sections.map((section, index) => (
-                      <li key={section.id} className="shrink-0 xl:shrink">
-                        <a
-                          href={`#section-${section.id}`}
-                          className="flex items-baseline gap-2 rounded-sm py-1.5 text-xs leading-5 text-text-muted hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
-                        >
-                          <span className="shrink-0 tabular-nums text-text-muted/60">
-                            {String(index + 1).padStart(2, "0")}
-                          </span>
-                          <span
-                            title={sectionName(section, index)}
-                            className="max-w-52 truncate xl:line-clamp-2 xl:max-w-none xl:whitespace-normal xl:break-words"
-                          >
-                            {sectionName(section, index)}
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ol>
-                </nav>
-              )}
-              <div className="min-w-0 flex-1 space-y-6">
-                {sections.map((section, index) => {
-                  const summary = cleanCourseText(section.summary);
-                  return (
-                    <section
-                      key={section.id}
-                      aria-labelledby={`section-${section.id}`}
-                    >
-                      <div className="mb-1 flex items-baseline gap-2 border-b border-border pb-2">
-                        <span
-                          className="text-xs tabular-nums text-text-muted/60"
-                          aria-hidden="true"
-                        >
-                          {String(index + 1).padStart(2, "0")}
-                        </span>
-                        <h2
-                          id={`section-${section.id}`}
-                          className="scroll-mt-8 break-words text-base font-medium tracking-tight sm:text-lg"
-                        >
-                          {sectionName(section, index)}
-                        </h2>
-                      </div>
-                      {summary && (
-                        <p className="my-2 whitespace-pre-line break-words text-sm leading-5 text-text-muted">
-                          {summary}
-                        </p>
-                      )}
-                      <CourseActivities
-                        courseId={course.id}
-                        navigate={navigate}
-                        modules={section.modules}
-                        onPreview={setPreview}
-                      />
-                    </section>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+        <Suspense fallback={<Loading label="Quellen werden geöffnet …"/>}>
+          <CourseSourcesView
+            courseId={course.id}
+            materials={materials}
+            connected={moodleConnected}
+            onSource={setSource}
+            onGraph={() => chooseTab("graph")}
+          />
+        </Suspense>
       )}
       {source && (
         <Suspense fallback={<Loading label="Quelle wird geöffnet …" />}>
@@ -422,15 +289,6 @@ export function CourseDetail({
             key={`${source.materialId}-${source.revision}-${source.blockId}`}
             source={source}
             onClose={() => setSource(undefined)}
-          />
-        </Suspense>
-      )}
-      {preview && (
-        <Suspense fallback={<Loading label="Vorschau wird geöffnet …" />}>
-          <ResourceViewer
-            key={preview.path}
-            preview={preview}
-            onClose={() => setPreview(undefined)}
           />
         </Suspense>
       )}
