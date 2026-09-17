@@ -1,6 +1,5 @@
 import "./structure-editor.css";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { Button } from "@dotnaos/ui-base";
 import { ArrowLeft, CalendarDays, ImagePlus } from "lucide-react";
 import { api, message, type Course, type CourseSection } from "./api";
 import { AppLink, type Navigate } from "./navigation";
@@ -188,28 +187,7 @@ export function CourseDetail({
           />
         </Suspense>
       )}
-      <div
-        role="group"
-        aria-label="Kursansicht"
-        className="course-view-tabs mt-4 flex flex-nowrap items-center gap-1 overflow-x-auto border-b border-border pb-3"
-      >
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="list"
-          label="Inhalt"
-          pressed={tab === "pipeline"}
-          onPress={() => chooseTab("pipeline")}
-        />
-        <Button
-          size="sm"
-          variant="ghost"
-          icon="folder-open"
-          label="Quellen"
-          pressed={tab === "materials"}
-          onPress={() => chooseTab("materials")}
-        />
-      </div>
+      <div className="mt-3">
       {!tabChosen && learning.loading ? (
         <div className="py-6">
           <Loading label="Kurs wird geöffnet …" />
@@ -283,6 +261,7 @@ export function CourseDetail({
           />
         </Suspense>
       )}
+      </div>
       {source && (
         <Suspense fallback={<Loading label="Quelle wird geöffnet …" />}>
           <SourceViewer

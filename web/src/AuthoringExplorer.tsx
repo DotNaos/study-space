@@ -626,8 +626,11 @@ export function AuthoringExplorer({
   return (
     <div className="authoring-explorer">
       <header className="authoring-explorer-header">
-        <strong>Explorer</strong>
-        <div>
+        <div className="authoring-explorer-heading">
+          <strong>Explorer</strong>
+          {state.pending > 0 && <small>{state.pending} offen</small>}
+        </div>
+        <div className="authoring-explorer-actions">
           <button
             type="button"
             aria-label="Quellenbestand aktualisieren"

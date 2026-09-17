@@ -129,10 +129,6 @@ export function PreparationWorkspace({
 
   return <section className="preparation-workspace" data-editing={editing || undefined}>
     <header className="preparation-workspace-head">
-      <div>
-        <strong>Inhalt</strong>
-        {editing && <span>{state.pending ? `${state.pending} Quellen offen` : "Struktur vollständig"}</span>}
-      </div>
       <div className="preparation-workspace-actions">
         {!editing && toc.length > 0 && <button type="button" className="preparation-toc-mobile-button" onClick={() => setTocOpen(true)}><ListTree size={14}/><span>Inhaltsverzeichnis</span></button>}
         <button type="button" className="preparation-edit-toggle" aria-pressed={editing} onClick={toggleEditing}>
