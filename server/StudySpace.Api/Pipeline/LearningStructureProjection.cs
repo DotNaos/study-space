@@ -32,7 +32,7 @@ public static partial class LearningStructure
         }).ToArray();
     }
 
-    public static PipelineUnit[] Apply(long courseId, PipelineUnit[] previous, PipelineUnit[] requested, PipelineGroup[] groups)
+    public static PipelineUnit[] Apply(long courseId, PipelineUnit[] previous, PipelineUnit[] requested, PipelineGroup[] groups, IReadOnlySet<string>? deletedUnitIds = null)
     {
         var old = Normalize(courseId, previous, groups).ToDictionary(unit => unit.Id);
         var next = requested.Select(unit =>
@@ -47,9 +47,11 @@ public static partial class LearningStructure
                 CustomTitle = string.IsNullOrWhiteSpace(unit.CustomTitle) ? null : unit.CustomTitle.Trim(),
                 ScriptUnitIds = unit.ScriptUnitIds ?? prior?.ScriptUnitIds ?? [] };
         }).ToList();
-        // Keep omitted entries and their references recoverable even for older clients.
+        // Omission remains backwards-compatible hiding. Only an explicit delete removes a
+        // user-created entry; provider-backed entries always remain recoverable.
         foreach (var missing in old.Values.Where(unit => requested.All(item => item.Id != unit.Id)))
-            next.Add(missing with { Hidden = true });
+            if (missing.SourceGroupId is not null || deletedUnitIds is null || !deletedUnitIds.Contains(missing.Id))
+                next.Add(missing with { Hidden = true });
         foreach (var siblings in next.GroupBy(unit => (Kind(unit), unit.ParentId)))
         {
             var ordered = siblings.OrderBy(unit => unit.Order).ThenBy(unit => unit.Hidden == true).ToArray();

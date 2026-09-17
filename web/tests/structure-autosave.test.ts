@@ -54,6 +54,13 @@ test("new provider reads only update clean structure; local edits remain recover
   const restored=new StructureAutosave(state([{...unit,customTitle:"Remote"}],5),async units=>state(units,6),saved,100000);
   expect(restored.getSnapshot().status).toBe("conflict");expect(restored.getSnapshot().units[0].customTitle).toBe("Local");queue.stop();restored.stop();
 });
+
+test("deleting a persisted user-created unit is sent as an explicit delete, not an omission",async()=>{
+  const custom={...unit,sourceGroupId:null};let deleted:string[]|undefined;
+  const queue=new StructureAutosave(state([custom]),async(units,revision,deletedUnitIds)=>{deleted=deletedUnitIds;return state(units,revision+1);},storage(),100000);
+  queue.update([]);expect(await queue.flush()).toBe(true);expect(deleted).toEqual([custom.id]);queue.stop();
+});
+
 test("guidance moves to the next unconfirmed source without confirming, hiding, or dropping any source",()=>{
   const plan=state();plan.sources=[source("a","reviewed"),source("b","pending"),source("c","stale"),source("d","excluded"),source("e","partial"),{...source("f"),source:{...source("f").source,present:false}}];
   expect(nextSourceDecision(plan)?.source.id).toBe("b");expect(nextSourceDecision(plan,"b")?.source.id).toBe("c");expect(nextSourceDecision(plan,"c")?.source.id).toBe("b");

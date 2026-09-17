@@ -33,7 +33,7 @@ public sealed record PipelineView(long CourseId, long Revision, string ObservedH
     PipelineGroup[] Groups, PipelineSourceView[] Sources, PipelineUnit[] Units, PipelineUnit[] SuggestedUnits,
     PipelineEvent[] History, int Pending, int Blocked, string[] UnattributedSections);
 public sealed record PlanSyncRequest(long ExpectedRevision);
-public sealed record PlanStructureRequest(long ExpectedRevision, PipelineUnit[] Units, string Reason, string Actor = "user");
+public sealed record PlanStructureRequest(long ExpectedRevision, PipelineUnit[] Units, string Reason, string Actor = "user", string[]? DeletedUnitIds = null);
 public sealed record PlanDecisionRequest(long ExpectedRevision, string SourceId, string SourceVersion,
     string Disposition, SourceUse[] Uses, string Reason, string Actor = "user");
 public sealed record PlanMappingItem(string SourceId, string SourceVersion, string Disposition, SourceUse[] Uses);

@@ -8,7 +8,7 @@ PR [#112](https://github.com/DotNaos/study-space/pull/112) implements the first 
 
 - primary course navigation is **Inhalt** + **Quellen**; legacy Lernen/Graph remain internal/advanced routes rather than primary tabs;
 - `Inhalt` has read/edit states, with a rendered heading TOC in read mode and the authored structure in edit mode;
-- the edit structure contains no nested source/file rows, shows contextual source counts, and has staged visibility editing;
+- the edit structure keeps files separate from structure nodes, but shows assigned files as compact selectable rows so block editing, diff, and the composer stay directly reachable; it also shows contextual source counts and staged visibility editing;
 - mobile read mode opens the TOC from a compact control instead of rendering a second column;
 - `Quellen` exposes one source inventory with current/default placement, move, hide, reset, refresh, and secondary graph access;
 - pipeline projection exposes provider-agnostic `defaultPlacementId`, `currentPlacementId`, and `hidden`; old stored source decisions remain readable and no duplicate placement store is introduced;
@@ -103,7 +103,7 @@ The content inspector uses compact editor-style tabs:
 - `Bearbeitet ↔ Raw`
 - `Raw`
 
-If a structure node has several sources, `PDF ↔ Jetzt` uses a small source selector rather than inserting source rows into the structure tree.
+Assigned files may appear as compact selectable rows beneath their structure node in edit mode. They are content/source links, not structure nodes. Selecting one opens its `Inhalt`, `PDF ↔ Jetzt`, `Bearbeitet ↔ Raw`, `Raw`, and composer workspace.
 
 ### Table of Contents
 
@@ -176,9 +176,10 @@ The structure sidebar owns:
 - rename;
 - add/remove;
 - content/task classification;
-- visibility editing.
+- visibility editing;
+- deletion of user-created nodes once they have no child nodes or assigned sources. Provider-backed nodes remain recoverable through hide/reset semantics.
 
-It does not show nested source/PDF rows.
+Assigned source/PDF files are shown beneath their structure node as compact selectable content rows. They do not participate in hierarchy/reorder operations as structure nodes.
 
 ## Visibility mode
 
