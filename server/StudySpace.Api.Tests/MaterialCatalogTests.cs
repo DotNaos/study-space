@@ -25,6 +25,22 @@ public sealed class MaterialCatalogTests : IDisposable
         Assert.Equal(4, source.Reads); Assert.False(await catalog.RunNext(default));
     }
 
+
+    [Fact] public async Task PdfReextractCreatesANewImmutableRevisionWhileNormalRefreshReusesCurrentProfile()
+    {
+        source.Pdf = true; using var catalog = Catalog();
+        await catalog.StartImport(7); await catalog.RunNext(default);
+        var first = (await catalog.GetSnapshot(7)).Materials[0]; Assert.Equal(2, extractor.Calls);
+        await catalog.StartImport(7); await catalog.RunNext(default);
+        var refreshed = (await catalog.GetSnapshot(7)).Materials[0];
+        Assert.Equal(first.Revision, refreshed.Revision); Assert.Equal(2, extractor.Calls);
+        await catalog.StartPdfReextract(7); await catalog.RunNext(default);
+        var rebuilt = (await catalog.GetSnapshot(7)).Materials[0];
+        Assert.NotEqual(first.Revision, rebuilt.Revision); Assert.Equal(4, extractor.Calls);
+        Assert.Equal("First course content", Assert.Single((await catalog.GetDocument(first.Id, first.Revision!)).Blocks).Text);
+        Assert.Equal("First course content", Assert.Single((await catalog.GetDocument(rebuilt.Id, rebuilt.Revision!)).Blocks).Text);
+    }
+
     [Fact] public async Task ChangedBytesCreateNewRevisionWhileOldSourceRemainsReadableOffline()
     {
         using var catalog = Catalog(); await catalog.StartImport(7); await catalog.RunNext(default);
@@ -118,13 +134,14 @@ public sealed class MaterialCatalogTests : IDisposable
         public bool FailSecond { get; set; }
         public bool FailAll { get; set; }
         public bool WithReference { get; set; }
+        public bool Pdf { get; set; }
         public bool Pause { get; set; }
         public int Reads { get; private set; }
         public TaskCompletionSource Started { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public Task<MaterialInventory> Inventory(long courseId, CancellationToken ct)
         {
-            var materials = new List<MaterialSource> { Item(courseId, "first"), Item(courseId, "second") };
-            if (WithReference) materials.Add(Item(courseId, "link") with { Kind = "reference", UnavailableReason = "This link requires separate access." });
+            var materials = new List<MaterialSource> { Item(courseId, "first", Pdf), Item(courseId, "second", Pdf) };
+            if (WithReference) materials.Add(Item(courseId, "link", false) with { Kind = "reference", UnavailableReason = "This link requires separate access." });
             return Task.FromResult(new MaterialInventory("scope", materials.ToArray()));
         }
         public async Task<MaterialInput> Read(MaterialSource item, CancellationToken ct)
@@ -132,10 +149,13 @@ public sealed class MaterialCatalogTests : IDisposable
             Reads++;
             if (Pause) { Started.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, ct); }
             if (FailAll || FailSecond && item.Name == "second") throw new ApiFailure("fixture_unavailable", "The material is temporarily unavailable.", 502);
-            return new(Encoding.UTF8.GetBytes(item.Name == "first" ? Content : "Second course content"), "text/plain", item.Name + ".txt");
+            var text = item.Name == "first" ? Content : "Second course content";
+            return Pdf
+                ? new(Encoding.UTF8.GetBytes("%PDF-1.4\n" + text), "application/pdf", item.Name + ".pdf")
+                : new(Encoding.UTF8.GetBytes(text), "text/plain", item.Name + ".txt");
         }
-        private static MaterialSource Item(long courseId, string name) => new(MaterialStore.Hash("scope:" + courseId + ":" + name), "scope", courseId, 1, "Week 1", 99,
-            name, "file", "text/plain", "resource", null, null);
+        private static MaterialSource Item(long courseId, string name, bool pdf) => new(MaterialStore.Hash("scope:" + courseId + ":" + name), "scope", courseId, 1, "Week 1", 99,
+            name, "file", pdf ? "application/pdf" : "text/plain", "resource", null, null);
     }
     private sealed class Extractor : IMaterialExtractor
     {
@@ -146,9 +166,10 @@ public sealed class MaterialCatalogTests : IDisposable
         public TaskCompletionSource Started { get; set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         public async Task<MaterialExtraction> Extract(MaterialInput input, CancellationToken ct)
         {
-            Calls++; if (input.Name == "first.txt") FirstCalls++;
+            Calls++; if (input.Name.StartsWith("first.", StringComparison.Ordinal)) FirstCalls++;
             if (PauseSecond && input.Name == "second.txt") { Started.TrySetResult(); await Task.Delay(Timeout.InfiniteTimeSpan, ct); }
-            return new([new("b-00001", "paragraph", Encoding.UTF8.GetString(input.Bytes), 0, 1, null, null)], [],
+            var text = Encoding.UTF8.GetString(input.Bytes); if (text.StartsWith("%PDF-1.4\n", StringComparison.Ordinal)) text = text[9..];
+            return new([new("b-00001", "paragraph", text, 0, 1, null, null)], [],
                 [new("fixture", "1", 1, MaterialStore.Hash(input.Bytes))], Incomplete ? ["A diagram needs visual review."] : [], !Incomplete);
         }
     }

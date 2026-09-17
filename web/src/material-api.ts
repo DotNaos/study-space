@@ -144,6 +144,21 @@ export function useMaterialSnapshot(courseId: number) {
       setBusy(false);
     }
   }
+  async function reextractPdfs() {
+    setBusy(true);
+    setError("");
+    try {
+      setSnapshot(
+        await api<MaterialSnapshot>(`${materialCoursePath(courseId)}/reextract-pdfs`, {
+          method: "POST",
+        }),
+      );
+    } catch (error) {
+      setError(message(error));
+    } finally {
+      setBusy(false);
+    }
+  }
   async function cancel() {
     if (!snapshot?.job) return;
     setBusy(true);
@@ -161,6 +176,6 @@ export function useMaterialSnapshot(courseId: number) {
       setBusy(false);
     }
   }
-  return { snapshot, busy, error, refresh, importMaterials, cancel };
+  return { snapshot, busy, error, refresh, importMaterials, reextractPdfs, cancel };
 }
 export type MaterialState = ReturnType<typeof useMaterialSnapshot>;

@@ -7,6 +7,8 @@ public static class MaterialFormat
 {
     public const int MaximumBytes = 32 * 1024 * 1024;
     public const string Profile = "local-structured-notebook-v2";
+    public const string PdfProfile = "pdf-inspector-1.20.0";
+    public static string ExtractionProfile(string detectedType) => detectedType == "application/pdf" ? $"{Profile}:{PdfProfile}" : Profile;
     public static string Detect(byte[] bytes, string name, string? declared)
     {
         if (bytes.AsSpan().StartsWith("%PDF-"u8)) return "application/pdf";
