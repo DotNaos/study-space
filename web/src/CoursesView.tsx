@@ -93,17 +93,12 @@ export function CoursesView({
   const groups = groupCourses(courses || [], query);
   return (
     <div className="mx-auto w-full max-w-4xl">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-baseline gap-2.5">
-          <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">
-            Kurse
-          </h1>
-          {courses && courses.length > 0 && (
-            <span className="text-xs tabular-nums text-text-muted" aria-label={`${courses.length} Kurse`}>{courses.length}</span>
-          )}
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-medium tracking-tight sm:text-3xl">
+          Kurse
+        </h1>
         {!!courses?.length && !error && (
-          <div className="relative w-full [&_input]:min-h-11 [&_input]:pl-10 [&_input]:text-base sm:w-72 sm:[&_input]:text-sm">
+          <div className="relative mt-4 w-full [&_input]:min-h-11 [&_input]:pl-10 [&_input]:text-base sm:[&_input]:text-sm">
             <Search size={16} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 z-10 -translate-y-1/2 text-text-muted" />
             <Input
               accessibilityLabel="Kurse durchsuchen"

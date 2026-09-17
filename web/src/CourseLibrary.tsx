@@ -17,16 +17,13 @@ export function CourseLibrary({
           key={semester.key}
           aria-labelledby={`semester-${semester.key}`}
         >
-          <div className="mb-1 flex items-baseline gap-2 border-b border-border/60 pb-2">
+          <div className="mb-1 border-b border-border/60 pb-2">
             <h2
               id={`semester-${semester.key}`}
               className="text-sm font-medium tracking-tight sm:text-base"
             >
               <span className="sm:hidden">{semester.shortLabel}</span><span className="hidden sm:inline">{semester.label}</span>
             </h2>
-            <span className="text-xs tabular-nums text-text-muted" aria-label={`${courses.length} Kurse`}>
-              {courses.length}
-            </span>
           </div>
           <ul className="divide-y divide-border/60">
             {courses.map((course) => {
