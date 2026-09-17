@@ -358,6 +358,32 @@ export function ContentAuthoringView({
     finally { setBusy(false); }
   }
 
+  async function rebuildStale() {
+    const staleBlocks = (workspace?.blocks ?? []).filter(block => block.included && block.stale && block.currentRevisionId);
+    if (!staleBlocks.length || busy || saving || aiBusy) return;
+    setBusy(true); setError("");
+    try {
+      const replacements: ContentBlockView[] = [];
+      for (const block of staleBlocks) {
+        const current = views[block.id] ?? await readContentBlock(courseId, block.id);
+        const revisionId = current.revision?.id;
+        if (!revisionId) continue;
+        replacements.push(await resetContentBlock(courseId, block.id, revisionId));
+      }
+      const byId = new Map(replacements.map(view => [view.block.id, view]));
+      setViews(current => ({ ...current, ...Object.fromEntries(replacements.map(view => [view.block.id, view])) }));
+      setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => byId.get(block.id)?.block ?? block) } : current);
+      setRawRevisions(current => ({ ...current, ...Object.fromEntries(replacements.flatMap(view => view.revision ? [[view.block.id, view.revision]] : [])) }));
+      const selectedNext = selected ? byId.get(selected) : undefined;
+      if (selectedNext?.revision) {
+        setDraft(selectedNext.revision.content); setSavedDraft(selectedNext.revision.content);
+        setDraftBlockId(selected!); setDraftRevisionId(selectedNext.revision.id);
+      }
+      setAiStatus(`${replacements.length} aktualisierte Raw-Fassung${replacements.length === 1 ? "" : "en"} übernommen.`);
+    } catch (error) { setError(message(error)); }
+    finally { setBusy(false); }
+  }
+
   async function undo() {
     const revisionId = selectedView?.revision?.id;
     if (!selected || !revisionId || busy || saving || aiBusy) return;
@@ -514,6 +540,7 @@ export function ContentAuthoringView({
       </div>
       {editing && <div className="content-authoring-actions">
         <Button size="sm" variant="ghost" icon="refresh" label={blocks.length ? "Inhalte aktualisieren" : "Rohfassung erstellen"} disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
+        {stale > 0 && <Button size="sm" variant="ghost" label="Aktualisierte Raw-Fassungen übernehmen" disabled={busy || saving || aiBusy} onPress={() => void rebuildStale()}/>}
       </div>}
     </header>
 

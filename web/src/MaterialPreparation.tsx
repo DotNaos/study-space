@@ -39,6 +39,7 @@ export function MaterialPreparation({
   const { snapshot, busy, error } = materials;
   const running = runningJob(snapshot?.job);
   const coverage = snapshot?.coverage;
+  const hasPdf = !!snapshot?.materials.some(entry => entry.mimeType === "application/pdf" && entry.status === "ready");
   return (
     <section
       aria-label="Quellenabdeckung"
@@ -69,18 +70,28 @@ export function MaterialPreparation({
             onPress={() => void materials.cancel()}
           />
         ) : (
-          <Button
-            variant={coverage?.ready ? "ghost" : "secondary"}
-            label={
-              busy
-                ? "Wird gestartet …"
-                : coverage?.total
-                  ? "Quellen aktualisieren"
-                  : "Quellen erfassen"
-            }
-            disabled={busy || !connected}
-            onPress={() => void materials.importMaterials()}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant={coverage?.ready ? "ghost" : "secondary"}
+              label={
+                busy
+                  ? "Wird gestartet …"
+                  : coverage?.total
+                    ? "Quellen aktualisieren"
+                    : "Quellen erfassen"
+              }
+              disabled={busy || !connected}
+              onPress={() => void materials.importMaterials()}
+            />
+            {hasPdf && (
+              <Button
+                variant="ghost"
+                label="PDFs neu extrahieren"
+                disabled={busy || !connected}
+                onPress={() => void materials.reextractPdfs()}
+              />
+            )}
+          </div>
         )}
       </div>
       {!connected && (

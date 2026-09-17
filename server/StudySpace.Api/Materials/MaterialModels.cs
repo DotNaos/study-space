@@ -12,7 +12,7 @@ public sealed record MaterialEntry(string Id, string? Revision, string Name, str
     public string? CapturedSourceHash { get; init; }
 }
 public sealed record MaterialJob(string Id, string Status, int Completed, int Total, DateTimeOffset CreatedAt,
-    DateTimeOffset? FinishedAt, string? Error);
+    DateTimeOffset? FinishedAt, string? Error, bool ReextractPdfs = false);
 
 public sealed record MaterialDocument(string MaterialId, string Revision, string Name, string MimeType,
     MaterialBlock[] Blocks, MaterialAsset[] Assets, MaterialProvenance[] Provenance, string[] Warnings, bool Complete);

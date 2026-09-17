@@ -15,7 +15,9 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
         try { return Snapshot(await store.Read(courseId, ct) ?? new() { CourseId = courseId }); }
         finally { changes.Release(); }
     }
-    public async Task<MaterialSnapshot> StartImport(long courseId, CancellationToken ct = default)
+    public Task<MaterialSnapshot> StartImport(long courseId, CancellationToken ct = default) => StartImport(courseId, false, ct);
+    public Task<MaterialSnapshot> StartPdfReextract(long courseId, CancellationToken ct = default) => StartImport(courseId, true, ct);
+    private async Task<MaterialSnapshot> StartImport(long courseId, bool reextractPdfs, CancellationToken ct)
     {
         if (courseId <= 0) throw MaterialStore.Missing();
         await changes.WaitAsync(ct);
@@ -23,7 +25,7 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
         {
             var state = await store.Read(courseId, ct) ?? new() { CourseId = courseId };
             if (state.Job?.Status is "queued" or "running") return Snapshot(state);
-            state.Job = new(Guid.NewGuid().ToString("N"), "queued", 0, 0, clock.GetUtcNow(), null, null);
+            state.Job = new(Guid.NewGuid().ToString("N"), "queued", 0, 0, clock.GetUtcNow(), null, null, reextractPdfs);
             state.Status = "queued"; state.SnapshotId = null; state.InventoryReady = false; state.UpdatedAt = clock.GetUtcNow();
             await store.Write(state); return Snapshot(state);
         }
@@ -99,7 +101,7 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
                 var current = await store.Read(course, run.Token) ?? throw MaterialStore.Missing();
                 var pending = current.Items.FirstOrDefault(item => item.Status == "pending");
                 if (pending is null) break;
-                await ImportOne(course, job, pending, run.Token);
+                await ImportOne(course, job, pending, current.Job!.ReextractPdfs, run.Token);
             }
             await changes.WaitAsync(stoppingToken);
             try
@@ -135,7 +137,7 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
         }
     }
 
-    private async Task ImportOne(long courseId, string jobId, MaterialItemState pending, CancellationToken ct)
+    private async Task ImportOne(long courseId, string jobId, MaterialItemState pending, bool reextractPdfs, CancellationToken ct)
     {
         var source = pending.Source;
         if (pending.CandidateRevision is not null && await store.Document(source.Id, pending.CandidateRevision, ct) is { } recovered)
@@ -158,7 +160,10 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
                 var input = await provider.Read(source, ct);
                 if (input.Bytes.Length > MaterialFormat.MaximumBytes) throw new ApiFailure("material_too_large", "This file exceeds the 32 MB import limit.", 413);
                 var sourceHash = await store.PutBlob(input.Bytes);
-                var revision = MaterialStore.Hash(sourceHash + ":" + MaterialFormat.Profile);
+                var detectedType = MaterialFormat.Detect(input.Bytes, input.Name, input.MimeType);
+                var revisionKey = sourceHash + ":" + MaterialFormat.ExtractionProfile(detectedType);
+                if (reextractPdfs && detectedType == "application/pdf") revisionKey += ":manual:" + jobId;
+                var revision = MaterialStore.Hash(revisionKey);
                 var document = await store.Document(source.Id, revision, ct);
                 if (document is null)
                 {
