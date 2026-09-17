@@ -144,3 +144,12 @@
 .structure-source-links button:hover,.structure-source-links li[data-selected=true] button { background:var(--color-bg-1); color:var(--color-text); }
 .structure-source-links button span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .structure-source-links small { flex-shrink:0; font-size:.6rem; color:var(--color-warning); }
+
+.structure-source-visibility-list { list-style:none; margin:.1rem 0 .35rem; padding:0 0 0 2.05rem; }
+.structure-source-visibility-list li { display:grid; grid-template-columns:minmax(0,1fr) 2.25rem; align-items:center; min-width:0; min-height:2rem; }
+.structure-source-visibility-row { display:flex; min-width:0; align-items:center; gap:.45rem; min-height:1.9rem; padding:.25rem .45rem; border:0; border-radius:.35rem; background:transparent; color:var(--color-text-muted); font:inherit; font-size:.68rem; text-align:left; cursor:pointer; }
+.structure-source-visibility-row:hover:not(:disabled) { background:var(--color-bg-1); color:var(--color-text); }
+.structure-source-visibility-row:disabled { cursor:not-allowed; opacity:.5; }
+.structure-source-visibility-row span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.structure-source-visibility-checkbox { display:grid; width:2.25rem; min-width:2.25rem; place-items:center; justify-self:end; }
+.structure-source-visibility-list li[data-hidden=true] .structure-source-visibility-row { opacity:.55; }

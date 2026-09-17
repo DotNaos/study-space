@@ -1,6 +1,6 @@
 import "./structure-editor.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Button, Icon } from "@dotnaos/ui-base";
+import { Button, Checkbox, Icon } from "@dotnaos/ui-base";
 import { closestCenter, DndContext, KeyboardSensor, MouseSensor, PointerSensor, TouchSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { BookOpen, Focus, ListTree } from "lucide-react";
@@ -48,6 +48,24 @@ function EmbeddedSources({state,unit,units,selectedSourceId,onOpen}:{state:Pipel
       </button>
     </li>)}
   </ul>;
+}
+
+export function EmbeddedSourceVisibility({state,unit,units,draft,disabled,onToggle}:{state:PipelineState;unit:PipelineUnit;units:PipelineUnit[];draft:Record<string,boolean>;disabled:boolean;onToggle:(id:string)=>void}) {
+  const items=orderedSources(state,sourceItems(state,units,unit)).filter(item=>item.source.present);
+  if(!items.length)return null;
+  const inheritedHidden=unitHidden(unit,units);
+  return <ul className="structure-source-visibility-list" aria-label={`Quellen-Sichtbarkeit in ${unitLabel(unit)}`}>{items.map(item=>{
+    const hidden=draft[item.source.id]??(!!item.hidden||item.decision?.disposition==="exclude");
+    const title=inheritedHidden?"Zuerst den übergeordneten Struktur-Eintrag einblenden":hidden?"Einblenden":"Ausblenden";
+    return <li key={item.source.id} data-hidden={hidden||undefined}>
+      <button type="button" className="structure-source-visibility-row" disabled={disabled||inheritedHidden} onClick={()=>onToggle(item.source.id)} title={title}>
+        <Icon.File filename={item.source.name} size={14}/><span>{item.source.name}</span>
+      </button>
+      <span className="structure-source-visibility-checkbox" title={title}>
+        <Checkbox label={`Quelle verwenden: ${item.source.name}`} checked={!hidden} disabled={disabled||inheritedHidden} onCheckedChange={()=>onToggle(item.source.id)}/>
+      </span>
+    </li>;
+  })}</ul>;
 }
 
 type MappingActions = {
@@ -124,6 +142,7 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
   const [showHidden,setShowHidden]=useState(false);
   const [visibilityMode,setVisibilityMode]=useState(false);
   const [visibilityDraft,setVisibilityDraft]=useState<Record<string,boolean>>({});
+  const [sourceVisibilityDraft,setSourceVisibilityDraft]=useState<Record<string,boolean>>({});
   const [expanded,setExpanded]=useState<string>();
   const [openUnits,setOpenUnits]=useState<Set<string>>(()=>{const initial=state.units.length?state.units:state.suggestedUnits;return new Set(initial.filter(unit=>unitKind(unit)==="script"&&!unitHidden(unit,initial)).slice(0,1).map(unit=>unit.id));});
   const [focusId,setFocusId]=useState<string>();
@@ -163,10 +182,29 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
     if(selectedUnitId===id) onSelectAll?.();
     setExpanded(current=>current===id?undefined:current);
   }
-  function startVisibility(){setVisibilityDraft(Object.fromEntries(units.map(unit=>[unit.id,!!unit.hidden])));setVisibilityMode(true);}
-  function cancelVisibility(){setVisibilityDraft({});setVisibilityMode(false);}
+  function startVisibility(){
+    setVisibilityDraft(Object.fromEntries(units.map(unit=>[unit.id,!!unit.hidden])));
+    setSourceVisibilityDraft(Object.fromEntries(state.sources.filter(item=>item.source.present).map(item=>[item.source.id,!!item.hidden||item.decision?.disposition==="exclude"])));
+    setVisibilityMode(true);
+  }
+  function cancelVisibility(){setVisibilityDraft({});setSourceVisibilityDraft({});setVisibilityMode(false);}
   function toggleVisibility(id:string){setVisibilityDraft(current=>({...current,[id]:!(current[id]??false)}));}
-  function applyVisibility(){const next=visibilityDraft;setUnits(current=>current.map(unit=>({...unit,hidden:next[unit.id]??!!unit.hidden})));setVisibilityMode(false);setVisibilityDraft({});}
+  function toggleSourceVisibility(id:string){setSourceVisibilityDraft(current=>({...current,[id]:!(current[id]??false)}));}
+  async function applyVisibility(){
+    const next=visibilityDraft;
+    const sourceNext=sourceVisibilityDraft;
+    setUnits(current=>current.map(unit=>({...unit,hidden:next[unit.id]??!!unit.hidden})));
+    const remote=await syncStructure();
+    if(!remote)return;
+    const changes=remote.sources.filter(item=>item.source.present).flatMap(item=>{
+      const currentHidden=!!item.hidden||item.decision?.disposition==="exclude";
+      const desiredHidden=sourceNext[item.source.id]??currentHidden;
+      if(desiredHidden===currentHidden)return [];
+      return [{sourceId:item.source.id,sourceVersion:item.source.sourceVersion,disposition:desiredHidden?"exclude":"clear",uses:[]} as MappingItem];
+    });
+    if(changes.length){mappings.enqueue(changes);if(!await mappings.flush())return;}
+    setVisibilityMode(false);setVisibilityDraft({});setSourceVisibilityDraft({});
+  }
   function add(kind:"script"|"tasks"){
     const siblings=units.filter(unit=>unitKind(unit)===kind&&unit.parentId===null);
     const id=crypto.randomUUID().replaceAll("-","");
@@ -186,17 +224,24 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
   const canCheckAll=hiddenCount>0;
   const canUncheckAll=units.some(unit=>!unitHidden(unit,units))||ownedSources.some(item=>item.decision?.disposition!=="exclude");
   const disabled=busy||mappingBusy||!editing;
-  const visibilityChanges=visibilityMode?units.filter(unit=>(visibilityDraft[unit.id]??!!unit.hidden)!==!!unit.hidden).length:0;
+  const visibilityChanges=visibilityMode
+    ? units.filter(unit=>(visibilityDraft[unit.id]??!!unit.hidden)!==!!unit.hidden).length
+      + state.sources.filter(item=>item.source.present&&!!sourceOwner(displayUnits,item)).filter(item=>{
+        const hidden=!!item.hidden||item.decision?.disposition==="exclude";
+        return (sourceVisibilityDraft[item.source.id]??hidden)!==hidden;
+      }).length
+    : 0;
   const actions:MappingActions={disabled:busy||structureBusy||mappingBlocked||!editing,enqueue:mappings.enqueue,before:beforeMapping,onOpen:onOpenSource};
 
   function row(unit:PipelineUnit,children?:ReactNode){
-    const sourceCount=sourceItems(state,displayUnits,unit).filter(item=>item.source.present&&!item.hidden&&item.decision?.disposition!=="exclude").length;
+    const visibilitySources=sourceItems(state,displayUnits,unit).filter(item=>item.source.present);
+    const sourceCount=visibilitySources.filter(item=>!item.hidden&&item.decision?.disposition!=="exclude").length;
     const sources=embedded?[]:sourceItems(state,displayUnits,unit).filter(item=>showHidden||item.decision?.disposition!=="exclude");
     const childUnits=displayUnits.filter(item=>item.parentId===unit.id&&(visibilityMode||showHidden||!unitHidden(item,displayUnits)));
     const directChildren=units.filter(item=>item.parentId===unit.id);
     const assignedSources=state.sources.filter(item=>item.currentPlacementId===unit.id||item.defaultPlacementId===unit.id||primaryUse(item)?.unitId===unit.id);
     const taskChildren=unitKind(unit)==="script"?displayUnits.filter(item=>unitKind(item)==="tasks"&&linkedTaskOwner(displayUnits,item,visibilityMode)===unit.id&&(visibilityMode||showHidden||!unitHidden(item,displayUnits))):[];
-    const nestedCount=(embedded&&!visibilityMode?sourceCount:sources.length)+childUnits.length+taskChildren.length;
+    const nestedCount=(embedded?(visibilityMode?visibilitySources.length:sourceCount):sources.length)+childUnits.length+taskChildren.length;
     const deletable=unit.sourceGroupId==null;
     const deleteDisabledReason=!deletable?undefined:directChildren.length?"Verschiebe oder lösche zuerst die untergeordneten Einträge.":assignedSources.length?"Verschiebe oder blende zuerst die zugeordneten Quellen aus.":undefined;
     return <StructureRow key={unit.id} unit={unit} units={displayUnits} disabled={disabled} expanded={expanded===unit.id} onToggle={()=>setExpanded(expanded===unit.id?undefined:unit.id)}
@@ -210,7 +255,10 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
   function level(items:PipelineUnit[],key:string){
     if(!items.length)return null;
     return <DndContext key={key} sensors={structureSensors} collisionDetection={closestCenter} onDragEnd={reorder}><SortableContext items={items.map(unit=>unit.id)} strategy={verticalListSortingStrategy}><ul className="structure-list structure-tree-level">{items.map(unit=>{
-      const sources=embedded ? visibilityMode ? null : <EmbeddedSources state={state} unit={unit} units={displayUnits} selectedSourceId={selectedSourceId} onOpen={onOpenSource}/> : <NestedSources state={state} unit={unit} units={displayUnits} actions={actions} showHidden={showHidden} selectedSourceId={selectedSourceId}/>;
+      const sources=embedded ? visibilityMode
+        ? <EmbeddedSourceVisibility state={state} unit={unit} units={displayUnits} draft={sourceVisibilityDraft} disabled={disabled} onToggle={toggleSourceVisibility}/>
+        : <EmbeddedSources state={state} unit={unit} units={displayUnits} selectedSourceId={selectedSourceId} onOpen={onOpenSource}/>
+        : <NestedSources state={state} unit={unit} units={displayUnits} actions={actions} showHidden={showHidden} selectedSourceId={selectedSourceId}/>;
       const childScripts=displayUnits.filter(item=>item.parentId===unit.id&&unitKind(item)===unitKind(unit)&&(visibilityMode||showHidden||!unitHidden(item,displayUnits))).sort((a,b)=>a.order-b.order);
       const tasks=unitKind(unit)==="script"?displayUnits.filter(item=>unitKind(item)==="tasks"&&linkedTaskOwner(displayUnits,item,visibilityMode)===unit.id&&(visibilityMode||showHidden||!unitHidden(item,displayUnits))).sort((a,b)=>a.order-b.order):[];
       const taskBranch = tasks.length ? embedded ? level(tasks,`${unit.id}-tasks`) : <div className="structure-task-branch"><div className="structure-branch-label">Aufgaben</div>{level(tasks,`${unit.id}-tasks`)}</div> : null;
@@ -226,7 +274,7 @@ export function PipelineStructure({ state, busy, onSave, onState, onOpenSource, 
     <div ref={listRef}>{level(roots,"script-roots")}{standaloneTasks.length ? embedded ? level(standaloneTasks,"standalone-tasks") : <div className="structure-standalone-tasks"><div className="structure-branch-label">Aufgaben</div>{level(standaloneTasks,"standalone-tasks")}</div> : null}</div>
     {!roots.length&&!standaloneTasks.length&&<p className="pipeline-muted">Noch keine sichtbare Struktur.</p>}
     {editing && !visibilityMode && <div className="structure-add-actions"><Button size="sm" variant="ghost" icon="plus" label="Lerneinheit" disabled={disabled} onPress={()=>add("script")}/><Button size="sm" variant="ghost" icon="plus" label="Aufgabe" disabled={disabled} onPress={()=>add("tasks")}/></div>}
-    {embedded && visibilityMode && <div className="structure-visibility-footer"><Button size="sm" variant="ghost" label="Abbrechen" onPress={cancelVisibility}/><Button size="sm" label={visibilityChanges===1?"1 Änderung übernehmen":`${visibilityChanges} Änderungen übernehmen`} disabled={visibilityChanges===0||disabled} onPress={applyVisibility}/></div>}
+    {embedded && visibilityMode && <div className="structure-visibility-footer"><Button size="sm" variant="ghost" label="Abbrechen" onPress={cancelVisibility}/><Button size="sm" label={visibilityChanges===1?"1 Änderung übernehmen":`${visibilityChanges} Änderungen übernehmen`} disabled={visibilityChanges===0||disabled} onPress={()=>void applyVisibility()}/></div>}
     {(saveError||conflictError||mappings.snapshot.error)&&<p className="prepare-error" role="alert">{conflictError||saveError||mappings.snapshot.error}</p>}
     {!embedded && <footer className="structure-footer prepare-next"><span className="prepare-next-count">{state.pending?`${state.pending} Quellen offen`:"Struktur vollständig"}</span><Button label="Inhalt" iconAfter="arrow-right" disabled={busy||mappingBlocked||!units.some(unit=>!unitHidden(unit,units))} onPress={()=>void openContent()}/></footer>}
     {conflict&&<DialogShell title="Struktur vergleichen" onClose={()=>setConflict(undefined)}><div className="structure-options"><div className="prepare-conflict-columns"><div><h3>Dein Entwurf</h3><ul>{units.map(unit=><li key={unit.id}>{unitLabel(unit)}{unit.hidden?" · ausgeblendet":""}</li>)}</ul></div><div><h3>Gespeicherter Stand</h3><ul>{conflict.units.map(unit=><li key={unit.id}>{unitLabel(unit)}{unit.hidden?" · ausgeblendet":""}</li>)}</ul></div></div><Button variant="secondary" label="Gespeicherten Stand verwenden" onPress={()=>{queue.resolve(conflict,false);mappings.resolve(conflict,false);setConflict(undefined);}}/><Button label="Meinen Entwurf übernehmen" onPress={()=>{queue.resolve(conflict,true);mappings.resolve(conflict,true);setConflict(undefined);}}/></div></DialogShell>}
