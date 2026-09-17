@@ -52,7 +52,7 @@ All state is stored under STUDY_DATA_DIR/learning using atomic manifests and imm
 - `GET /api/materials/{materialId}/revisions/{revision}` returns structured blocks, asset references, actual engine/version/hash provenance, warnings and complete status. Blocks retain page/slide/order and available coordinates/table cells. Imported source revisions stay readable without Moodle.
 - `GET /api/materials/{materialId}/revisions/{revision}/assets/{assetId}` resolves immutable local bytes only. PDF/raster bytes use the local viewer; other formats use forced attachment with a restrictive sandbox policy.
 
-The durable coordinator has bounded attempts and process deadlines. PDF page renders preserve the original visual context; OCR records the language-model hashes. Office diagrams or linked references that cannot be read are reported explicitly. API, CLI and UI use this same state; metadata-only inventory is not labelled successful extraction.
+The durable coordinator has bounded attempts and process deadlines. Native PDF extraction uses pinned `pdf-inspector` 1.20.0 for classification, structured Markdown and positioned text/image items. Poppler renders immutable page images for visual review; Tesseract runs only for pages routed to OCR or lacking reliable native text, and records the language-model hashes. Office diagrams or linked references that cannot be read are reported explicitly. API, CLI and UI use this same state; metadata-only inventory is not labelled successful extraction.
 
 ## Codex API and runtime
 
