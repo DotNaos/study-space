@@ -416,8 +416,8 @@ export function ContentAuthoringView({
     const view = views[block.id];
     const preview = view?.revision?.content;
     return <article className="content-reading-block" key={block.id}>
-      {editing && <button type="button" className="content-reading-source" onClick={() => onSelectSource(block.id, unitId)}>
-        <Icon.File filename={block.name} size={15}/><span>{block.name}</span>{sourcePages(block) && <small>{sourcePages(block)}</small>}
+      {editing && <button type="button" className="content-reading-source" onClick={() => onSelectSource(block.id, unitId)} title={`${block.name} bearbeiten`}>
+        <Icon.File filename={block.name} size={15}/><span>{block.name}</span>{sourcePages(block) && <small>{sourcePages(block)}</small>}<small className="content-reading-edit-label"><PencilLine size={11}/>Bearbeiten</small>
       </button>}
       {preview ? <div className="content-reading-markdown"><MarkdownRenderer value={preview}/></div> : <div className="content-preview-placeholder">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div>}
     </article>;

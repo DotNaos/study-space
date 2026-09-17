@@ -4,7 +4,7 @@ import type { PipelineState, PipelineUnit } from "./pipeline-api";
 
 export type SaveStatus = "proposal" | "saved" | "pending" | "saving" | "error" | "conflict" | "invalid";
 export type StructureSnapshot = { units: PipelineUnit[]; status: SaveStatus; error: string };
-export type StructureSave = (units: PipelineUnit[], expectedRevision: number) => Promise<PipelineState>;
+export type StructureSave = (units: PipelineUnit[], expectedRevision: number, deletedUnitIds?: string[]) => Promise<PipelineState>;
 export type DraftStorage = { getItem(key: string): string | null; setItem(key: string, value: string): void; removeItem(key: string): void };
 
 // Normalize optional fields for comparison, never reorder user content by title.
@@ -20,6 +20,7 @@ const valid = (units: PipelineUnit[]) => units.length <= 250 && units.every(unit
 export class StructureAutosave {
   private revision: number;
   private acknowledged: string;
+  private acknowledgedUnits: PipelineUnit[];
   private confirmed: boolean;
   private timer?: ReturnType<typeof setTimeout>;
   private request?: Promise<boolean>;
@@ -37,6 +38,7 @@ export class StructureAutosave {
     this.key = `study-space:structure-draft:v1:${state.courseId}`;
     const units = structureDraft(state);
     this.acknowledged = structureKey(units);
+    this.acknowledgedUnits = state.units;
     this.confirmed = state.units.length > 0 || (state.history ?? []).some(event => event.action === "structure");
     this.snapshot = { units, status: this.confirmed ? "saved" : "proposal", error: "" };
     try {
@@ -96,10 +98,12 @@ export class StructureAutosave {
     this.emit("saving");
     this.request = (async () => {
       try {
-        const state = await this.save(submitted, this.revision);
+        const deletedUnitIds = this.acknowledgedUnits.filter(unit => unit.sourceGroupId == null && !submitted.some(item => item.id === unit.id)).map(unit => unit.id);
+        const state = await this.save(submitted, this.revision, deletedUnitIds);
         this.revision = state.revision;
         this.confirmed = true;
         this.acknowledged = structureKey(state.units);
+        this.acknowledgedUnits = state.units;
         if (structureKey(this.snapshot.units) === signature) this.snapshot = { ...this.snapshot, units: state.units };
         if (this.dirty) this.remember(); else this.clearDraft();
         this.emit(this.dirty ? valid(this.snapshot.units) ? "pending" : "invalid" : "saved");
@@ -122,18 +126,19 @@ export class StructureAutosave {
     if (key === this.lastAttempt || key === this.acknowledged) {
       this.revision = state.revision;
       this.acknowledged = key;
+      this.acknowledgedUnits = state.units;
       this.confirmed = true;
       if (!this.dirty) { this.clearDraft(); this.emit("saved"); } else { this.emit("pending"); this.remember(); this.schedule(); }
     } else if (this.dirty) {
       this.emit("conflict");
     } else {
-      this.revision = state.revision; this.acknowledged = key; this.confirmed = true;
+      this.revision = state.revision; this.acknowledged = key; this.acknowledgedUnits = state.units; this.confirmed = true;
       this.snapshot = { units: state.units, status: "saved", error: "" }; this.clearDraft(); this.emit("saved");
     }
   }
   /** Only called after the user explicitly chooses one side of a displayed conflict. */
   resolve(state: PipelineState, keepLocal: boolean) {
-    this.revision = state.revision; this.acknowledged = structureKey(state.units); this.confirmed = true;
+    this.revision = state.revision; this.acknowledged = structureKey(state.units); this.acknowledgedUnits = state.units; this.confirmed = true;
     if (!keepLocal) this.snapshot = { ...this.snapshot, units: state.units };
     if (this.dirty) { this.remember(); this.emit("pending"); this.schedule(); } else { this.clearDraft(); this.emit("saved"); }
   }

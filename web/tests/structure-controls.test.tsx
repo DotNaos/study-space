@@ -163,13 +163,14 @@ test("nested source checkbox reflects an explicit use decision, not merely a pen
   expect(reviewedCheckbox).toContain('checked=""');
 });
 
-test("embedded authoring structure keeps sources out of the tree and hides permanent visibility checkboxes", () => {
+test("embedded authoring structure shows assigned files as selectable content rows without making them structure nodes", () => {
   const nestedUnit = { ...unit, sourceGroupId: 10 };
   const state = { courseId: 7, revision: 1, units: [nestedUnit], suggestedUnits: [], sources: [nestedSource], history: [], pending: 1, blocked: 0, groups: [{ id: 10, title: "Block 1", order: 0, parentId: null }], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
   const html = renderToStaticMarkup(<PipelineStructure state={state} busy={false} onSave={async () => state} onState={noop}
     onOpenSource={noop} onFocus={noop} embedded editing onSelectUnit={noop} />);
   expect(html).toContain("Sichtbarkeit");
-  expect(html).not.toContain("2026_CDS303_Block1_1.pdf");
+  expect(html).toContain("2026_CDS303_Block1_1.pdf");
+  expect(html).toContain('class="structure-source-links"');
   expect(html).not.toContain('class="structure-visibility-checkbox"');
   expect(html).not.toContain('class="structure-branch-label">Aufgaben');
 });

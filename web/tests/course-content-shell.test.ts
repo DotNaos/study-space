@@ -44,3 +44,12 @@ test("mobile content exposes the rendered TOC through one compact control", () =
   expect(css).toContain(".preparation-toc-mobile-button { display:flex;");
   expect(css).toContain(".preparation-toc-panel { display:none;");
 });
+
+
+test("edit-mode unit content exposes an explicit path into block editor, diff and composer", () => {
+  const content = readFileSync(new URL("../src/ContentAuthoringView.tsx", import.meta.url), "utf8");
+  expect(content).toContain('className="content-reading-edit-label"');
+  expect(content).toContain('setTab("edited-raw")');
+  expect(content).toContain('<Composer');
+  expect(content).toContain('<MarkdownEditor');
+});

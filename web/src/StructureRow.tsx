@@ -12,12 +12,14 @@ export function StructureRow({
   unit, units, disabled, expanded, onToggle, onChange, onHide, onOpen, onParent, onKind,
   inlineChildren=false, nestedOpen=false, nestedCount=0, onToggleNested, children,
   editing=true, selected=false, onSelect, visibilityMode=false, onVisibilityToggle, inlineVisibility=true, sourceCount=0,
+  onDelete, deleteDisabledReason,
 }: {
   unit:PipelineUnit;units:PipelineUnit[];disabled:boolean;expanded:boolean;onToggle:()=>void;
   onChange:(patch:Partial<PipelineUnit>)=>void;onHide:(hidden:boolean)=>void;onOpen:()=>void;
   onParent:(id:string|null)=>void;onKind:()=>void;inlineChildren?:boolean;nestedOpen?:boolean;nestedCount?:number;
   onToggleNested?:()=>void;children?:ReactNode;editing?:boolean;selected?:boolean;onSelect?:()=>void;
   visibilityMode?:boolean;onVisibilityToggle?:()=>void;inlineVisibility?:boolean;sourceCount?:number;
+  onDelete?:()=>void;deleteDisabledReason?:string;
 }) {
   const editingControls=editing&&!visibilityMode;
   const {attributes,listeners,setNodeRef,setActivatorNodeRef,transform,transition,isDragging}=useSortable({id:unit.id,disabled:disabled||!editingControls});
@@ -91,7 +93,12 @@ export function StructureRow({
         <StructurePicker label="Übergeordneter Eintrag" units={units.filter(item=>unitKind(item)===kind&&!excluded.has(item.id))} selected={unit.parentId?[unit.parentId]:[]} disabled={disabled} onChange={ids=>onParent(ids[0]??null)}/>
         {kind==="tasks" && <StructurePicker label="Skript-Zuordnung" units={script} selected={unit.scriptUnitIds??[]} multiple disabled={disabled} onChange={ids=>onChange({scriptUnitIds:ids})}/>}
         <div className="structure-option-actions">
-          <Button size="sm" variant="ghost" label={kind==="script"?"Als Aufgabe klassifizieren":"Als Skript klassifizieren"} onPress={onKind} disabled={disabled}/>
+          <div className="structure-option-main-actions">
+            <Button size="sm" variant="ghost" label={kind==="script"?"Als Aufgabe klassifizieren":"Als Skript klassifizieren"} onPress={onKind} disabled={disabled}/>
+            {onDelete && <span className="structure-delete-action" title={deleteDisabledReason}>
+              <Button size="sm" variant="ghost" label="Löschen" disabled={disabled||!!deleteDisabledReason} onPress={onDelete}/>
+            </span>}
+          </div>
           <Button size="sm" variant="secondary" label="Fertig" onPress={onToggle}/>
         </div>
       </div>

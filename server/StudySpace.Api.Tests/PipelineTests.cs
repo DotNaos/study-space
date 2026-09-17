@@ -19,6 +19,21 @@ public sealed class PipelineTests : IDisposable
         store = new(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> { ["STUDY_DATA_DIR"] = directory }).Build());
         service = new(store, inventory, catalog, TimeProvider.System);
     }
+
+    [Fact] public void UserCreatedUnitsCanBeDeletedWhileProviderBackedUnitsRemainRecoverable()
+    {
+        var groups = new[] { new PipelineGroup(10, "Week 1", 0) };
+        var provider = LearningStructure.Suggestions(7, groups).Single();
+        var custom = new PipelineUnit(new('f', 32), "My section", null, 1, "script", false, null, null, []);
+        var deleted = LearningStructure.Apply(7, [provider, custom], [provider], groups, new HashSet<string> { custom.Id });
+        Assert.DoesNotContain(deleted, unit => unit.Id == custom.Id);
+
+        var recoverable = LearningStructure.Apply(7, [provider], [], groups);
+        Assert.Single(recoverable);
+        Assert.True(recoverable[0].Hidden);
+        Assert.Equal(provider.SourceGroupId, recoverable[0].SourceGroupId);
+    }
+
     [Fact] public async Task ObservationIncludesEmptyGroupsAndInlineOnlySourcesWithoutWritingOrGenerating()
     {
         var view = await service.Get(7);

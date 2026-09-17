@@ -50,7 +50,14 @@ public sealed class PipelineService(LearningStore store, IPipelineInventory inve
             var plan = state.Pipeline;
             CheckRevision(plan, request.ExpectedRevision);
             var groups = observed.Groups.Concat(plan.Groups.Where(old => !observed.Groups.Any(group => group.Id == old.Id))).ToArray();
-            var next = LearningStructure.Apply(courseId, plan.Units, request.Units, groups);
+            var deleted = (request.DeletedUnitIds ?? []).ToHashSet(StringComparer.Ordinal);
+            var previousUnits = LearningStructure.Normalize(courseId, plan.Units, groups);
+            if (deleted.Any(id => !Regex.IsMatch(id, "^[a-f0-9]{32}$")) || deleted.Count != (request.DeletedUnitIds ?? []).Length ||
+                deleted.Any(id => previousUnits.FirstOrDefault(unit => unit.Id == id) is not { SourceGroupId: null }))
+                throw Invalid("Nur selbst erstellte Struktureinträge können gelöscht werden.");
+            if (plan.Decisions.Any(decision => decision.Uses.Any(use => deleted.Contains(use.UnitId))))
+                throw Invalid("Verschiebe oder blende zugeordnete Quellen aus, bevor du den Struktureintrag löschst.");
+            var next = LearningStructure.Apply(courseId, plan.Units, request.Units, groups, deleted);
             ValidateUnits(next);
             var previous = JsonSerializer.Serialize(plan.Units, LearningStore.Json);
             plan.Units = next;

@@ -52,9 +52,9 @@ export function PipelineView({
   const navigationGuard = useRef<(() => Promise<boolean>) | null>(null);
   const mappingReturn = useRef<string | undefined>(undefined);
   const registerGuard = useCallback((guard: (() => Promise<boolean>) | null) => { navigationGuard.current = guard; }, []);
-  const saveStructure = useCallback(async (units: PipelineUnit[], expectedRevision: number) => {
+  const saveStructure = useCallback(async (units: PipelineUnit[], expectedRevision: number, deletedUnitIds: string[] = []) => {
     const next = await api<PipelineState>(pipelinePath(courseId) + "/structure", {
-      method: "PUT", body: JSON.stringify({ units, expectedRevision, actor: "user", reason: "Gliederung automatisch gespeichert: lokale Reihenfolge, Anzeigenamen und Sichtbarkeit." }),
+      method: "PUT", body: JSON.stringify({ units, deletedUnitIds, expectedRevision, actor: "user", reason: "Gliederung automatisch gespeichert: lokale Reihenfolge, Anzeigenamen, Sichtbarkeit und Löschungen." }),
     });
     setState(next);
     return next;
