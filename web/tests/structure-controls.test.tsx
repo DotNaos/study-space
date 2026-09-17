@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { StructureRow } from "../src/StructureRow";
 import { StructurePicker } from "../src/StructurePicker";
-import { PipelineStructure } from "../src/PipelineStructure";
+import { EmbeddedSourceVisibility, PipelineStructure } from "../src/PipelineStructure";
 import type { PipelineSourceView, PipelineState, PipelineUnit } from "../src/pipeline-api";
 
 const unit: PipelineUnit = { id: "a".repeat(32), title: "Block 1", parentId: null, order: 0, kind: "script", hidden: false };
@@ -194,4 +194,29 @@ test("embedded tasks are highlighted inline without a separate task branch label
   expect(html).toContain('data-kind="tasks"');
   expect(html).toContain("Aufgabe 1");
   expect(html).not.toContain('class="structure-branch-label">Aufgaben');
+});
+
+
+test("visibility mode exposes source files with their own trailing checkboxes", () => {
+  const placedUnit = { ...unit, sourceGroupId: 10 };
+  const hiddenSource: PipelineSourceView = {
+    ...nestedSource,
+    source: { ...nestedSource.source, id: "2".repeat(64), name: "Hidden.pdf" },
+    status: "excluded",
+    decision: { sourceId: "2".repeat(64), sourceVersion: nestedSource.source.sourceVersion, disposition: "exclude", uses: [], reason: "hidden", actor: "user", decidedAt: "2026-09-17T00:00:00Z" },
+    hidden: true,
+    defaultPlacementId: placedUnit.id,
+    currentPlacementId: null,
+  };
+  const visibleSource = { ...nestedSource, defaultPlacementId: placedUnit.id, currentPlacementId: placedUnit.id, hidden: false };
+  const state = { courseId: 7, revision: 1, units: [placedUnit], suggestedUnits: [], sources: [visibleSource, hiddenSource], history: [], pending: 0, blocked: 0, groups: [{ id: 10, title: "Block 1", order: 0, parentId: null }], observedHash: "x", persisted: true, problem: null, unattributedSections: [] } as PipelineState;
+  const html = renderToStaticMarkup(<EmbeddedSourceVisibility state={state} unit={placedUnit} units={[placedUnit]} draft={{ [hiddenSource.source.id]: true, [visibleSource.source.id]: false }} disabled={false} onToggle={noop} />);
+  expect(html).toContain('class="structure-source-visibility-list"');
+  expect(html).toContain("2026_CDS303_Block1_1.pdf");
+  expect(html).toContain("Hidden.pdf");
+  expect(html).toContain('class="structure-source-visibility-checkbox"');
+  expect(html).toContain("Quelle verwenden: 2026_CDS303_Block1_1.pdf");
+  expect(html).toContain("Quelle verwenden: Hidden.pdf");
+  expect((html.match(/type="checkbox"/g) ?? []).length).toBe(2);
+  expect((html.match(/checked=""/g) ?? []).length).toBe(1);
 });

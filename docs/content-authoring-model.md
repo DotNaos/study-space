@@ -187,9 +187,10 @@ Ordinary structure editing should not permanently show visibility checkboxes.
 
 A small **Sichtbarkeit** action switches the structure sidebar into a staged visibility mode:
 
-- each row becomes clickable to toggle inclusion;
-- checkboxes occupy one fixed right-aligned column, independent of hierarchy indentation;
-- changes remain local until submitted;
+- each structure row becomes clickable to toggle inclusion;
+- assigned source/file rows are shown in the same mode and have their own visibility toggles;
+- structure and source checkboxes occupy one fixed right-aligned column, independent of hierarchy indentation;
+- structure and source changes remain local until submitted together;
 - a sticky footer shows `Abbrechen` and `N Änderungen übernehmen`;
 - parent-hidden effectively hides the subtree but does not overwrite each child's own visibility value, so restoring the parent restores prior child state.
 
