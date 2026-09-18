@@ -258,6 +258,27 @@
   border: 1px solid var(--color-border);
   border-radius: .65rem;
   background: var(--color-bg);
+  --authoring-panel-header-height: 3.35rem;
+}
+
+@media (min-width: 801px) {
+  .preparation-authoring-shell .authoring-explorer-header {
+    box-sizing:border-box;
+    height:var(--authoring-panel-header-height);
+    min-height:var(--authoring-panel-header-height);
+    padding-top:0;
+    padding-bottom:0;
+  }
+
+  .preparation-authoring-shell .content-authoring-panel { padding-top:0; }
+  .preparation-authoring-shell .content-authoring-head {
+    box-sizing:border-box;
+    height:var(--authoring-panel-header-height);
+    min-height:var(--authoring-panel-header-height);
+    margin:0 -1rem 1rem;
+    padding:0 1rem;
+    border-bottom:1px solid var(--color-border);
+  }
 }
 
 .preparation-explorer-panel {
