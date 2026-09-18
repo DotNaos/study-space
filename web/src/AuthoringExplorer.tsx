@@ -1,7 +1,7 @@
 import "./authoring-explorer.css";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Reorder } from "motion/react";
+import { LayoutGroup, Reorder } from "motion/react";
 import { Icon } from "@dotnaos/ui-base";
 import {
   AlertCircle,
@@ -459,8 +459,11 @@ function ReorderSourceList({
             className="authoring-reorder-item"
             dragListener={!disabled}
             dragMomentum={false}
-            dragElastic={0.035}
-            whileDrag={{ scale: 1.012 }}
+            dragElastic={0.025}
+            layout="position"
+            layoutId={`authoring-source-${id}`}
+            transition={{ layout: { type: "spring", stiffness: 360, damping: 32, mass: 0.72 } }}
+            whileDrag={{ scale: 1.006 }}
             onDragStart={() => onDragStart(item, targetKey)}
             onDrag={(event) => {
               if ("clientX" in event) onDragMove({ x: event.clientX, y: event.clientY });
@@ -474,6 +477,12 @@ function ReorderSourceList({
     </Reorder.Group>
   );
 }
+
+type OptimisticSourcePlacement = {
+  targetUnitId?: string;
+  hidden: boolean;
+  order?: number;
+};
 
 export function AuthoringExplorer({
   courseId,
@@ -505,6 +514,8 @@ export function AuthoringExplorer({
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
   const [dropTarget, setDropTarget] = useState<string>();
   const dropTargetRef = useRef<string | undefined>(undefined);
+  const [optimisticPlacements, setOptimisticPlacements] = useState<Record<string, OptimisticSourcePlacement>>({});
+  const [optimisticUnits, setOptimisticUnits] = useState<PipelineUnit[]>([]);
   const [movingSourceId, setMovingSourceId] = useState<string>();
   const [movingTaskId, setMovingTaskId] = useState<string>();
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(() => new Set());
@@ -562,9 +573,50 @@ export function AuthoringExplorer({
     return () => controller.abort();
   }, [courseId, state.revision, state.sources]);
 
+  useEffect(() => {
+    setOptimisticUnits((current) => {
+      const persisted = new Set(state.units.map((unit) => unit.id));
+      const next = current.filter((unit) => !persisted.has(unit.id));
+      return next.length === current.length ? current : next;
+    });
+    setOptimisticPlacements((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const [sourceId, optimistic] of Object.entries(current)) {
+        const item = state.sources.find((candidate) => candidate.source.id === sourceId);
+        if (!item) continue;
+        const actual = sourcePlacement(state, item);
+        const confirmed = optimistic.hidden
+          ? actual.hidden
+          : !actual.hidden && actual.currentUnitId === optimistic.targetUnitId;
+        if (confirmed) {
+          delete next[sourceId];
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [state.revision, state.sources, state.units]);
+
+  const effectiveUnits = useMemo(() => {
+    const persisted = new Set(state.units.map((unit) => unit.id));
+    return [...state.units, ...optimisticUnits.filter((unit) => !persisted.has(unit.id))];
+  }, [state.units, optimisticUnits]);
+
+  function effectivePlacement(item: PipelineSourceView) {
+    const optimistic = optimisticPlacements[item.source.id];
+    if (!optimistic) return sourcePlacement(state, item);
+    return {
+      ...sourcePlacement(state, item),
+      currentUnitId: optimistic.hidden ? undefined : optimistic.targetUnitId,
+      hidden: optimistic.hidden,
+      overridden: true,
+    };
+  }
+
   const visibleUnits = useMemo(
-    () => state.units.filter((unit) => !unitHidden(unit, state.units)),
-    [state.units],
+    () => effectiveUnits.filter((unit) => !unitHidden(unit, effectiveUnits)),
+    [effectiveUnits],
   );
   const scriptRoots = useMemo(
     () => visibleUnits
@@ -575,24 +627,34 @@ export function AuthoringExplorer({
   const activeSources = useMemo(
     () => state.sources.filter((item) => {
       if (!item.source.present) return false;
-      const placement = sourcePlacement(state, item);
-      return !placement.hidden && !!placement.currentUnitId;
+      const placement = optimisticPlacements[item.source.id];
+      if (placement) return !placement.hidden && !!placement.targetUnitId;
+      const actual = sourcePlacement(state, item);
+      return !actual.hidden && !!actual.currentUnitId;
     }),
-    [state],
+    [state, optimisticPlacements],
   );
   const ignored = useMemo(
-    () => state.sources.filter((item) =>
-      item.source.present && sourcePlacement(state, item).hidden,
-    ),
-    [state],
+    () => state.sources.filter((item) => {
+      if (!item.source.present) return false;
+      const placement = optimisticPlacements[item.source.id];
+      return placement ? placement.hidden : sourcePlacement(state, item).hidden;
+    }),
+    [state, optimisticPlacements],
   );
 
   function sourcesFor(unitId: string) {
     return activeSources
-      .filter((item) => sourcePlacement(state, item).currentUnitId === unitId)
+      .filter((item) => effectivePlacement(item).currentUnitId === unitId)
       .sort((left, right) => {
-        const leftOrder = left.decision?.uses.find((use) => use.unitId === unitId)?.order ?? Number.MAX_SAFE_INTEGER;
-        const rightOrder = right.decision?.uses.find((use) => use.unitId === unitId)?.order ?? Number.MAX_SAFE_INTEGER;
+        const leftOptimistic = optimisticPlacements[left.source.id];
+        const rightOptimistic = optimisticPlacements[right.source.id];
+        const leftOrder = leftOptimistic?.targetUnitId === unitId && leftOptimistic.order != null
+          ? leftOptimistic.order
+          : left.decision?.uses.find((use) => use.unitId === unitId)?.order ?? Number.MAX_SAFE_INTEGER;
+        const rightOrder = rightOptimistic?.targetUnitId === unitId && rightOptimistic.order != null
+          ? rightOptimistic.order
+          : right.decision?.uses.find((use) => use.unitId === unitId)?.order ?? Number.MAX_SAFE_INTEGER;
         return leftOrder - rightOrder || left.source.name.localeCompare(right.source.name);
       });
   }
@@ -675,6 +737,52 @@ export function AuthoringExplorer({
     });
   }
 
+  function applyOptimisticPlacement(
+    item: PipelineSourceView,
+    placement: OptimisticSourcePlacement,
+  ) {
+    setOptimisticPlacements((current) => ({
+      ...current,
+      [item.source.id]: placement,
+    }));
+  }
+
+  function rollbackOptimisticPlacement(sourceId: string) {
+    setOptimisticPlacements((current) => {
+      if (!(sourceId in current)) return current;
+      const next = { ...current };
+      delete next[sourceId];
+      return next;
+    });
+  }
+
+  function createTaskUnit(item: PipelineSourceView, script: PipelineUnit) {
+    const taskId = crypto.randomUUID().replaceAll("-", "");
+    const siblings = effectiveUnits.filter((unit) => unitKind(unit) === "tasks");
+    const title = item.source.name.replace(/\.[^.]+$/, "") || "Task";
+    return {
+      id: taskId,
+      title,
+      customTitle: title,
+      parentId: null,
+      order: Math.max(-1, ...siblings.map((unit) => unit.order)) + 1,
+      kind: "tasks" as const,
+      hidden: false,
+      sourceGroupId: null,
+      scriptUnitIds: [script.id],
+    } satisfies PipelineUnit;
+  }
+
+  function addOptimisticUnit(unit: PipelineUnit) {
+    setOptimisticUnits((current) => current.some((candidate) => candidate.id === unit.id)
+      ? current
+      : [...current, unit]);
+  }
+
+  function rollbackOptimisticUnit(unitId: string) {
+    setOptimisticUnits((current) => current.filter((unit) => unit.id !== unitId));
+  }
+
   async function removeEmptyTask(taskId: string, baseState: PipelineState) {
     const task = baseState.units.find((unit) => unit.id === taskId);
     if (!task || unitKind(task) !== "tasks" || task.sourceGroupId != null) return baseState;
@@ -697,14 +805,21 @@ export function AuthoringExplorer({
     const previousTask = previousUnitId
       ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
       : undefined;
+    const optimisticOrder = sourcesFor(target.id).filter((candidate) => candidate.source.id !== item.source.id).length;
+    applyOptimisticPlacement(item, { targetUnitId: target.id, hidden: false, order: optimisticOrder });
     setMovingSourceId(item.source.id); setMoveError("");
     try {
       let next = await saveMapping(item, target);
       if (previousTask && previousTask.id !== target.id) next = await removeEmptyTask(previousTask.id, next);
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, target.id);
-    } catch (error) { setMoveError(message(error)); }
-    finally { setMovingSourceId(undefined); clearSourceDrag(); }
+    } catch (error) {
+      rollbackOptimisticPlacement(item.source.id);
+      setMoveError(message(error));
+    } finally {
+      setMovingSourceId(undefined);
+      clearSourceDrag();
+    }
   }
 
   async function moveToIgnored(item: PipelineSourceView) {
@@ -713,14 +828,20 @@ export function AuthoringExplorer({
     const previousTask = previousUnitId
       ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
       : undefined;
+    applyOptimisticPlacement(item, { hidden: true });
     setMovingSourceId(item.source.id); setMoveError("");
     try {
       let next = await saveMapping(item, undefined);
       if (previousTask) next = await removeEmptyTask(previousTask.id, next);
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item);
-    } catch (error) { setMoveError(message(error)); }
-    finally { setMovingSourceId(undefined); clearSourceDrag(); }
+    } catch (error) {
+      rollbackOptimisticPlacement(item.source.id);
+      setMoveError(message(error));
+    } finally {
+      setMovingSourceId(undefined);
+      clearSourceDrag();
+    }
   }
 
   async function moveToTasks(item: PipelineSourceView, script: PipelineUnit) {
@@ -729,31 +850,26 @@ export function AuthoringExplorer({
     const previousTask = previousUnitId
       ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
       : undefined;
+    const task = createTaskUnit(item, script);
+    addOptimisticUnit(task);
+    applyOptimisticPlacement(item, { targetUnitId: task.id, hidden: false, order: 0 });
     setMovingSourceId(item.source.id); setMoveError("");
     try {
-      const taskId = crypto.randomUUID().replaceAll("-", "");
-      const siblings = state.units.filter((unit) => unitKind(unit) === "tasks");
-      const title = item.source.name.replace(/\.[^.]+$/, "") || "Task";
-      const task: PipelineUnit = {
-        id: taskId,
-        title,
-        customTitle: title,
-        parentId: null,
-        order: Math.max(-1, ...siblings.map((unit) => unit.order)) + 1,
-        kind: "tasks",
-        hidden: false,
-        sourceGroupId: null,
-        scriptUnitIds: [script.id],
-      };
       const structured = await onSave([...state.units, task], state.revision);
       onState(structured);
-      const savedTask = structured.units.find((unit) => unit.id === taskId) ?? task;
+      const savedTask = structured.units.find((unit) => unit.id === task.id) ?? task;
       let next = await saveMapping(item, savedTask, structured);
       if (previousTask && previousTask.id !== savedTask.id) next = await removeEmptyTask(previousTask.id, next);
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, savedTask.id);
-    } catch (error) { setMoveError(message(error)); }
-    finally { setMovingSourceId(undefined); clearSourceDrag(); }
+    } catch (error) {
+      rollbackOptimisticPlacement(item.source.id);
+      rollbackOptimisticUnit(task.id);
+      setMoveError(message(error));
+    } finally {
+      setMovingSourceId(undefined);
+      clearSourceDrag();
+    }
   }
 
   async function moveTaskToContent(task: PipelineUnit) {
@@ -852,8 +968,8 @@ export function AuthoringExplorer({
   }
 
   function sourceMenu(item: PipelineSourceView) {
-    const placement = sourcePlacement(state, item);
-    const current = placement.currentUnitId ? state.units.find((unit) => unit.id === placement.currentUnitId) : undefined;
+    const placement = effectivePlacement(item);
+    const current = placement.currentUnitId ? effectiveUnits.find((unit) => unit.id === placement.currentUnitId) : undefined;
     const currentScript = current && unitKind(current) === "script" ? current : current ? taskOwner(visibleUnits, current) : undefined;
     return <>
       {currentScript && unitKind(current!) === "script" && <button type="button" onClick={() => void moveToTasks(item, currentScript)}><ListTodo size={13} aria-hidden="true" /><span>Move to Tasks</span></button>}
@@ -1066,7 +1182,8 @@ export function AuthoringExplorer({
   }
 
   return (
-    <div className="authoring-explorer">
+    <LayoutGroup id={`authoring-explorer-${courseId}`}>
+      <div className="authoring-explorer">
       <header className="authoring-explorer-header">
         <div className="authoring-explorer-heading">
           <strong>Explorer</strong>
@@ -1131,6 +1248,7 @@ export function AuthoringExplorer({
         </section>
       </div>
 
-    </div>
+      </div>
+    </LayoutGroup>
   );
 }

@@ -328,12 +328,13 @@
 .authoring-reorder-item:active { cursor:grabbing; }
 
 /* Source organization interactions */
-.authoring-source-card[data-moving="true"] { opacity:.55; pointer-events:none; }
 .authoring-unit[data-drop-active="true"] > .authoring-unit-heading,
 .authoring-task-item[data-drop-active="true"] > .authoring-task-row,
 .authoring-task-section[data-drop-active="true"] > .authoring-task-section-title,
 .authoring-ignored[data-drop-active="true"] > .authoring-ignored-title {
-  background:color-mix(in srgb,var(--color-accent) 8%,var(--color-bg-1));
+  outline:2px solid var(--color-accent);
+  outline-offset:-2px;
+  background:transparent;
   color:var(--color-text);
 }
 .authoring-source-submenu { position:relative; width:100%; }
