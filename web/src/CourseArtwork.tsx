@@ -14,14 +14,18 @@ type ShaderSpec = {
 };
 
 const shaderPalettes: ShaderPalette[] = [
-  { background: "#5877F4", colors: ["#E5EEFF", "#53DFFF", "#A27CFF"] },
-  { background: "#15B7A1", colors: ["#D2FFF1", "#4BE1C5", "#4D8CFF"] },
-  { background: "#F08B28", colors: ["#FFE5B3", "#FFBC4C", "#FF7152"] },
-  { background: "#9275F2", colors: ["#FFB5E9", "#77D2FF", "#D8BEFF"] },
-  { background: "#1FA5DD", colors: ["#D1F8FF", "#55D9FF", "#7578F4"] },
-  { background: "#E76091", colors: ["#FFD2E2", "#FF91C2", "#8580FF"] },
-  { background: "#42B978", colors: ["#D8FFE3", "#68E6A8", "#32CBD4"] },
-  { background: "#F29A2C", colors: ["#FFF0BE", "#FFD05B", "#FF8069"] },
+  { background: "#19A993", colors: ["#D6FFF2", "#55E7CF", "#43B8EC"] },
+  { background: "#F06E61", colors: ["#FFE0CE", "#FF9B74", "#F35A9C"] },
+  { background: "#6375E7", colors: ["#E8EDFF", "#78CAFF", "#B38CFF"] },
+  { background: "#4C3FC2", colors: ["#B8B7FF", "#E062C7", "#37CBE7"] },
+  { background: "#38B46D", colors: ["#DCFFE4", "#73E8A4", "#35D3D1"] },
+  { background: "#D85298", colors: ["#FFD2E8", "#F988CF", "#7D83FF"] },
+  { background: "#E69847", colors: ["#FFF0C9", "#FFBD64", "#FF7768"] },
+  { background: "#159BC6", colors: ["#D5FAFF", "#54DBE8", "#728AF5"] },
+  { background: "#9B68D8", colors: ["#F5D8FF", "#D99AF1", "#6FCBEF"] },
+  { background: "#E5564F", colors: ["#FFE0C8", "#FF916D", "#EC6AA8"] },
+  { background: "#218F82", colors: ["#CBFFF0", "#50D4B7", "#5CB6FF"] },
+  { background: "#5361C9", colors: ["#DEE6FF", "#799EF4", "#D07CD9"] },
 ];
 
 const vertexShaderSource = `
@@ -78,7 +82,7 @@ vec4 petal(
   float width = scale.x * (0.12 + 0.88 * pow(max(0.0, 1.0 - y * y), 0.54));
   float x = abs(q.x) / max(width, 0.001);
   float distanceField = max(abs(y), x);
-  float mask = 1.0 - smoothstep(0.88, 1.02, distanceField);
+  float mask = 1.0 - smoothstep(0.70, 1.08, distanceField);
 
   float crossLight = clamp(
     0.5 + 0.5 * q.x / max(scale.x, 0.001) * lightDirection,
@@ -87,7 +91,7 @@ vec4 petal(
   );
   float centerFold = exp(-pow(q.x / max(scale.x * 0.22, 0.001), 2.0));
   float innerLight = pow(max(0.0, 1.0 - abs(y)), 0.7);
-  float rim = smoothstep(0.68, 0.98, distanceField) * mask;
+  float rim = smoothstep(0.62, 0.98, distanceField) * mask;
 
   vec3 shaded = petalColor * (0.79 + crossLight * 0.21);
   shaded = mix(
@@ -95,7 +99,7 @@ vec4 petal(
     screenBlend(shaded, vec3(0.74)),
     centerFold * innerLight * 0.22
   );
-  shaded = mix(shaded, screenBlend(shaded, vec3(0.64)), rim * 0.10);
+  shaded = mix(shaded, screenBlend(shaded, vec3(0.64)), rim * 0.035);
 
   return vec4(shaded, mask);
 }
@@ -115,11 +119,11 @@ vec4 sheet(
   vec2 n = q / max(scale, vec2(0.001));
 
   float distanceField = pow(abs(n.x), 3.0) + pow(abs(n.y), 2.2);
-  float mask = 1.0 - smoothstep(0.84, 1.04, distanceField);
+  float mask = 1.0 - smoothstep(0.66, 1.10, distanceField);
   float crossLight = clamp(0.5 + 0.5 * n.x * lightDirection, 0.0, 1.0);
   float crease = exp(-pow((n.x - foldOffset) * 5.4, 2.0));
   float middle = pow(max(0.0, 1.0 - abs(n.y)), 0.55);
-  float rim = smoothstep(0.58, 0.96, distanceField) * mask;
+  float rim = smoothstep(0.54, 0.98, distanceField) * mask;
 
   vec3 shaded = sheetColor * (0.80 + crossLight * 0.20);
   shaded = mix(
@@ -127,13 +131,13 @@ vec4 sheet(
     screenBlend(shaded, vec3(0.76)),
     crease * middle * 0.20
   );
-  shaded = mix(shaded, screenBlend(shaded, vec3(0.62)), rim * 0.08);
+  shaded = mix(shaded, screenBlend(shaded, vec3(0.62)), rim * 0.03);
 
   return vec4(shaded, mask);
 }
 
 vec3 compositeForm(vec3 base, vec4 layer, float opacity) {
-  vec3 translucent = mix(base, layer.rgb, 0.82);
+  vec3 translucent = mix(base, layer.rgb, 0.76);
   return mix(base, translucent, layer.a * opacity);
 }
 
@@ -149,7 +153,7 @@ void main() {
   // Clean editorial base: saturated enough to feel alive, but the large forms
   // carry the composition instead of procedural texture.
   float diagonal = clamp(uv.x * 0.58 + (1.0 - uv.y) * 0.42, 0.0, 1.0);
-  vec3 color = mix(u_background, u_b, 0.08 + diagonal * 0.20);
+  vec3 color = mix(u_background, u_b, 0.05 + diagonal * 0.14);
   vec2 softPoint = vec2(0.20 + seedA * 0.24, 0.17 + seedB * 0.20);
   float softLight = exp(-dot(uv - softPoint, uv - softPoint) * 5.2);
   color = mix(color, screenBlend(color, u_a * 0.72), softLight * 0.28);
@@ -492,8 +496,8 @@ class SharedCourseShaderRenderer {
     context.globalAlpha = 1;
     context.filter = "none";
     context.drawImage(this.canvas, 0, 0, width, height);
-    context.globalAlpha = 0.18;
-    context.filter = "blur(2.5px)";
+    context.globalAlpha = 0.24;
+    context.filter = "blur(3.5px)";
     context.drawImage(this.canvas, 0, 0, width, height);
     context.globalAlpha = 1;
     context.filter = "none";
