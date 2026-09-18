@@ -1,5 +1,6 @@
 import "./authoring-explorer.css";
-import { useEffect, useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Icon } from "@dotnaos/ui-base";
 import {
   AlertCircle,
@@ -7,6 +8,10 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  ExternalLink,
+  EyeOff,
+  FolderInput,
+  ListTodo,
   LoaderCircle,
   MoreHorizontal,
   PanelLeftClose,
@@ -178,6 +183,78 @@ function ExtractionMark({
   );
 }
 
+function MoveSubmenu({ children }: { children: ReactNode }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number }>();
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const rect = summaryRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const gutter = 8;
+      const gap = 4;
+      const width = Math.min(256, window.innerWidth - gutter * 2);
+      const maxHeight = Math.min(352, window.innerHeight - gutter * 2);
+      const rightFits = rect.right + gap + width <= window.innerWidth - gutter;
+      const left = rightFits
+        ? rect.right + gap
+        : Math.max(gutter, rect.left - width - gap);
+      const top = Math.min(
+        Math.max(gutter, rect.top - 4),
+        Math.max(gutter, window.innerHeight - maxHeight - gutter),
+      );
+      setPosition({ top, left, width });
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+    };
+  }, [open]);
+
+  return (
+    <details
+      ref={detailsRef}
+      className="authoring-source-submenu"
+      onToggle={(event) => {
+        const next = event.currentTarget.open;
+        setOpen(next);
+        if (!next) setPosition(undefined);
+      }}
+    >
+      <summary ref={summaryRef} aria-haspopup="menu">
+        <span className="authoring-source-submenu-label">
+          <FolderInput size={13} aria-hidden="true" />
+          <span>Move to</span>
+        </span>
+        <ChevronRight className="authoring-source-submenu-chevron" size={13} aria-hidden="true" />
+      </summary>
+      {open && position && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            className="authoring-source-submenu-flyout"
+            role="menu"
+            style={{ top: position.top, left: position.left, width: position.width }}
+            onClick={(event) => {
+              if ((event.target as Element).closest?.("button")) {
+                if (detailsRef.current) detailsRef.current.open = false;
+                setOpen(false);
+              }
+            }}
+          >
+            {children}
+          </div>,
+          document.body,
+        )}
+    </details>
+  );
+}
+
 function SourceCard({
   item,
   preview,
@@ -234,7 +311,7 @@ function SourceCard({
             <MoreHorizontal size={14} />
           </summary>
           <div>
-            <button type="button" onClick={onSelect}>Open</button>
+            <button type="button" onClick={onSelect}><ExternalLink size={13} aria-hidden="true" /><span>Open</span></button>
             {menu}
           </div>
         </details>
@@ -509,21 +586,15 @@ export function AuthoringExplorer({
     const current = placement.currentUnitId ? state.units.find((unit) => unit.id === placement.currentUnitId) : undefined;
     const currentScript = current && unitKind(current) === "script" ? current : current ? taskOwner(visibleUnits, current) : undefined;
     return <>
-      {currentScript && unitKind(current!) === "script" && <button type="button" onClick={() => void moveToTasks(item, currentScript)}>Move to Tasks</button>}
-      {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}>Move to Content</button>}
-      {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}>Move to Ignored</button>}
-      <details className="authoring-source-submenu">
-        <summary>
-          <span>Move to</span>
-          <ChevronRight size={13} aria-hidden="true" />
-        </summary>
-        <div>
-          {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
-            <button type="button" onClick={() => void moveToUnit(item, unit)}>{unitLabel(unit)}</button>
-            <button type="button" onClick={() => void moveToTasks(item, unit)}>{unitLabel(unit)} / Tasks</button>
-          </span>)}
-        </div>
-      </details>
+      {currentScript && unitKind(current!) === "script" && <button type="button" onClick={() => void moveToTasks(item, currentScript)}><ListTodo size={13} aria-hidden="true" /><span>Move to Tasks</span></button>}
+      {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}><BookOpen size={13} aria-hidden="true" /><span>Move to Content</span></button>}
+      {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}><EyeOff size={13} aria-hidden="true" /><span>Move to Ignored</span></button>}
+      <MoveSubmenu>
+        {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
+          <button type="button" role="menuitem" onClick={() => void moveToUnit(item, unit)}><BookOpen size={13} aria-hidden="true" /><span>{unitLabel(unit)}</span></button>
+          <button type="button" role="menuitem" onClick={() => void moveToTasks(item, unit)}><ListTodo size={13} aria-hidden="true" /><span>{unitLabel(unit)} / Tasks</span></button>
+        </span>)}
+      </MoveSubmenu>
     </>;
   }
 
