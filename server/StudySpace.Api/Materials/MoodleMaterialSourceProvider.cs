@@ -42,7 +42,7 @@ public sealed class MoodleMaterialSourceProvider(MoodleService moodle, Credentia
                             module.Id, resource.Name, kind, resource.MimeType, resource.Id, null, reason, resource.ModifiedAt, resource.Size, module.Name, module.Type));
                     }
                 }
-                if (sources.Count == before)
+                if (sources.Count == before && module.Type != "label")
                     sources.Add(new(MaterialStore.Hash(scope + ":" + courseId + ":module:" + module.Id), scope, courseId, section.Id, section.Name,
                         module.Id, module.Name, "activity", null, null, null,
                         "This Moodle activity has no exported document or text. Open it in Moodle to check its learning content."));
@@ -96,7 +96,7 @@ public sealed class MoodleMaterialSourceProvider(MoodleService moodle, Credentia
             foreach (var attribute in element.Attributes.ToArray())
                 if (attribute.Name is not ("alt" or "rowspan" or "colspan")) element.RemoveAttribute(attribute.Name);
         var text = MoodleText.Plain(document.Body?.TextContent);
-        if (string.IsNullOrWhiteSpace(text)) return;
+        if (string.IsNullOrWhiteSpace(text) || !text.Any(char.IsLetterOrDigit)) return;
         sources.Add(new(MaterialStore.Hash(scope + ":" + courseId + ":" + key), scope, courseId, sectionId, sectionName,
             moduleId, name, "text", "text/html", null, document.Body?.InnerHtml ?? html, null));
     }

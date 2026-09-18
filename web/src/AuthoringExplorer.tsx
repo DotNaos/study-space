@@ -76,17 +76,20 @@ function ExtractionMark({
   preview?: SourcePreview;
 }) {
   const hasExtraction = !!item.source.materialRevision;
-  const problem = !!item.source.problem || item.source.warnings.length > 0;
+  const unsupported = item.source.acquisition === "unsupported";
+  const problem = !unsupported && (!!item.source.problem || item.source.warnings.length > 0);
   const metadata = preview?.extraction;
   const title = problem
     ? ["Extraction issue", item.source.problem, ...item.source.warnings]
         .filter(Boolean)
         .join(" · ")
-    : hasExtraction
-      ? ["Extracted", metadata?.engine, metadata?.version]
-          .filter(Boolean)
-          .join(" · ")
-      : "No extraction";
+    : unsupported
+      ? item.source.problem ?? "No extractable Moodle content"
+      : hasExtraction
+        ? ["Extracted", metadata?.engine, metadata?.version]
+            .filter(Boolean)
+            .join(" · ")
+        : "No extraction";
 
   if (problem)
     return (
@@ -101,7 +104,7 @@ function ExtractionMark({
       </span>
     );
   return (
-    <span className="authoring-extraction-mark" data-state="empty" title={title}>
+    <span className="authoring-extraction-mark" data-state={unsupported ? "unsupported" : "empty"} title={title}>
       <Circle size={11} />
     </span>
   );

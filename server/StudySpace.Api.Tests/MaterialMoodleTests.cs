@@ -45,6 +45,14 @@ public sealed class MaterialMoodleTests : IDisposable
         Assert.Equal("moodle_connection_changed", (await Assert.ThrowsAsync<ApiFailure>(() => provider.Read(summary, default))).Code);
     }
 
+    [Fact] public async Task DecorativeLabelsDoNotBecomeLearningSourcesOrUnsupportedActivities()
+    {
+        metadata.DecorativeLabel = true;
+        await Connect(); var inventory = await provider.Inventory(7, default);
+        Assert.DoesNotContain(inventory.Sources, source => source.ModuleId == 100);
+        Assert.DoesNotContain(inventory.Sources, source => source.Name.Contains("___", StringComparison.Ordinal));
+    }
+
     [Fact] public async Task UnreadableEmbedsRemainVisibleWithoutExposingSourceUrls()
     {
         metadata.Embed = "<iframe title='Recorded lesson' src='https://external.example.test/?token=upstreamSecret'></iframe>";
@@ -87,6 +95,7 @@ public sealed class MaterialMoodleTests : IDisposable
     {
         public int Modified { get; set; } = 1;
         public string Embed { get; set; } = "";
+        public bool DecorativeLabel { get; set; }
         public Task<JsonElement> Public(Uri site, string method, object args, CancellationToken ct) => throw new InvalidOperationException();
         public Task<JsonElement> Authenticated(Uri site, string token, string method, Dictionary<string, string>? args, CancellationToken ct)
         {
@@ -97,9 +106,12 @@ public sealed class MaterialMoodleTests : IDisposable
                 fileurl = Site + "/webservice/pluginfile.php/91/mod_resource/content/1/" + name + "?token=upstreamSecret" };
             object[] contents = [File("lecture.pdf"), File("slides.pptx"), File("index.html"), File("scan.png"),
                 new { type = "url", filename = "Reading", fileurl = "https://external.example.test/?token=upstreamSecret" }];
+            var modules = new List<object> { new { id = 99, name = "Biology", modname = "resource", contents } };
+            if (DecorativeLabel)
+                modules.Add(new { id = 100, name = "____________________", modname = "label", description = "________________________________________" });
             return Task.FromResult(JsonSerializer.SerializeToElement(new[] { new { id = 11, name = "Week 1",
                 summary = "<h2>Water</h2><p>H<sub>2</sub>O <a href='https://external.example.test/?token=upstreamSecret'>Reading</a><img src='/tokenpluginfile.php/upstreamSecret/diagram.png' alt='Diagram'></p>" + Embed,
-                modules = new[] { new { id = 99, name = "Biology", modname = "resource", contents } } } }));
+                modules = modules.ToArray() } }));
         }
     }
     private sealed class Downloads : IMoodleFileTransport
