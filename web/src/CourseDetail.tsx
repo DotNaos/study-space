@@ -148,42 +148,44 @@ export function CourseDetail({
         </div>
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg-0 via-bg-0/25 to-transparent" />
 
-        <div className="relative z-10 px-4 pt-6 sm:px-8 md:px-12 md:pt-12 lg:px-16">
-          <AppLink navigate={navigate} href="/courses" className={linkClass}>
-            <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
-          </AppLink>
-        </div>
+        <div className="relative z-10 px-4 pt-5 sm:px-8 sm:pt-7 md:px-12 md:pt-8 lg:px-16">
+          <div className="flex min-h-9 items-center justify-between gap-4">
+            <AppLink navigate={navigate} href="/courses" className={linkClass}>
+              <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
+            </AppLink>
 
-        <div className="relative z-10 flex min-h-36 items-end px-4 py-5 pr-12 sm:min-h-40 sm:px-8 sm:py-6 sm:pr-16 md:px-12 md:pr-20 lg:px-16 lg:pr-24">
-          <div className="min-w-0 max-w-3xl">
-            {semester && (
-              <p className="mb-2 flex items-center gap-2 text-xs font-medium text-text-muted">
-                <CalendarDays size={14} aria-hidden="true" />
-                {semester.shortLabel}
-              </p>
-            )}
-            <h1 className="break-words text-2xl font-medium leading-snug tracking-tight sm:text-3xl">
-              {course.name}
-            </h1>
-            {subtitle && (
-              <p className="mt-1.5 break-words text-sm leading-5 text-text-muted">
-                {subtitle}
-              </p>
+            {moodleConnected && onCourseChanged && (
+              <button
+                type="button"
+                onClick={() => setArtworkOpen(true)}
+                aria-label="Kursbild ändern"
+                title="Kursbild ändern"
+                className="flex size-8 shrink-0 items-center justify-center rounded-md bg-bg-0/45 text-text-muted backdrop-blur-md transition-colors hover:bg-bg-0/70 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+              >
+                <ImagePlus size={14} aria-hidden="true" />
+              </button>
             )}
           </div>
-        </div>
 
-        {moodleConnected && onCourseChanged && (
-          <button
-            type="button"
-            onClick={() => setArtworkOpen(true)}
-            aria-label="Kursbild ändern"
-            title="Kursbild ändern"
-            className="absolute right-4 top-6 z-20 flex size-8 items-center justify-center rounded-md bg-bg-0/45 text-text-muted backdrop-blur-md transition-colors hover:bg-bg-0/70 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:right-8 md:right-12 md:top-12 lg:right-16"
-          >
-            <ImagePlus size={14} aria-hidden="true" />
-          </button>
-        )}
+          <div className="flex min-h-32 items-end pb-6 pt-10 sm:min-h-36 sm:pb-7 sm:pt-12">
+            <div className="min-w-0 max-w-3xl">
+              {semester && (
+                <p className="mb-2 flex items-center gap-2 text-xs font-medium text-text-muted">
+                  <CalendarDays size={14} aria-hidden="true" />
+                  {semester.shortLabel}
+                </p>
+              )}
+              <h1 className="break-words text-2xl font-medium leading-snug tracking-tight sm:text-3xl">
+                {course.name}
+              </h1>
+              {subtitle && (
+                <p className="mt-1.5 break-words text-sm leading-5 text-text-muted">
+                  {subtitle}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
       </header>
       {artworkOpen && onCourseChanged && (
         <Suspense fallback={<Loading label="Bildeditor wird geöffnet …" />}>
