@@ -1,5 +1,5 @@
 import "./authoring-explorer.css";
-import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Icon } from "@dotnaos/ui-base";
 import {
@@ -186,6 +186,7 @@ function ExtractionMark({
 function MoveSubmenu({ children }: { children: ReactNode }) {
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const summaryRef = useRef<HTMLElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number; width: number }>();
 
@@ -197,16 +198,11 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
       const gutter = 8;
       const gap = 4;
       const width = Math.min(256, window.innerWidth - gutter * 2);
-      const maxHeight = Math.min(352, window.innerHeight - gutter * 2);
       const rightFits = rect.right + gap + width <= window.innerWidth - gutter;
       const left = rightFits
         ? rect.right + gap
         : Math.max(gutter, rect.left - width - gap);
-      const top = Math.min(
-        Math.max(gutter, rect.top - 4),
-        Math.max(gutter, window.innerHeight - maxHeight - gutter),
-      );
-      setPosition({ top, left, width });
+      setPosition({ top: Math.max(gutter, rect.top - 4), left, width });
     };
     update();
     window.addEventListener("resize", update);
@@ -216,6 +212,21 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
       window.removeEventListener("scroll", update, true);
     };
   }, [open]);
+
+  useLayoutEffect(() => {
+    if (!open || !position || !flyoutRef.current) return;
+    const gutter = 8;
+    const rect = flyoutRef.current.getBoundingClientRect();
+    const viewportBottom = window.innerHeight - gutter;
+    let top = position.top;
+    if (rect.bottom > viewportBottom) {
+      top = Math.max(gutter, top - (rect.bottom - viewportBottom));
+    }
+    if (rect.top < gutter) top += gutter - rect.top;
+    if (Math.abs(top - position.top) > 0.5) {
+      setPosition({ ...position, top });
+    }
+  }, [open, position]);
 
   return (
     <details
@@ -237,6 +248,7 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
       {open && position && typeof document !== "undefined" &&
         createPortal(
           <div
+            ref={flyoutRef}
             className="authoring-source-submenu-flyout"
             role="menu"
             style={{ top: position.top, left: position.left, width: position.width }}
@@ -591,8 +603,8 @@ export function AuthoringExplorer({
       {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}><EyeOff size={13} aria-hidden="true" /><span>Move to Ignored</span></button>}
       <MoveSubmenu>
         {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
-          <button type="button" role="menuitem" onClick={() => void moveToUnit(item, unit)}><BookOpen size={13} aria-hidden="true" /><span>{unitLabel(unit)}</span></button>
-          <button type="button" role="menuitem" onClick={() => void moveToTasks(item, unit)}><ListTodo size={13} aria-hidden="true" /><span>{unitLabel(unit)} / Tasks</span></button>
+          <button type="button" role="menuitem" onClick={() => void moveToUnit(item, unit)}><span>{unitLabel(unit)}</span></button>
+          <button type="button" role="menuitem" onClick={() => void moveToTasks(item, unit)}><span>{unitLabel(unit)} / Tasks</span></button>
         </span>)}
       </MoveSubmenu>
     </>;
