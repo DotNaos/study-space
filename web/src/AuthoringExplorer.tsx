@@ -435,6 +435,7 @@ export function AuthoringExplorer({
   const [dragSourceId, setDragSourceId] = useState<string>();
   const [dropTarget, setDropTarget] = useState<string>();
   const [movingSourceId, setMovingSourceId] = useState<string>();
+  const [movingTaskId, setMovingTaskId] = useState<string>();
   const [moveError, setMoveError] = useState("");
 
   useEffect(() => {
@@ -631,6 +632,29 @@ export function AuthoringExplorer({
     finally { setMovingSourceId(undefined); dragEnd(); }
   }
 
+  async function moveTaskToContent(task: PipelineUnit) {
+    if (disabled || movingSourceId || movingTaskId) return;
+    const owner = taskOwner(visibleUnits, task);
+    if (!owner) return;
+    setMovingTaskId(task.id); setMoveError("");
+    try {
+      let nextState = state;
+      for (const item of sourcesFor(task.id)) {
+        nextState = await saveMapping(item, owner, nextState);
+      }
+      const nextUnits = nextState.units
+        .filter((unit) => unit.id !== task.id)
+        .map((unit) => ({
+          ...unit,
+          scriptUnitIds: (unit.scriptUnitIds ?? []).filter((id) => id !== task.id),
+        }));
+      const saved = await onSave(nextUnits, nextState.revision, [task.id]);
+      onState(saved);
+      onSelectUnit(saved.units.find((unit) => unit.id === owner.id) ?? owner);
+    } catch (error) { setMoveError(message(error)); }
+    finally { setMovingTaskId(undefined); }
+  }
+
   function dropOnUnit(event: DragEvent<HTMLElement>, unit: PipelineUnit) {
     event.preventDefault(); event.stopPropagation();
     const item = sourceFromDrag(event);
@@ -687,23 +711,41 @@ export function AuthoringExplorer({
 
   function renderTask(task: PipelineUnit) {
     const sources = sourcesFor(task.id);
+    const owner = taskOwner(visibleUnits, task);
     return (
       <li
         className="authoring-task-item"
         key={task.id}
+        data-moving={movingTaskId === task.id || undefined}
         data-drop-active={dropTarget === `task:${task.id}` || undefined}
         onDragOver={(event) => allowDrop(event, `task:${task.id}`)}
         onDragLeave={() => dropTarget === `task:${task.id}` && setDropTarget(undefined)}
         onDrop={(event) => dropOnUnit(event, task)}
       >
-        <button
-          type="button"
-          data-selected={selection.kind === "unit" && selection.id === task.id || undefined}
-          onClick={() => onSelectUnit(task)}
-        >
-          <span className="authoring-task-mark" />
-          <span>{unitLabel(task)}</span>
-        </button>
+        <div className="authoring-task-row">
+          <button
+            type="button"
+            className="authoring-task-open"
+            data-selected={selection.kind === "unit" && selection.id === task.id || undefined}
+            onClick={() => onSelectUnit(task)}
+          >
+            <span className="authoring-task-mark" />
+            <span>{unitLabel(task)}</span>
+          </button>
+          {owner && (
+            <details className="authoring-task-menu">
+              <summary aria-label={`Aktionen für ${unitLabel(task)}`} title="Aktionen">
+                <MoreHorizontal size={14} />
+              </summary>
+              <div>
+                <button type="button" disabled={movingTaskId === task.id} onClick={() => void moveTaskToContent(task)}>
+                  <BookOpen size={13} aria-hidden="true" />
+                  <span>Move to Content</span>
+                </button>
+              </div>
+            </details>
+          )}
+        </div>
         {sources.length > 0 && (
           <div className="authoring-task-sources">
             {sources.map((item) => (
