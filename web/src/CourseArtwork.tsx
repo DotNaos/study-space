@@ -327,6 +327,15 @@ void main() {
   );
   color *= 0.95 + edge * 0.05;
 
+  // Fine static film grain. Keep it multiplicative so hue/saturation stay intact.
+  float grainA = hash21(gl_FragCoord.xy + vec2(u_seed * 173.0, u_seed * 317.0));
+  float grainB = hash21(
+    gl_FragCoord.yx * vec2(0.7549, 0.5698) +
+    vec2(u_seed * 911.0, 37.0)
+  );
+  float grain = (grainA + grainB - 1.0) * 0.018;
+  color *= 1.0 + grain;
+
   gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 `;
@@ -480,7 +489,14 @@ class SharedCourseShaderRenderer {
     if (target.width !== width) target.width = width;
     if (target.height !== height) target.height = height;
     context.clearRect(0, 0, width, height);
+    context.globalAlpha = 1;
+    context.filter = "none";
     context.drawImage(this.canvas, 0, 0, width, height);
+    context.globalAlpha = 0.18;
+    context.filter = "blur(2.5px)";
+    context.drawImage(this.canvas, 0, 0, width, height);
+    context.globalAlpha = 1;
+    context.filter = "none";
     return true;
   }
 }
