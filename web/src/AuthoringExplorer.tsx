@@ -512,11 +512,18 @@ export function AuthoringExplorer({
       {currentScript && unitKind(current!) === "script" && <button type="button" onClick={() => void moveToTasks(item, currentScript)}>Move to Tasks</button>}
       {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}>Move to Content</button>}
       {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}>Move to Ignored</button>}
-      <span className="authoring-source-menu-label">Move to…</span>
-      {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
-        <button type="button" onClick={() => void moveToUnit(item, unit)}>{unitLabel(unit)}</button>
-        <button type="button" onClick={() => void moveToTasks(item, unit)}>{unitLabel(unit)} / Tasks</button>
-      </span>)}
+      <details className="authoring-source-submenu">
+        <summary>
+          <span>Move to</span>
+          <ChevronRight size={13} aria-hidden="true" />
+        </summary>
+        <div>
+          {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
+            <button type="button" onClick={() => void moveToUnit(item, unit)}>{unitLabel(unit)}</button>
+            <button type="button" onClick={() => void moveToTasks(item, unit)}>{unitLabel(unit)} / Tasks</button>
+          </span>)}
+        </div>
+      </details>
     </>;
   }
 
