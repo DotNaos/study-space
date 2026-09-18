@@ -645,7 +645,10 @@ export function AuthoringExplorer({
       <MoveSubmenu>
         {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
           <button type="button" role="menuitem" onClick={() => void moveToUnit(item, unit)}><span>{unitLabel(unit)}</span></button>
-          <button type="button" role="menuitem" onClick={() => void moveToTasks(item, unit)}><span>{unitLabel(unit)} / Tasks</span></button>
+          <button type="button" role="menuitem" data-destination-kind="tasks" onClick={() => void moveToTasks(item, unit)}>
+            <span>{unitLabel(unit)}</span>
+            <span className="authoring-source-menu-task-badge">Tasks</span>
+          </button>
         </span>)}
       </MoveSubmenu>
     </>;
