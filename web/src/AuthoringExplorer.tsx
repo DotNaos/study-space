@@ -21,7 +21,9 @@ import {
   MoreHorizontal,
   PanelLeftClose,
   PencilLine,
+  Plus,
   RefreshCw,
+  Search,
   RotateCcw,
 } from "lucide-react";
 import { api, message } from "./api";
@@ -394,7 +396,12 @@ function SolutionPicker({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const [position, setPosition] = useState<{ top: number; left: number; width: number }>();
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const filteredCandidates = candidates.filter((source) =>
+    source.source.name.toLocaleLowerCase().includes(normalizedQuery),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -418,6 +425,7 @@ function SolutionPicker({
       const target = event.target as Node;
       if (triggerRef.current?.contains(target) || flyoutRef.current?.contains(target)) return;
       setOpen(false);
+      setQuery("");
       setPosition(undefined);
     };
     update();
@@ -433,6 +441,7 @@ function SolutionPicker({
 
   const choose = (source: PipelineSourceView) => {
     setOpen(false);
+    setQuery("");
     setPosition(undefined);
     onPick(source);
   };
@@ -446,9 +455,17 @@ function SolutionPicker({
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => setOpen((value) => {
+          const next = !value;
+          if (!next) setQuery("");
+          return next;
+        })}
       >
-        Lösung zuordnen
+        <span className="authoring-solution-picker-trigger-icon"><Plus size={14} aria-hidden="true" /></span>
+        <span className="authoring-solution-picker-trigger-copy">
+          <strong>Lösung hinzufügen</strong>
+          <small>Quelle auswählen oder später erstellen</small>
+        </span>
       </button>
       {open && position && typeof document !== "undefined" && createPortal(
         <div
@@ -462,8 +479,19 @@ function SolutionPicker({
             <strong>Lösung zuordnen</strong>
             <small>{task.source.name}</small>
           </div>
+          <label className="authoring-solution-picker-search">
+            <Search size={13} aria-hidden="true" />
+            <input
+              autoFocus
+              type="search"
+              value={query}
+              placeholder="Quellen durchsuchen…"
+              aria-label="Quellen durchsuchen"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
           <div className="authoring-solution-picker-list">
-            {candidates.length ? candidates.map((source) => (
+            {filteredCandidates.length ? filteredCandidates.map((source) => (
               <button
                 type="button"
                 role="menuitem"
@@ -477,7 +505,7 @@ function SolutionPicker({
                 {solutionLike(source) && <small>Solution</small>}
               </button>
             )) : (
-              <div className="authoring-solution-picker-empty">Keine passende vorhandene Quelle.</div>
+              <div className="authoring-solution-picker-empty">{query.trim() ? "Keine Quelle gefunden." : "Keine vorhandene Quelle verfügbar."}</div>
             )}
           </div>
         </div>,
@@ -1625,16 +1653,12 @@ export function AuthoringExplorer({
                       {solutionEntry ? (
                         renderSourceCard(solutionEntry.item, solutionEntry.unit.id)
                       ) : (
-                        <div className="authoring-task-solution-missing">
-                          <span>Lösung fehlt</span>
-                          <SolutionPicker
-                            task={primary}
-                            candidates={solutionCandidatesFor(primary)}
-                            disabled={disabled || !!movingSourceId}
-                            onPick={(solution) => void assignSolutionSource(primary, task, solution)}
-                          />
-                          <small>oder später erstellen</small>
-                        </div>
+                        <SolutionPicker
+                          task={primary}
+                          candidates={solutionCandidatesFor(primary)}
+                          disabled={disabled || !!movingSourceId}
+                          onPick={(solution) => void assignSolutionSource(primary, task, solution)}
+                        />
                       )}
                     </div>
                   </div>
