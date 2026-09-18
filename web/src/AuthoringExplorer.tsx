@@ -8,8 +8,8 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
+  ArrowRight,
   ExternalLink,
-  Eye,
   EyeOff,
   FolderInput,
   ListTodo,
@@ -858,7 +858,7 @@ export function AuthoringExplorer({
         onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `content:${unit.id}`) setDropTarget(undefined); }}
         onDrop={(event) => dropOnUnit(event, unit)}
       >
-        <div className="authoring-unit-heading">
+        <div className="authoring-unit-heading" data-selected={selected || undefined}>
           <button
             type="button"
             className="authoring-unit-toggle"
@@ -871,12 +871,11 @@ export function AuthoringExplorer({
           <button
             type="button"
             className="authoring-unit-view"
-            data-selected={selected || undefined}
-            aria-label={unitLabel(unit) + " ansehen"}
-            title="Ansehen"
+            aria-label={unitLabel(unit) + " öffnen"}
+            title="Öffnen"
             onClick={() => onSelectUnit(unit)}
           >
-            <Eye size={14} aria-hidden="true" />
+            <ArrowRight size={14} aria-hidden="true" />
           </button>
         </div>
         {!collapsed && <div className="authoring-unit-content">
