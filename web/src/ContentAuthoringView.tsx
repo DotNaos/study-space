@@ -561,7 +561,7 @@ export function ContentAuthoringView({
           ? `${pipeline.pending} Quellen sind noch offen. Ordne sie unter Quellen zu oder blende sie aus.`
           : "Keine sichtbare Quelle ist einem sichtbaren Struktur-Eintrag zugeordnet."
         : "Noch keine editierbare Rohfassung aus der bestätigten Struktur."}</span>
-      <Button label="Rohfassung erstellen" size="sm" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
+      <Button label="Rohfassung erstellen" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
     </div>}
 
     {selection.kind !== "source" ? <div ref={readingRootRef}>{renderReadingSelection()}</div> : !selectedSummary ? <div className="content-authoring-empty">Diese Datei ist noch nicht als Inhalt materialisiert.</div> : <div className="content-source-detail" ref={activeBlockRef}>
