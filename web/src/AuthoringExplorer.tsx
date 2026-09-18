@@ -326,6 +326,7 @@ function SourceCard({
   onDragEnd,
   menu,
   moving = false,
+  dragging = false,
 }: {
   item: PipelineSourceView;
   preview?: SourcePreview;
@@ -336,6 +337,7 @@ function SourceCard({
   onDragEnd: () => void;
   menu?: ReactNode;
   moving?: boolean;
+  dragging?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const menuRef = useRef<HTMLDetailsElement>(null);
@@ -358,6 +360,7 @@ function SourceCard({
       data-selected={selected || undefined}
       data-compact={compact || undefined}
       data-moving={moving || undefined}
+      data-dragging={dragging || undefined}
       draggable={!moving}
       onDragStart={onDragStart}
       onDragEnd={onDragEnd}
@@ -409,6 +412,19 @@ function SourceCard({
         </div>
       )}
     </article>
+  );
+}
+
+function SourceDropPreview({ item }: { item: PipelineSourceView }) {
+  return (
+    <div className="authoring-source-drop-preview" aria-hidden="true">
+      <span className="authoring-source-drop-preview-indent" />
+      {hasFileExtension(item.source.name)
+        ? <Icon.File filename={item.source.name} size={15} />
+        : <ExternalLink className="authoring-source-external-icon" size={15} />}
+      <span className="authoring-source-drop-preview-name">{item.source.name}</span>
+      <span className="authoring-source-drop-preview-hint">Move here</span>
+    </div>
   );
 }
 
@@ -524,6 +540,16 @@ export function AuthoringExplorer({
     [state],
   );
 
+  const dragItem = useMemo(
+    () => dragSourceId ? state.sources.find((item) => item.source.id === dragSourceId) : undefined,
+    [dragSourceId, state.sources],
+  );
+
+  function renderDropPreview(target: string) {
+    if (!dragItem || dropTarget !== target) return null;
+    return <SourceDropPreview item={dragItem} />;
+  }
+
   function sourcesFor(unitId: string) {
     return activeSources
       .filter((item) => sourcePlacement(state, item).currentUnitId === unitId)
@@ -543,6 +569,19 @@ export function AuthoringExplorer({
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("application/x-study-source", item.source.id);
     event.dataTransfer.setData("text/plain", item.source.id);
+
+    const ghost = document.createElement("span");
+    ghost.style.position = "fixed";
+    ghost.style.left = "0";
+    ghost.style.top = "0";
+    ghost.style.width = "1px";
+    ghost.style.height = "1px";
+    ghost.style.opacity = "0";
+    ghost.style.pointerEvents = "none";
+    document.body.appendChild(ghost);
+    event.dataTransfer.setDragImage(ghost, 0, 0);
+    requestAnimationFrame(() => ghost.remove());
+
     setDragSourceId(item.source.id);
     setMoveError("");
   }
@@ -562,6 +601,25 @@ export function AuthoringExplorer({
     if (!carriesSource || disabled || movingSourceId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
+
+    if (target.startsWith("content:")) {
+      const id = target.slice("content:".length);
+      setCollapsedUnits((current) => {
+        if (!current.has(id)) return current;
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    } else if (target.startsWith("tasks:")) {
+      const id = target.slice("tasks:".length);
+      setCollapsedTasks((current) => {
+        if (!current.has(id)) return current;
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    }
+
     if (dropTarget !== target) setDropTarget(target);
   }
 
@@ -760,7 +818,9 @@ export function AuthoringExplorer({
           key={task.id}
           data-drop-active={dropTarget === `task:${task.id}` || undefined}
           onDragOver={(event) => allowDrop(event, `task:${task.id}`)}
-          onDragLeave={() => dropTarget === `task:${task.id}` && setDropTarget(undefined)}
+          onDragLeave={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `task:${task.id}`) setDropTarget(undefined);
+          }}
           onDrop={(event) => dropOnUnit(event, task)}
         >
           {sources.map((item) => (
@@ -774,8 +834,10 @@ export function AuthoringExplorer({
               onDragEnd={dragEnd}
               menu={sourceMenu(item)}
               moving={movingSourceId === item.source.id}
+              dragging={dragSourceId === item.source.id}
             />
           ))}
+          {renderDropPreview(`task:${task.id}`)}
         </li>
       );
     }
@@ -788,7 +850,9 @@ export function AuthoringExplorer({
         data-moving={movingTaskId === task.id || undefined}
         data-drop-active={dropTarget === `task:${task.id}` || undefined}
         onDragOver={(event) => allowDrop(event, `task:${task.id}`)}
-        onDragLeave={() => dropTarget === `task:${task.id}` && setDropTarget(undefined)}
+        onDragLeave={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `task:${task.id}`) setDropTarget(undefined);
+        }}
         onDrop={(event) => dropOnUnit(event, task)}
       >
         <div className="authoring-task-row">
@@ -815,6 +879,7 @@ export function AuthoringExplorer({
             </details>
           )}
         </div>
+        {renderDropPreview(`task:${task.id}`)}
       </li>
     );
   }
@@ -890,8 +955,10 @@ export function AuthoringExplorer({
               onDragEnd={dragEnd}
               menu={sourceMenu(item)}
               moving={movingSourceId === item.source.id}
+              dragging={dragSourceId === item.source.id}
             />
           ))}
+          {renderDropPreview(`content:${unit.id}`)}
           {children.map((child) => renderUnit(child, depth + 1))}
           <div
             className="authoring-task-section"
@@ -911,11 +978,16 @@ export function AuthoringExplorer({
               <ListTodo size={13} aria-hidden="true" />
               <span>Tasks</span>
             </button>
-            {!tasksCollapsed && (tasks.length ? (
-              <ul>{tasks.map(renderTask)}</ul>
-            ) : (
-              <div className="authoring-task-drop">Drop here</div>
-            ))}
+            {!tasksCollapsed && (
+              <>
+                {tasks.length ? (
+                  <ul>{tasks.map(renderTask)}</ul>
+                ) : dropTarget !== `tasks:${unit.id}` ? (
+                  <div className="authoring-task-drop">Drop here</div>
+                ) : null}
+                {renderDropPreview(`tasks:${unit.id}`)}
+              </>
+            )}
           </div>
         </div>}
       </section>
@@ -986,12 +1058,14 @@ export function AuthoringExplorer({
                   onDragEnd={dragEnd}
                   menu={sourceMenu(item)}
                   moving={movingSourceId === item.source.id}
+                  dragging={dragSourceId === item.source.id}
                 />
               ))}
             </div>
-          ) : (
+          ) : dropTarget !== "ignored" ? (
             <div className="authoring-ignored-empty">Drop files here to ignore them</div>
-          )}
+          ) : null}
+          {renderDropPreview("ignored")}
         </section>
       </div>
     </div>
