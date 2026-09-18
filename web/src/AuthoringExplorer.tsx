@@ -589,11 +589,32 @@ export function AuthoringExplorer({
     });
   }
 
+  async function removeEmptyTask(taskId: string, baseState: PipelineState) {
+    const task = baseState.units.find((unit) => unit.id === taskId);
+    if (!task || unitKind(task) !== "tasks" || task.sourceGroupId != null) return baseState;
+    const stillUsed = baseState.sources.some(
+      (candidate) => sourcePlacement(baseState, candidate).currentUnitId === taskId,
+    );
+    if (stillUsed) return baseState;
+    const units = baseState.units
+      .filter((unit) => unit.id !== taskId)
+      .map((unit) => ({
+        ...unit,
+        scriptUnitIds: (unit.scriptUnitIds ?? []).filter((id) => id !== taskId),
+      }));
+    return onSave(units, baseState.revision, [taskId]);
+  }
+
   async function moveToUnit(item: PipelineSourceView, target: PipelineUnit) {
     if (disabled || movingSourceId) return;
+    const previousUnitId = sourcePlacement(state, item).currentUnitId;
+    const previousTask = previousUnitId
+      ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
+      : undefined;
     setMovingSourceId(item.source.id); setMoveError("");
     try {
-      const next = await saveMapping(item, target);
+      let next = await saveMapping(item, target);
+      if (previousTask && previousTask.id !== target.id) next = await removeEmptyTask(previousTask.id, next);
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, target.id);
     } catch (error) { setMoveError(message(error)); }
@@ -602,9 +623,14 @@ export function AuthoringExplorer({
 
   async function moveToIgnored(item: PipelineSourceView) {
     if (disabled || movingSourceId) return;
+    const previousUnitId = sourcePlacement(state, item).currentUnitId;
+    const previousTask = previousUnitId
+      ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
+      : undefined;
     setMovingSourceId(item.source.id); setMoveError("");
     try {
-      const next = await saveMapping(item, undefined);
+      let next = await saveMapping(item, undefined);
+      if (previousTask) next = await removeEmptyTask(previousTask.id, next);
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item);
     } catch (error) { setMoveError(message(error)); }
@@ -613,6 +639,10 @@ export function AuthoringExplorer({
 
   async function moveToTasks(item: PipelineSourceView, script: PipelineUnit) {
     if (disabled || movingSourceId) return;
+    const previousUnitId = sourcePlacement(state, item).currentUnitId;
+    const previousTask = previousUnitId
+      ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
+      : undefined;
     setMovingSourceId(item.source.id); setMoveError("");
     try {
       const taskId = crypto.randomUUID().replaceAll("-", "");
@@ -632,7 +662,8 @@ export function AuthoringExplorer({
       const structured = await onSave([...state.units, task], state.revision);
       onState(structured);
       const savedTask = structured.units.find((unit) => unit.id === taskId) ?? task;
-      const next = await saveMapping(item, savedTask, structured);
+      let next = await saveMapping(item, savedTask, structured);
+      if (previousTask && previousTask.id !== savedTask.id) next = await removeEmptyTask(previousTask.id, next);
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, savedTask.id);
     } catch (error) { setMoveError(message(error)); }
@@ -718,6 +749,34 @@ export function AuthoringExplorer({
 
   function renderTask(task: PipelineUnit) {
     const sources = sourcesFor(task.id);
+
+    if (sources.length > 0) {
+      return (
+        <li
+          className="authoring-task-item authoring-task-item-sources"
+          key={task.id}
+          data-drop-active={dropTarget === `task:${task.id}` || undefined}
+          onDragOver={(event) => allowDrop(event, `task:${task.id}`)}
+          onDragLeave={() => dropTarget === `task:${task.id}` && setDropTarget(undefined)}
+          onDrop={(event) => dropOnUnit(event, task)}
+        >
+          {sources.map((item) => (
+            <SourceCard
+              key={item.source.id}
+              item={item}
+              preview={previews[item.source.id]}
+              selected={selection.kind === "source" && selection.id === item.source.id}
+              onSelect={() => onSelectSource(item, task.id)}
+              onDragStart={(event) => dragStart(item, event)}
+              onDragEnd={dragEnd}
+              menu={sourceMenu(item)}
+              moving={movingSourceId === item.source.id}
+            />
+          ))}
+        </li>
+      );
+    }
+
     const owner = taskOwner(visibleUnits, task);
     return (
       <li
@@ -736,7 +795,7 @@ export function AuthoringExplorer({
             data-selected={selection.kind === "unit" && selection.id === task.id || undefined}
             onClick={() => onSelectUnit(task)}
           >
-            <span className="authoring-task-mark" />
+            <ListTodo size={13} aria-hidden="true" />
             <span>{unitLabel(task)}</span>
           </button>
           {owner && (
@@ -753,24 +812,6 @@ export function AuthoringExplorer({
             </details>
           )}
         </div>
-        {sources.length > 0 && (
-          <div className="authoring-task-sources">
-            {sources.map((item) => (
-              <SourceCard
-                key={item.source.id}
-                item={item}
-                preview={previews[item.source.id]}
-                selected={selection.kind === "source" && selection.id === item.source.id}
-                compact
-                onSelect={() => onSelectSource(item, task.id)}
-                onDragStart={(event) => dragStart(item, event)}
-                onDragEnd={dragEnd}
-                menu={sourceMenu(item)}
-                moving={movingSourceId === item.source.id}
-              />
-            ))}
-          </div>
-        )}
       </li>
     );
   }

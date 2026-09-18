@@ -247,6 +247,7 @@
 .authoring-task-section ul { list-style: none; margin: 0; padding: 0; }
 .authoring-task-item { min-width: 0; }
 .authoring-task-item[data-moving=true] { opacity:.55; pointer-events:none; }
+.authoring-task-item-sources > .authoring-source-card { margin:.28rem 0; }
 .authoring-task-row { display:grid; grid-template-columns:minmax(0,1fr) 1.7rem; align-items:center; min-width:0; }
 .authoring-task-open {
   display:flex;
@@ -268,7 +269,6 @@
 .authoring-task-open:hover,
 .authoring-task-open[data-selected=true] { background:var(--color-bg-1); }
 .authoring-task-open > span:last-child { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.authoring-task-mark { width:.48rem; height:.48rem; flex:0 0 auto; border:1px solid var(--color-warning); border-radius:.1rem; transform:rotate(45deg); }
 .authoring-task-menu { position:relative; }
 .authoring-task-menu > summary { display:inline-flex; width:1.45rem; height:1.45rem; align-items:center; justify-content:center; border-radius:.3rem; color:var(--color-text-muted); list-style:none; cursor:pointer; }
 .authoring-task-menu > summary::-webkit-details-marker { display:none; }
