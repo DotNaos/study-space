@@ -141,14 +141,21 @@ export function CourseDetail({
       >
         <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
       </AppLink>
-      <header className="relative isolate overflow-hidden rounded-xl border border-border bg-bg-1">
-        <div className="absolute -inset-2">
+      <header className="relative isolate min-h-36 overflow-hidden border-b border-border/60 sm:min-h-40">
+        <div
+          className="pointer-events-none absolute -right-8 -top-10 h-[calc(100%+4rem)] w-[72%] opacity-80 sm:-right-12 sm:w-[58%]"
+          style={{
+            WebkitMaskImage:
+              "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 22%, black 58%, black 100%)",
+            maskImage:
+              "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 22%, black 58%, black 100%)",
+          }}
+        >
           <CourseArtwork course={course} eager className="h-full w-full" />
         </div>
-        <div className="absolute inset-0 bg-gradient-to-r from-bg-0 via-bg-0/80 to-bg-0/15" />
-        <div className="absolute inset-0 bg-gradient-to-t from-bg-0/85 via-bg-0/10 to-bg-0/20" />
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg-0 via-bg-0/25 to-transparent" />
 
-        <div className="relative z-10 flex min-h-44 items-end px-5 py-6 sm:min-h-52 sm:px-7 sm:py-7">
+        <div className="relative z-10 flex min-h-36 items-end py-5 pr-12 sm:min-h-40 sm:py-6">
           <div className="min-w-0 max-w-3xl">
             {semester && (
               <p className="mb-2 flex items-center gap-2 text-xs font-medium text-text-muted">
@@ -173,9 +180,9 @@ export function CourseDetail({
             onClick={() => setArtworkOpen(true)}
             aria-label="Kursbild ändern"
             title="Kursbild ändern"
-            className="absolute right-3 top-3 z-20 flex size-9 items-center justify-center rounded-lg border border-border/80 bg-bg-0/60 text-text-muted shadow-sm backdrop-blur-md transition-colors hover:bg-bg-0/80 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:right-4 sm:top-4"
+            className="absolute right-0 top-1 z-20 flex size-8 items-center justify-center rounded-md bg-bg-0/45 text-text-muted backdrop-blur-md transition-colors hover:bg-bg-0/70 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
           >
-            <ImagePlus size={15} aria-hidden="true" />
+            <ImagePlus size={14} aria-hidden="true" />
           </button>
         )}
       </header>
