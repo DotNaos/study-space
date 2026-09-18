@@ -462,7 +462,9 @@ function ReorderSourceList({
             dragElastic={0.035}
             whileDrag={{ scale: 1.012 }}
             onDragStart={() => onDragStart(item, targetKey)}
-            onDrag={(_, info) => onDragMove(info.point)}
+            onDrag={(event) => {
+              if ("clientX" in event) onDragMove({ x: event.clientX, y: event.clientY });
+            }}
             onDragEnd={() => onDragEnd(item, targetKey, orderRef.current)}
           >
             {renderItem(item)}
@@ -609,20 +611,13 @@ export function AuthoringExplorer({
   }
 
   function dropTargetAt(point: { x: number; y: number }) {
-    let best: { target: string; area: number } | undefined;
-    for (const element of document.querySelectorAll<HTMLElement>("[data-source-drop-target]")) {
-      const rect = element.getBoundingClientRect();
-      if (
-        point.x < rect.left || point.x > rect.right ||
-        point.y < rect.top || point.y > rect.bottom ||
-        rect.width <= 0 || rect.height <= 0
-      ) continue;
-      const target = element.dataset.sourceDropTarget;
-      if (!target) continue;
-      const area = rect.width * rect.height;
-      if (!best || area < best.area) best = { target, area };
+    for (const element of document.elementsFromPoint(point.x, point.y)) {
+      if (element.closest(".authoring-reorder-item")) continue;
+      const targetElement = element.closest<HTMLElement>("[data-source-drop-target]");
+      const target = targetElement?.dataset.sourceDropTarget;
+      if (target) return target;
     }
-    return best?.target;
+    return undefined;
   }
 
   function updateSourceDrag(point: { x: number; y: number }) {
@@ -1001,10 +996,13 @@ export function AuthoringExplorer({
         className="authoring-unit"
         data-depth={depth}
         key={unit.id}
-        data-source-drop-target={`content:${unit.id}`}
         data-drop-active={dropTarget === `content:${unit.id}` || undefined}
       >
-        <div className="authoring-unit-heading" data-selected={selected || undefined}>
+        <div
+          className="authoring-unit-heading"
+          data-selected={selected || undefined}
+          data-source-drop-target={`content:${unit.id}`}
+        >
           <button
             type="button"
             className="authoring-unit-toggle"
@@ -1024,7 +1022,7 @@ export function AuthoringExplorer({
             <ArrowUpRight size={14} aria-hidden="true" />
           </button>
         </div>
-        {!collapsed && <div className="authoring-unit-content">
+        {!collapsed && <div className="authoring-unit-content" data-source-drop-target={`content:${unit.id}`}>
           <ReorderSourceList
             items={sources}
             targetKey={`content:${unit.id}`}
@@ -1044,6 +1042,7 @@ export function AuthoringExplorer({
             <button
               type="button"
               className="authoring-task-section-title"
+              data-source-drop-target={`tasks:${unit.id}`}
               aria-expanded={!tasksCollapsed}
               onClick={() => toggleTasksCollapsed(unit.id)}
             >
