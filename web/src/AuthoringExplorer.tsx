@@ -415,15 +415,34 @@ function SourceCard({
   );
 }
 
-function SourceDropPreview({ item }: { item: PipelineSourceView }) {
+function SourceDragOverlay({
+  item,
+  preview,
+  left,
+  top,
+  width,
+}: {
+  item: PipelineSourceView;
+  preview?: SourcePreview;
+  left: number;
+  top: number;
+  width: number;
+}) {
   return (
-    <div className="authoring-source-drop-preview" aria-hidden="true">
-      <span className="authoring-source-drop-preview-indent" />
-      {hasFileExtension(item.source.name)
-        ? <Icon.File filename={item.source.name} size={15} />
-        : <ExternalLink className="authoring-source-external-icon" size={15} />}
-      <span className="authoring-source-drop-preview-name">{item.source.name}</span>
-      <span className="authoring-source-drop-preview-hint">Move here</span>
+    <div
+      className="authoring-source-drag-overlay"
+      aria-hidden="true"
+      style={{ left, top, width }}
+    >
+      <span className="authoring-source-drag-overlay-disclosure"><ChevronDown size={13} /></span>
+      <span className="authoring-source-drag-overlay-main">
+        {hasFileExtension(item.source.name)
+          ? <Icon.File filename={item.source.name} size={15} />
+          : <ExternalLink className="authoring-source-external-icon" size={15} />}
+        <span>{item.source.name}</span>
+      </span>
+      <ExtractionMark item={item} preview={preview} />
+      <MoreHorizontal size={14} />
     </div>
   );
 }
@@ -457,6 +476,7 @@ export function AuthoringExplorer({
 }) {
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
   const [dragSourceId, setDragSourceId] = useState<string>();
+  const [dragOverlay, setDragOverlay] = useState<{ x: number; y: number; width: number }>();
   const [dropTarget, setDropTarget] = useState<string>();
   const [movingSourceId, setMovingSourceId] = useState<string>();
   const [movingTaskId, setMovingTaskId] = useState<string>();
@@ -545,10 +565,18 @@ export function AuthoringExplorer({
     [dragSourceId, state.sources],
   );
 
-  function renderDropPreview(target: string) {
-    if (!dragItem || dropTarget !== target) return null;
-    return <SourceDropPreview item={dragItem} />;
-  }
+  useEffect(() => {
+    if (!dragSourceId) return;
+    const update = (event: Event) => {
+      const dragEvent = event as globalThis.DragEvent;
+      if (!dragEvent.clientX && !dragEvent.clientY) return;
+      setDragOverlay((current) => current
+        ? { ...current, x: dragEvent.clientX, y: dragEvent.clientY }
+        : current);
+    };
+    document.addEventListener("dragover", update, true);
+    return () => document.removeEventListener("dragover", update, true);
+  }, [dragSourceId]);
 
   function sourcesFor(unitId: string) {
     return activeSources
@@ -582,12 +610,15 @@ export function AuthoringExplorer({
     event.dataTransfer.setDragImage(ghost, 0, 0);
     requestAnimationFrame(() => ghost.remove());
 
+    const rect = event.currentTarget.getBoundingClientRect();
     setDragSourceId(item.source.id);
+    setDragOverlay({ x: event.clientX, y: event.clientY, width: rect.width });
     setMoveError("");
   }
 
   function dragEnd() {
     setDragSourceId(undefined);
+    setDragOverlay(undefined);
     setDropTarget(undefined);
   }
 
@@ -837,7 +868,6 @@ export function AuthoringExplorer({
               dragging={dragSourceId === item.source.id}
             />
           ))}
-          {renderDropPreview(`task:${task.id}`)}
         </li>
       );
     }
@@ -879,7 +909,6 @@ export function AuthoringExplorer({
             </details>
           )}
         </div>
-        {renderDropPreview(`task:${task.id}`)}
       </li>
     );
   }
@@ -958,7 +987,6 @@ export function AuthoringExplorer({
               dragging={dragSourceId === item.source.id}
             />
           ))}
-          {renderDropPreview(`content:${unit.id}`)}
           {children.map((child) => renderUnit(child, depth + 1))}
           <div
             className="authoring-task-section"
@@ -982,10 +1010,9 @@ export function AuthoringExplorer({
               <>
                 {tasks.length ? (
                   <ul>{tasks.map(renderTask)}</ul>
-                ) : dropTarget !== `tasks:${unit.id}` ? (
+                ) : (
                   <div className="authoring-task-drop">Drop here</div>
-                ) : null}
-                {renderDropPreview(`tasks:${unit.id}`)}
+                )}
               </>
             )}
           </div>
@@ -1062,12 +1089,22 @@ export function AuthoringExplorer({
                 />
               ))}
             </div>
-          ) : dropTarget !== "ignored" ? (
+          ) : (
             <div className="authoring-ignored-empty">Drop files here to ignore them</div>
-          ) : null}
-          {renderDropPreview("ignored")}
+          )}
         </section>
       </div>
+
+      {dragItem && dragOverlay && typeof document !== "undefined" && createPortal(
+        <SourceDragOverlay
+          item={dragItem}
+          preview={previews[dragItem.source.id]}
+          left={Math.max(8, Math.min(dragOverlay.x + 12, window.innerWidth - Math.min(dragOverlay.width, 420) - 8))}
+          top={Math.max(8, Math.min(dragOverlay.y + 12, window.innerHeight - 48))}
+          width={Math.min(dragOverlay.width, 420)}
+        />,
+        document.body,
+      )}
     </div>
   );
 }
