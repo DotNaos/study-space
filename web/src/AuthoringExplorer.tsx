@@ -1,7 +1,7 @@
 import "./authoring-explorer.css";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { LayoutGroup, Reorder } from "motion/react";
+import { LayoutGroup, Reorder, useDragControls } from "motion/react";
 import { Icon } from "@dotnaos/ui-base";
 import {
   AlertCircle,
@@ -11,13 +11,17 @@ import {
   Circle,
   ArrowUpRight,
   ExternalLink,
+  Eye,
   EyeOff,
   FolderInput,
+  GripVertical,
   ListTodo,
   LoaderCircle,
   MoreHorizontal,
   PanelLeftClose,
+  PencilLine,
   RefreshCw,
+  RotateCcw,
 } from "lucide-react";
 import { api, message } from "./api";
 import {
@@ -36,6 +40,18 @@ import { pipelinePath, type MappingItem, type PipelineSourceView, type PipelineS
 import { placementRole, sourcePlacement } from "./source-placement";
 import type { StructureSave } from "./structure-autosave";
 import type { ContentSelection } from "./ContentAuthoringView";
+
+function sameUnitDraft(left: PipelineUnit, right: PipelineUnit) {
+  return left.id === right.id
+    && left.title === right.title
+    && (left.customTitle ?? null) === (right.customTitle ?? null)
+    && left.parentId === right.parentId
+    && left.order === right.order
+    && unitKind(left) === unitKind(right)
+    && (left.hidden ?? false) === (right.hidden ?? false)
+    && (left.sourceGroupId ?? null) === (right.sourceGroupId ?? null)
+    && JSON.stringify(left.scriptUnitIds ?? []) === JSON.stringify(right.scriptUnitIds ?? []);
+}
 
 type HeadingNode = {
   id: string;
@@ -478,6 +494,147 @@ function ReorderSourceList({
   );
 }
 
+function SectionActions({
+  unit,
+  hidden,
+  resettable,
+  disabled,
+  visibilityDisabled,
+  onRename,
+  onVisibility,
+  onReset,
+}: {
+  unit: PipelineUnit;
+  hidden: boolean;
+  resettable: boolean;
+  disabled: boolean;
+  visibilityDisabled: boolean;
+  onRename: () => void;
+  onVisibility: () => void;
+  onReset: () => void;
+}) {
+  const ref = useRef<HTMLDetailsElement>(null);
+
+  useEffect(() => {
+    const dismiss = (event: PointerEvent) => {
+      if (ref.current?.contains(event.target as Node)) return;
+      if (ref.current) ref.current.open = false;
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, []);
+
+  const run = (action: () => void) => {
+    if (ref.current) ref.current.open = false;
+    action();
+  };
+
+  return (
+    <details ref={ref} className="authoring-unit-menu">
+      <summary aria-label={`Aktionen für ${unitLabel(unit)}`} title="Aktionen">
+        <MoreHorizontal size={14} />
+      </summary>
+      <div>
+        <button type="button" disabled={disabled} onClick={() => run(onRename)}><PencilLine size={13} aria-hidden="true" /><span>Rename</span></button>
+        <button type="button" disabled={disabled || visibilityDisabled} onClick={() => run(onVisibility)} title={visibilityDisabled ? "Hidden by parent" : undefined}>
+          {hidden ? <Eye size={13} aria-hidden="true" /> : <EyeOff size={13} aria-hidden="true" />}
+          <span>{hidden ? "Show" : "Hide"}</span>
+        </button>
+        {resettable && <button type="button" disabled={disabled} onClick={() => run(onReset)}><RotateCcw size={13} aria-hidden="true" /><span>Reset</span></button>}
+      </div>
+    </details>
+  );
+}
+
+function SectionReorderItem({
+  unit,
+  disabled,
+  onDragEnd,
+  children,
+}: {
+  unit: PipelineUnit;
+  disabled: boolean;
+  onDragEnd: () => void;
+  children: (handle: ReactNode) => ReactNode;
+}) {
+  const controls = useDragControls();
+  const handle = (
+    <button
+      type="button"
+      className="authoring-unit-drag-handle authoring-unit-control"
+      aria-label={`${unitLabel(unit)} verschieben`}
+      title="Verschieben"
+      disabled={disabled}
+      onPointerDown={(event) => {
+        event.preventDefault();
+        if (!disabled) controls.start(event);
+      }}
+    >
+      <GripVertical size={14} aria-hidden="true" />
+    </button>
+  );
+
+  return (
+    <Reorder.Item
+      as="div"
+      value={unit.id}
+      dragListener={false}
+      dragControls={controls}
+      dragMomentum={false}
+      dragElastic={0.02}
+      layout="position"
+      layoutId={`authoring-unit-${unit.id}`}
+      transition={{ layout: { type: "spring", stiffness: 360, damping: 32, mass: 0.72 } }}
+      className="authoring-unit-reorder-item"
+      onDragEnd={onDragEnd}
+    >
+      {children(handle)}
+    </Reorder.Item>
+  );
+}
+
+function ReorderSectionList({
+  items,
+  disabled,
+  renderItem,
+  onOrder,
+}: {
+  items: PipelineUnit[];
+  disabled: boolean;
+  renderItem: (unit: PipelineUnit, dragHandle: ReactNode) => ReactNode;
+  onOrder: (order: string[]) => void;
+}) {
+  const ids = items.map((unit) => unit.id);
+  const key = ids.join("\u0000");
+  const [order, setOrder] = useState(ids);
+  const orderRef = useRef(ids);
+
+  useEffect(() => {
+    orderRef.current = ids;
+    setOrder(ids);
+  }, [key]);
+
+  const byId = new Map(items.map((unit) => [unit.id, unit]));
+  const update = (next: string[]) => {
+    orderRef.current = next;
+    setOrder(next);
+  };
+
+  return (
+    <Reorder.Group as="div" axis="y" values={order} onReorder={update} className="authoring-unit-reorder-list">
+      {order.map((id) => {
+        const unit = byId.get(id);
+        if (!unit) return null;
+        return (
+          <SectionReorderItem key={id} unit={unit} disabled={disabled} onDragEnd={() => onOrder(orderRef.current)}>
+            {(handle) => renderItem(unit, handle)}
+          </SectionReorderItem>
+        );
+      })}
+    </Reorder.Group>
+  );
+}
+
 type OptimisticSourcePlacement = {
   targetUnitId?: string;
   hidden: boolean;
@@ -518,6 +675,9 @@ export function AuthoringExplorer({
   const [optimisticUnits, setOptimisticUnits] = useState<PipelineUnit[]>([]);
   const [movingSourceId, setMovingSourceId] = useState<string>();
   const [movingTaskId, setMovingTaskId] = useState<string>();
+  const [structureSaving, setStructureSaving] = useState(false);
+  const [renamingUnitId, setRenamingUnitId] = useState<string>();
+  const [renameValue, setRenameValue] = useState("");
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(() => new Set());
   const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(() => new Set());
   const [moveError, setMoveError] = useState("");
@@ -575,8 +735,10 @@ export function AuthoringExplorer({
 
   useEffect(() => {
     setOptimisticUnits((current) => {
-      const persisted = new Set(state.units.map((unit) => unit.id));
-      const next = current.filter((unit) => !persisted.has(unit.id));
+      const next = current.filter((optimistic) => {
+        const persisted = state.units.find((unit) => unit.id === optimistic.id);
+        return !persisted || !sameUnitDraft(persisted, optimistic);
+      });
       return next.length === current.length ? current : next;
     });
     setOptimisticPlacements((current) => {
@@ -599,8 +761,12 @@ export function AuthoringExplorer({
   }, [state.revision, state.sources, state.units]);
 
   const effectiveUnits = useMemo(() => {
+    const overrides = new Map(optimisticUnits.map((unit) => [unit.id, unit]));
     const persisted = new Set(state.units.map((unit) => unit.id));
-    return [...state.units, ...optimisticUnits.filter((unit) => !persisted.has(unit.id))];
+    return [
+      ...state.units.map((unit) => overrides.get(unit.id) ?? unit),
+      ...optimisticUnits.filter((unit) => !persisted.has(unit.id)),
+    ];
   }, [state.units, optimisticUnits]);
 
   function effectivePlacement(item: PipelineSourceView) {
@@ -614,15 +780,12 @@ export function AuthoringExplorer({
     };
   }
 
-  const visibleUnits = useMemo(
-    () => effectiveUnits.filter((unit) => !unitHidden(unit, effectiveUnits)),
-    [effectiveUnits],
-  );
+  const explorerUnits = useMemo(() => effectiveUnits, [effectiveUnits]);
   const scriptRoots = useMemo(
-    () => visibleUnits
+    () => explorerUnits
       .filter((unit) => unitKind(unit) === "script" && unit.parentId === null)
       .sort((a, b) => a.order - b.order),
-    [visibleUnits],
+    [explorerUnits],
   );
   const activeSources = useMemo(
     () => state.sources.filter((item) => {
@@ -659,9 +822,9 @@ export function AuthoringExplorer({
       });
   }
 
-  const scriptUnits = useMemo(() => visibleUnits
-    .filter((unit) => unitKind(unit) === "script")
-    .sort((a, b) => a.order - b.order), [visibleUnits]);
+  const scriptUnits = useMemo(() => explorerUnits
+    .filter((unit) => unitKind(unit) === "script" && !unitHidden(unit, explorerUnits))
+    .sort((a, b) => a.order - b.order), [explorerUnits]);
 
   function setActiveDropTarget(target?: string) {
     dropTargetRef.current = target;
@@ -735,6 +898,135 @@ export function AuthoringExplorer({
         reason: target ? "Quelle im Explorer verschoben." : "Quelle im Explorer nach Ignored verschoben.",
       }),
     });
+  }
+
+  function setOptimisticStructure(units: PipelineUnit[]) {
+    setOptimisticUnits(units);
+  }
+
+  async function saveStructureOptimistically(nextUnits: PipelineUnit[], deletedUnitIds: string[] = []) {
+    if (structureSaving) return undefined;
+    const previous = effectiveUnits;
+    setOptimisticStructure(nextUnits);
+    setStructureSaving(true);
+    setMoveError("");
+    try {
+      const saved = await onSave(nextUnits, state.revision, deletedUnitIds);
+      onState(saved);
+      return saved;
+    } catch (error) {
+      setOptimisticStructure(previous);
+      setMoveError(message(error));
+      return undefined;
+    } finally {
+      setStructureSaving(false);
+    }
+  }
+
+  function patchSection(unit: PipelineUnit, patch: Partial<PipelineUnit>) {
+    const nextUnits = effectiveUnits.map((candidate) => candidate.id === unit.id ? { ...candidate, ...patch } : candidate);
+    void saveStructureOptimistically(nextUnits);
+  }
+
+  function beginRenameSection(unit: PipelineUnit) {
+    setRenamingUnitId(unit.id);
+    setRenameValue(unitLabel(unit));
+  }
+
+  function commitRenameSection(unit: PipelineUnit) {
+    const value = renameValue.trim();
+    setRenamingUnitId(undefined);
+    setRenameValue("");
+    if (!value || value === unitLabel(unit)) return;
+    patchSection(unit, { customTitle: value === unit.title ? null : value });
+  }
+
+  function reorderSectionSiblings(parentId: string | null, order: string[]) {
+    const positions = new Map(order.map((id, index) => [id, index]));
+    const nextUnits = effectiveUnits.map((unit) =>
+      unitKind(unit) === "script" && unit.parentId === parentId && positions.has(unit.id)
+        ? { ...unit, order: positions.get(unit.id)! }
+        : unit,
+    );
+    void saveStructureOptimistically(nextUnits);
+  }
+
+  function originalSectionUnit(unit: PipelineUnit) {
+    const suggested = unit.sourceGroupId != null
+      ? state.suggestedUnits.find((candidate) => candidate.sourceGroupId === unit.sourceGroupId)
+      : state.suggestedUnits.find((candidate) => candidate.id === unit.id);
+    const group = unit.sourceGroupId != null ? state.groups.find((candidate) => candidate.id === unit.sourceGroupId) : undefined;
+    const originalParent = group?.parentId != null
+      ? effectiveUnits.find((candidate) => candidate.sourceGroupId === group.parentId && unitKind(candidate) === "script")
+      : undefined;
+    return {
+      ...unit,
+      title: suggested?.title ?? unit.title,
+      customTitle: null,
+      parentId: suggested?.parentId ?? originalParent?.id ?? (group?.parentId == null ? null : unit.parentId),
+      order: suggested?.order ?? group?.order ?? unit.order,
+      hidden: false,
+      kind: "script" as const,
+      scriptUnitIds: suggested?.scriptUnitIds ?? [],
+    };
+  }
+
+  async function resetSection(unit: PipelineUnit) {
+    if (structureSaving || movingSourceId || unit.sourceGroupId == null) return;
+    const previousUnits = effectiveUnits;
+    const previousPlacements = { ...optimisticPlacements };
+    const resetUnit = originalSectionUnit(unit);
+    const nextUnits = effectiveUnits.map((candidate) => candidate.id === unit.id ? resetUnit : candidate);
+    const affected = state.sources.filter((item) => {
+      const placement = effectivePlacement(item);
+      return item.source.sectionId === unit.sourceGroupId || placement.currentUnitId === unit.id;
+    });
+
+    setOptimisticStructure(nextUnits);
+    setOptimisticPlacements((current) => {
+      const next = { ...current };
+      for (const item of affected) {
+        const original = nextUnits.find((candidate) => candidate.sourceGroupId === item.source.sectionId && unitKind(candidate) === "script");
+        next[item.source.id] = original
+          ? { targetUnitId: original.id, hidden: false }
+          : { hidden: false };
+      }
+      return next;
+    });
+    setStructureSaving(true);
+    setMoveError("");
+
+    let structureSaved = false;
+    try {
+      let next = await onSave(nextUnits, state.revision);
+      structureSaved = true;
+      onState(next);
+      if (affected.length) {
+        const items: MappingItem[] = affected.map((item) => ({
+          sourceId: item.source.id,
+          sourceVersion: item.source.sourceVersion,
+          disposition: "clear",
+          uses: [],
+        }));
+        next = await api<PipelineState>(`${pipelinePath(courseId)}/mapping`, {
+          method: "POST",
+          body: JSON.stringify({
+            expectedRevision: next.revision,
+            items,
+            actor: "user",
+            reason: "Section im Explorer auf Quellstruktur zurückgesetzt.",
+          }),
+        });
+        onState(next);
+      }
+    } catch (error) {
+      if (!structureSaved) setOptimisticStructure(previousUnits);
+      else setOptimisticStructure([]);
+      setOptimisticPlacements(previousPlacements);
+      setMoveError(message(error));
+    } finally {
+      setStructureSaving(false);
+    }
   }
 
   function applyOptimisticPlacement(
@@ -874,7 +1166,7 @@ export function AuthoringExplorer({
 
   async function moveTaskToContent(task: PipelineUnit) {
     if (disabled || movingSourceId || movingTaskId) return;
-    const owner = taskOwner(visibleUnits, task);
+    const owner = taskOwner(explorerUnits, task);
     if (!owner) return;
     setMovingTaskId(task.id); setMoveError("");
     try {
@@ -970,7 +1262,7 @@ export function AuthoringExplorer({
   function sourceMenu(item: PipelineSourceView) {
     const placement = effectivePlacement(item);
     const current = placement.currentUnitId ? effectiveUnits.find((unit) => unit.id === placement.currentUnitId) : undefined;
-    const currentScript = current && unitKind(current) === "script" ? current : current ? taskOwner(visibleUnits, current) : undefined;
+    const currentScript = current && unitKind(current) === "script" ? current : current ? taskOwner(explorerUnits, current) : undefined;
     return <>
       {currentScript && unitKind(current!) === "script" && <button type="button" onClick={() => void moveToTasks(item, currentScript)}><ListTodo size={13} aria-hidden="true" /><span>Move to Tasks</span></button>}
       {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}><BookOpen size={13} aria-hidden="true" /><span>Move to Content</span></button>}
@@ -1041,7 +1333,7 @@ export function AuthoringExplorer({
       );
     }
 
-    const owner = taskOwner(visibleUnits, task);
+    const owner = taskOwner(explorerUnits, task);
     return (
       <li
         className="authoring-task-item"
@@ -1096,49 +1388,90 @@ export function AuthoringExplorer({
     });
   }
 
-  function renderUnit(unit: PipelineUnit, depth = 0) {
+  function renderUnit(unit: PipelineUnit, depth = 0, dragHandle?: ReactNode) {
     const sources = sourcesFor(unit.id);
-    const children = visibleUnits
+    const children = explorerUnits
       .filter((candidate) => candidate.parentId === unit.id && unitKind(candidate) === "script")
       .sort((a, b) => a.order - b.order);
-    const tasks = visibleUnits
-      .filter((candidate) => unitKind(candidate) === "tasks" && taskOwner(visibleUnits, candidate)?.id === unit.id)
+    const tasks = explorerUnits
+      .filter((candidate) => unitKind(candidate) === "tasks" && taskOwner(explorerUnits, candidate)?.id === unit.id)
       .sort((a, b) => a.order - b.order);
     const collapsed = collapsedUnits.has(unit.id);
     const tasksCollapsed = collapsedTasks.has(unit.id);
     const selected = selection.kind === "unit" && selection.id === unit.id;
+    const hidden = unitHidden(unit, explorerUnits);
+    const inheritedHidden = hidden && !unit.hidden;
+    const renaming = renamingUnitId === unit.id;
+    const controlsDisabled = disabled || structureSaving || !!movingSourceId;
+
     return (
       <section
         className="authoring-unit"
         data-depth={depth}
-        key={unit.id}
+        data-hidden={hidden || undefined}
         data-drop-active={dropTarget === `content:${unit.id}` || undefined}
       >
         <div
           className="authoring-unit-heading"
           data-selected={selected || undefined}
+          data-hidden={hidden || undefined}
           data-source-drop-target={`content:${unit.id}`}
         >
-          <button
+          {renaming ? (
+            <div className="authoring-unit-rename">
+              <span className="authoring-unit-rename-chevron">
+                {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+              </span>
+              <input
+                autoFocus
+                value={renameValue}
+                aria-label={`${unit.title} umbenennen`}
+                onChange={(event) => setRenameValue(event.target.value)}
+                onBlur={() => commitRenameSection(unit)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                  if (event.key === "Escape") {
+                    setRenameValue(unitLabel(unit));
+                    event.currentTarget.blur();
+                  }
+                }}
+              />
+            </div>
+          ) : (
+            <button
+              type="button"
+              className="authoring-unit-toggle"
+              aria-expanded={!collapsed && !hidden}
+              onClick={() => toggleUnitCollapsed(unit.id)}
+            >
+              {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+              <span>{unitLabel(unit)}</span>
+              {hidden && <EyeOff className="authoring-unit-hidden-mark" size={12} aria-hidden="true" />}
+            </button>
+          )}
+          {!hidden ? <button
             type="button"
-            className="authoring-unit-toggle"
-            aria-expanded={!collapsed}
-            onClick={() => toggleUnitCollapsed(unit.id)}
-          >
-            {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-            <span>{unitLabel(unit)}</span>
-          </button>
-          <button
-            type="button"
-            className="authoring-unit-view"
+            className="authoring-unit-view authoring-unit-control"
             aria-label={unitLabel(unit) + " öffnen"}
             title="Öffnen"
             onClick={() => onSelectUnit(unit)}
           >
             <ArrowUpRight size={14} aria-hidden="true" />
-          </button>
+          </button> : <span className="authoring-unit-control-spacer" />}
+          {dragHandle ?? <span className="authoring-unit-control-spacer" />}
+          <SectionActions
+            unit={unit}
+            hidden={!!unit.hidden}
+            resettable={unit.sourceGroupId != null}
+            disabled={controlsDisabled}
+            visibilityDisabled={inheritedHidden}
+            onRename={() => beginRenameSection(unit)}
+            onVisibility={() => patchSection(unit, { hidden: !unit.hidden })}
+            onReset={() => void resetSection(unit)}
+          />
         </div>
-        {!collapsed && <div className="authoring-unit-content" data-source-drop-target={`content:${unit.id}`}>
+
+        {!collapsed && !hidden && <div className="authoring-unit-content" data-source-drop-target={`content:${unit.id}`}>
           <ReorderSourceList
             items={sources}
             targetKey={`content:${unit.id}`}
@@ -1148,7 +1481,12 @@ export function AuthoringExplorer({
             onDragEnd={finishSourceDrag}
             disabled={disabled || !!movingSourceId}
           />
-          {children.map((child) => renderUnit(child, depth + 1))}
+          <ReorderSectionList
+            items={children}
+            disabled={controlsDisabled}
+            renderItem={(child, handle) => renderUnit(child, depth + 1, handle)}
+            onOrder={(order) => reorderSectionSiblings(unit.id, order)}
+          />
           <div
             className="authoring-task-section"
             data-empty={!tasks.length || undefined}
@@ -1217,7 +1555,12 @@ export function AuthoringExplorer({
       {moveError && <div className="authoring-explorer-error" role="alert">{moveError}</div>}
       <div className="authoring-explorer-scroll">
         <div className="authoring-explorer-tree">
-          {scriptRoots.map((unit) => renderUnit(unit))}
+          <ReorderSectionList
+            items={scriptRoots}
+            disabled={disabled || structureSaving || !!movingSourceId}
+            renderItem={(unit, handle) => renderUnit(unit, 0, handle)}
+            onOrder={(order) => reorderSectionSiblings(null, order)}
+          />
         </div>
 
         <section

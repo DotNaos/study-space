@@ -57,7 +57,7 @@
 .authoring-unit { min-width:0; margin-top:.18rem; }
 .authoring-unit[data-depth="1"] { margin-left:.55rem; }
 .authoring-unit[data-depth="2"] { margin-left:1rem; }
-.authoring-unit-heading { display:grid; grid-template-columns:minmax(0,1fr) 1.7rem; align-items:center; min-width:0; border-radius:.4rem; }
+.authoring-unit-heading { display:grid; grid-template-columns:minmax(0,1fr) 1.7rem 1.7rem 1.7rem; align-items:center; min-width:0; border-radius:.4rem; }
 .authoring-unit-heading:hover,
 .authoring-unit-heading[data-selected=true] { background:var(--color-bg-1); }
 .authoring-unit-toggle {
@@ -78,6 +78,38 @@
   cursor:pointer;
 }
 .authoring-unit-toggle span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.authoring-unit-toggle .authoring-unit-hidden-mark { flex:0 0 auto; margin-left:.15rem; color:var(--color-text-muted); }
+.authoring-unit-heading[data-hidden=true] { color:var(--color-text-muted); }
+.authoring-unit-heading[data-hidden=true] .authoring-unit-toggle { color:var(--color-text-muted); }
+.authoring-unit-control-spacer { width:1.55rem; height:1.55rem; }
+.authoring-unit-control,
+.authoring-unit-menu > summary { opacity:0; pointer-events:none; transition:opacity .1s ease,background-color .1s ease,color .1s ease; }
+.authoring-unit-heading:hover .authoring-unit-control,
+.authoring-unit-heading:focus-within .authoring-unit-control,
+.authoring-unit-heading:hover .authoring-unit-menu > summary,
+.authoring-unit-heading:focus-within .authoring-unit-menu > summary,
+.authoring-unit-menu[open] > summary { opacity:1; pointer-events:auto; }
+.authoring-unit-rename { display:flex; min-width:0; min-height:2rem; align-items:center; gap:.42rem; padding:.22rem .28rem .22rem .38rem; }
+.authoring-unit-rename-chevron { display:inline-flex; flex:0 0 auto; color:var(--color-text-muted); }
+.authoring-unit-rename input { width:100%; min-width:0; height:1.55rem; padding:.15rem .35rem; border:1px solid var(--color-focus-ring); border-radius:.3rem; outline:none; background:var(--color-bg-0); color:var(--color-text); font:inherit; font-size:.72rem; font-weight:600; }
+.authoring-unit-drag-handle,
+.authoring-unit-menu > summary { display:inline-flex; width:1.55rem; height:1.55rem; align-items:center; justify-content:center; border:0; border-radius:.32rem; background:transparent; color:var(--color-text-muted); cursor:grab; }
+.authoring-unit-drag-handle:active { cursor:grabbing; }
+.authoring-unit-drag-handle:hover,
+.authoring-unit-drag-handle:focus-visible,
+.authoring-unit-menu > summary:hover,
+.authoring-unit-menu > summary:focus-visible { background:var(--color-bg-2); color:var(--color-text); }
+.authoring-unit-drag-handle:disabled { opacity:.35!important; cursor:default; }
+.authoring-unit-menu { position:relative; }
+.authoring-unit-menu > summary { list-style:none; cursor:pointer; }
+.authoring-unit-menu > summary::-webkit-details-marker { display:none; }
+.authoring-unit-menu > div { position:absolute; z-index:40; top:1.65rem; right:0; width:max-content; min-width:9.5rem; padding:.3rem; border:1px solid var(--color-border); border-radius:.5rem; background:var(--color-bg-0); box-shadow:0 .75rem 2rem rgb(0 0 0 / 35%); }
+.authoring-unit-menu > div button { display:flex; width:100%; align-items:center; gap:.38rem; padding:.38rem .48rem; border:0; border-radius:.3rem; background:transparent; color:var(--color-text); font:inherit; font-size:.66rem; text-align:left; cursor:pointer; }
+.authoring-unit-menu > div button:hover:not(:disabled) { background:var(--color-bg-1); }
+.authoring-unit-menu > div button:disabled { opacity:.4; cursor:default; }
+.authoring-unit-menu > div button svg { color:var(--color-text-muted); }
+.authoring-unit-reorder-list,
+.authoring-unit-reorder-item { min-width:0; }
 .authoring-unit-view {
   display:inline-flex;
   width:1.55rem;
@@ -88,13 +120,8 @@
   border-radius:.32rem;
   background:transparent;
   color:var(--color-text-muted);
-  opacity:0;
-  pointer-events:none;
   cursor:pointer;
-  transition:opacity .1s ease,background-color .1s ease,color .1s ease;
 }
-.authoring-unit-heading:hover .authoring-unit-view,
-.authoring-unit-view:focus-visible { opacity:1; pointer-events:auto; }
 .authoring-unit-view:hover,
 .authoring-unit-view:focus-visible { background:var(--color-bg-2); color:var(--color-text); }
 .authoring-unit-content { padding:.12rem 0 .12rem .8rem; }
