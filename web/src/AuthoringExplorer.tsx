@@ -332,7 +332,20 @@ function SourceCard({
   moving?: boolean;
 }) {
   const [open, setOpen] = useState(true);
+  const menuRef = useRef<HTMLDetailsElement>(null);
   const metadata = preview?.extraction;
+
+  useEffect(() => {
+    const dismissMenu = (event: PointerEvent) => {
+      const target = event.target as Element;
+      if (menuRef.current?.contains(target)) return;
+      if (target.closest?.(".authoring-source-submenu-flyout")) return;
+      if (menuRef.current) menuRef.current.open = false;
+    };
+    document.addEventListener("pointerdown", dismissMenu);
+    return () => document.removeEventListener("pointerdown", dismissMenu);
+  }, []);
+
   return (
     <article
       className="authoring-source-card"
@@ -361,7 +374,7 @@ function SourceCard({
           <span>{item.source.name}</span>
         </button>
         <ExtractionMark item={item} preview={preview} />
-        <details className="authoring-source-menu">
+        <details ref={menuRef} className="authoring-source-menu">
           <summary aria-label={`Aktionen für ${item.source.name}`} title="Aktionen">
             <MoreHorizontal size={14} />
           </summary>
