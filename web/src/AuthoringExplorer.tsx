@@ -9,6 +9,7 @@ import {
   ChevronRight,
   Circle,
   ExternalLink,
+  Eye,
   EyeOff,
   FolderInput,
   ListTodo,
@@ -443,6 +444,8 @@ export function AuthoringExplorer({
   const [dropTarget, setDropTarget] = useState<string>();
   const [movingSourceId, setMovingSourceId] = useState<string>();
   const [movingTaskId, setMovingTaskId] = useState<string>();
+  const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(() => new Set());
+  const [collapsedTasks, setCollapsedTasks] = useState<Set<string>>(() => new Set());
   const [moveError, setMoveError] = useState("");
 
   useEffect(() => {
@@ -816,6 +819,24 @@ export function AuthoringExplorer({
     );
   }
 
+  function toggleUnitCollapsed(id: string) {
+    setCollapsedUnits((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleTasksCollapsed(id: string) {
+    setCollapsedTasks((current) => {
+      const next = new Set(current);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   function renderUnit(unit: PipelineUnit, depth = 0) {
     const sources = sourcesFor(unit.id);
     const children = visibleUnits
@@ -824,6 +845,9 @@ export function AuthoringExplorer({
     const tasks = visibleUnits
       .filter((candidate) => unitKind(candidate) === "tasks" && taskOwner(visibleUnits, candidate)?.id === unit.id)
       .sort((a, b) => a.order - b.order);
+    const collapsed = collapsedUnits.has(unit.id);
+    const tasksCollapsed = collapsedTasks.has(unit.id);
+    const selected = selection.kind === "unit" && selection.id === unit.id;
     return (
       <section
         className="authoring-unit"
@@ -834,16 +858,28 @@ export function AuthoringExplorer({
         onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `content:${unit.id}`) setDropTarget(undefined); }}
         onDrop={(event) => dropOnUnit(event, unit)}
       >
-        <button
-          type="button"
-          className="authoring-unit-title"
-          data-selected={selection.kind === "unit" && selection.id === unit.id || undefined}
-          onClick={() => onSelectUnit(unit)}
-        >
-          <ChevronDown size={14} aria-hidden="true" />
-          <span>{unitLabel(unit)}</span>
-        </button>
-        <div className="authoring-unit-content">
+        <div className="authoring-unit-heading">
+          <button
+            type="button"
+            className="authoring-unit-toggle"
+            aria-expanded={!collapsed}
+            onClick={() => toggleUnitCollapsed(unit.id)}
+          >
+            {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
+            <span>{unitLabel(unit)}</span>
+          </button>
+          <button
+            type="button"
+            className="authoring-unit-view"
+            data-selected={selected || undefined}
+            aria-label={unitLabel(unit) + " ansehen"}
+            title="Ansehen"
+            onClick={() => onSelectUnit(unit)}
+          >
+            <Eye size={14} aria-hidden="true" />
+          </button>
+        </div>
+        {!collapsed && <div className="authoring-unit-content">
           {sources.map((item) => (
             <SourceCard
               key={item.source.id}
@@ -866,17 +902,23 @@ export function AuthoringExplorer({
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `tasks:${unit.id}`) setDropTarget(undefined); }}
             onDrop={(event) => dropOnTasks(event, unit)}
           >
-            <div className="authoring-task-section-title">
+            <button
+              type="button"
+              className="authoring-task-section-title"
+              aria-expanded={!tasksCollapsed}
+              onClick={() => toggleTasksCollapsed(unit.id)}
+            >
+              {tasksCollapsed ? <ChevronRight size={13} aria-hidden="true" /> : <ChevronDown size={13} aria-hidden="true" />}
               <ListTodo size={13} aria-hidden="true" />
               <span>Tasks</span>
-            </div>
-            {tasks.length ? (
+            </button>
+            {!tasksCollapsed && (tasks.length ? (
               <ul>{tasks.map(renderTask)}</ul>
             ) : (
               <div className="authoring-task-drop">Drop here</div>
-            )}
+            ))}
           </div>
-        </div>
+        </div>}
       </section>
     );
   }
@@ -889,6 +931,15 @@ export function AuthoringExplorer({
           {state.pending > 0 && <small>{state.pending} offen</small>}
         </div>
         <div className="authoring-explorer-actions">
+          <button
+            type="button"
+            data-selected={selection.kind === "script" || undefined}
+            aria-label="Gesamtes Skript ansehen"
+            title="Gesamtes Skript"
+            onClick={onSelectScript}
+          >
+            <BookOpen size={14} />
+          </button>
           <button
             type="button"
             aria-label="Quellenbestand aktualisieren"
@@ -906,16 +957,6 @@ export function AuthoringExplorer({
 
       {moveError && <div className="authoring-explorer-error" role="alert">{moveError}</div>}
       <div className="authoring-explorer-scroll">
-        <button
-          type="button"
-          className="authoring-script-row"
-          data-selected={selection.kind === "script" || undefined}
-          onClick={onSelectScript}
-        >
-          <BookOpen size={15} />
-          <span>Gesamtes Skript</span>
-        </button>
-
         <div className="authoring-explorer-tree">
           {scriptRoots.map((unit) => renderUnit(unit))}
         </div>
