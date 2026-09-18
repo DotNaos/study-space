@@ -134,16 +134,9 @@ export function CourseDetail({
         tab === "graph" || tab === "pipeline" ? "min-w-0" : "max-w-5xl"
       }
     >
-      <AppLink
-        navigate={navigate}
-        href="/courses"
-        className={`${linkClass} mb-4`}
-      >
-        <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
-      </AppLink>
-      <header className="relative isolate -mx-4 min-h-36 overflow-hidden border-b border-border/60 sm:-mx-8 sm:min-h-40 md:-mx-12 lg:-mx-16">
+      <header className="relative isolate -mx-4 -mt-6 overflow-hidden border-b border-border/60 sm:-mx-8 md:-mx-12 md:-mt-12 lg:-mx-16">
         <div
-          className="pointer-events-none absolute -right-8 -top-10 h-[calc(100%+4rem)] w-[72%] opacity-80 sm:-right-12 sm:w-[58%]"
+          className="pointer-events-none absolute -right-8 -top-8 h-[calc(100%+3rem)] w-[72%] opacity-80 sm:-right-12 sm:w-[58%]"
           style={{
             WebkitMaskImage:
               "linear-gradient(to right, transparent 0%, rgba(0,0,0,0.18) 22%, black 58%, black 100%)",
@@ -154,6 +147,12 @@ export function CourseDetail({
           <CourseArtwork course={course} eager className="h-full w-full" />
         </div>
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg-0 via-bg-0/25 to-transparent" />
+
+        <div className="relative z-10 px-4 pt-6 sm:px-8 md:px-12 md:pt-12 lg:px-16">
+          <AppLink navigate={navigate} href="/courses" className={linkClass}>
+            <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
+          </AppLink>
+        </div>
 
         <div className="relative z-10 flex min-h-36 items-end px-4 py-5 pr-12 sm:min-h-40 sm:px-8 sm:py-6 sm:pr-16 md:px-12 md:pr-20 lg:px-16 lg:pr-24">
           <div className="min-w-0 max-w-3xl">
@@ -180,7 +179,7 @@ export function CourseDetail({
             onClick={() => setArtworkOpen(true)}
             aria-label="Kursbild ändern"
             title="Kursbild ändern"
-            className="absolute right-4 top-1 z-20 flex size-8 items-center justify-center rounded-md bg-bg-0/45 text-text-muted backdrop-blur-md transition-colors hover:bg-bg-0/70 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:right-8 md:right-12 lg:right-16"
+            className="absolute right-4 top-6 z-20 flex size-8 items-center justify-center rounded-md bg-bg-0/45 text-text-muted backdrop-blur-md transition-colors hover:bg-bg-0/70 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:right-8 md:right-12 md:top-12 lg:right-16"
           >
             <ImagePlus size={14} aria-hidden="true" />
           </button>
