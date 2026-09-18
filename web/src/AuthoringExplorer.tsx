@@ -8,7 +8,7 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
-  ArrowRight,
+  ArrowUpRight,
   ExternalLink,
   EyeOff,
   FolderInput,
@@ -875,7 +875,7 @@ export function AuthoringExplorer({
             title="Öffnen"
             onClick={() => onSelectUnit(unit)}
           >
-            <ArrowRight size={14} aria-hidden="true" />
+            <ArrowUpRight size={14} aria-hidden="true" />
           </button>
         </div>
         {!collapsed && <div className="authoring-unit-content">

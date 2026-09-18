@@ -94,9 +94,9 @@
   transition:opacity .1s ease,background-color .1s ease,color .1s ease;
 }
 .authoring-unit-heading:hover .authoring-unit-view,
-.authoring-unit-heading:focus-within .authoring-unit-view { opacity:1; pointer-events:auto; }
-.authoring-unit-view:hover { background:var(--color-bg-2); color:var(--color-text); }
-@media(hover:none){.authoring-unit-view{opacity:1;pointer-events:auto}}
+.authoring-unit-view:focus-visible { opacity:1; pointer-events:auto; }
+.authoring-unit-view:hover,
+.authoring-unit-view:focus-visible { background:var(--color-bg-2); color:var(--color-text); }
 .authoring-unit-content { padding:.12rem 0 .12rem .8rem; }
 
 .authoring-source-card {
