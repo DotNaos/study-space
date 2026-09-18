@@ -257,6 +257,20 @@
 .authoring-task-solution-missing { display:flex; min-width:0; min-height:1.55rem; align-items:center; gap:.38rem; padding:0 .12rem; font-size:.6rem; }
 .authoring-task-solution-missing > span { color:var(--color-warning); font-weight:600; }
 .authoring-task-solution-missing small { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--color-text-muted); font-size:.54rem; }
+.authoring-solution-picker-trigger { flex:0 0 auto; padding:.1rem .32rem; border:1px solid var(--color-border); border-radius:.28rem; background:var(--color-bg-1); color:var(--color-text); font:inherit; font-size:.55rem; font-weight:600; cursor:pointer; }
+.authoring-solution-picker-trigger:hover:not(:disabled),
+.authoring-solution-picker-trigger[aria-expanded=true] { border-color:color-mix(in srgb,var(--color-accent) 48%,var(--color-border)); background:var(--color-bg-2); }
+.authoring-solution-picker-trigger:disabled { opacity:.45; cursor:default; }
+.authoring-solution-picker-flyout { position:fixed; z-index:1600; overflow:hidden; border:1px solid var(--color-border); border-radius:.5rem; background:var(--color-bg-0); box-shadow:0 .75rem 2rem rgb(0 0 0 / 35%); }
+.authoring-solution-picker-heading { display:grid; gap:.12rem; padding:.48rem .55rem .38rem; border-bottom:1px solid var(--color-border); }
+.authoring-solution-picker-heading strong { font-size:.64rem; font-weight:650; }
+.authoring-solution-picker-heading small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--color-text-muted); font-size:.54rem; }
+.authoring-solution-picker-list { max-height:14rem; overflow:auto; padding:.28rem; }
+.authoring-solution-picker-list button { display:grid; width:100%; grid-template-columns:1rem minmax(0,1fr) auto; align-items:center; gap:.38rem; padding:.38rem .42rem; border:0; border-radius:.3rem; background:transparent; color:var(--color-text); font:inherit; font-size:.61rem; text-align:left; cursor:pointer; }
+.authoring-solution-picker-list button:hover { background:var(--color-bg-1); }
+.authoring-solution-picker-list button > span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.authoring-solution-picker-list button > small { color:var(--color-text-muted); font-size:.5rem; text-transform:uppercase; letter-spacing:.03em; }
+.authoring-solution-picker-empty { padding:.6rem; color:var(--color-text-muted); font-size:.58rem; }
 .authoring-task-unpaired { opacity:.72; }
 .authoring-task-row { display:grid; grid-template-columns:minmax(0,1fr) 1.7rem; align-items:center; min-width:0; }
 .authoring-task-open {

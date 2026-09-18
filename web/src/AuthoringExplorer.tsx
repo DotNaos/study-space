@@ -35,7 +35,7 @@ import {
   materialDocumentPath,
   type MaterialDocument,
 } from "./material-api";
-import { pipelinePath, type MappingItem, type PipelineSourceView, type PipelineState, type PipelineUnit } from "./pipeline-api";
+import { pipelinePath, type MappingItem, type PipelineSourceView, type PipelineState, type PipelineUnit, type SourceUse } from "./pipeline-api";
 import { currentUse, placementRole, sourcePlacement } from "./source-placement";
 import type { StructureSave } from "./structure-autosave";
 import { matchingSolutionSource, matchingTaskSource, solutionLike, taskLike } from "./task-pairing";
@@ -380,6 +380,113 @@ function ReorderSourceList({
   );
 }
 
+function SolutionPicker({
+  task,
+  candidates,
+  disabled,
+  onPick,
+}: {
+  task: PipelineSourceView;
+  candidates: PipelineSourceView[];
+  disabled: boolean;
+  onPick: (source: PipelineSourceView) => void;
+}) {
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const flyoutRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<{ top: number; left: number; width: number }>();
+
+  useEffect(() => {
+    if (!open) return;
+    const update = () => {
+      const rect = triggerRef.current?.getBoundingClientRect();
+      if (!rect) return;
+      const gutter = 8;
+      const width = Math.min(320, window.innerWidth - gutter * 2);
+      const left = Math.min(
+        Math.max(gutter, rect.left),
+        Math.max(gutter, window.innerWidth - width - gutter),
+      );
+      const preferredTop = rect.bottom + 4;
+      setPosition({
+        top: Math.min(preferredTop, Math.max(gutter, window.innerHeight - 280 - gutter)),
+        left,
+        width,
+      });
+    };
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || flyoutRef.current?.contains(target)) return;
+      setOpen(false);
+      setPosition(undefined);
+    };
+    update();
+    window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
+    document.addEventListener("pointerdown", dismiss);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
+      document.removeEventListener("pointerdown", dismiss);
+    };
+  }, [open]);
+
+  const choose = (source: PipelineSourceView) => {
+    setOpen(false);
+    setPosition(undefined);
+    onPick(source);
+  };
+
+  return (
+    <>
+      <button
+        ref={triggerRef}
+        type="button"
+        className="authoring-solution-picker-trigger"
+        disabled={disabled}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        Lösung zuordnen
+      </button>
+      {open && position && typeof document !== "undefined" && createPortal(
+        <div
+          ref={flyoutRef}
+          className="authoring-solution-picker-flyout"
+          role="menu"
+          aria-label={"Lösung für " + task.source.name + " zuordnen"}
+          style={position}
+        >
+          <div className="authoring-solution-picker-heading">
+            <strong>Lösung zuordnen</strong>
+            <small>{task.source.name}</small>
+          </div>
+          <div className="authoring-solution-picker-list">
+            {candidates.length ? candidates.map((source) => (
+              <button
+                type="button"
+                role="menuitem"
+                key={source.source.id}
+                onClick={() => choose(source)}
+              >
+                {hasFileExtension(source.source.name)
+                  ? <Icon.File filename={source.source.name} size={14} />
+                  : <ExternalLink size={14} aria-hidden="true" />}
+                <span>{source.source.name}</span>
+                {solutionLike(source) && <small>Solution</small>}
+              </button>
+            )) : (
+              <div className="authoring-solution-picker-empty">Keine passende vorhandene Quelle.</div>
+            )}
+          </div>
+        </div>,
+        document.body,
+      )}
+    </>
+  );
+}
+
 function SectionActions({
   unit,
   hidden,
@@ -525,6 +632,8 @@ type OptimisticSourcePlacement = {
   targetUnitId?: string;
   hidden: boolean;
   order?: number;
+  role?: string;
+  relatedSourceId?: string | null;
 };
 
 export function AuthoringExplorer({
@@ -638,9 +747,15 @@ export function AuthoringExplorer({
         const item = state.sources.find((candidate) => candidate.source.id === sourceId);
         if (!item) continue;
         const actual = sourcePlacement(state, item);
-        const confirmed = optimistic.hidden
+        const actualUse = currentUse(item);
+        const placementConfirmed = optimistic.hidden
           ? actual.hidden
           : !actual.hidden && actual.currentUnitId === optimistic.targetUnitId;
+        const mappingConfirmed = !optimistic.role || (
+          actualUse?.role === optimistic.role
+          && (actualUse.relatedSourceId ?? null) === (optimistic.relatedSourceId ?? null)
+        );
+        const confirmed = placementConfirmed && mappingConfirmed;
         if (confirmed) {
           delete next[sourceId];
           changed = true;
@@ -668,6 +783,19 @@ export function AuthoringExplorer({
       hidden: optimistic.hidden,
       overridden: true,
     };
+  }
+
+  function effectiveUse(item: PipelineSourceView): SourceUse | undefined {
+    const optimistic = optimisticPlacements[item.source.id];
+    if (optimistic?.role && optimistic.targetUnitId) {
+      return {
+        unitId: optimistic.targetUnitId,
+        role: optimistic.role,
+        relatedSourceId: optimistic.relatedSourceId ?? null,
+        order: optimistic.order ?? null,
+      };
+    }
+    return currentUse(item);
   }
 
   const explorerUnits = useMemo(() => effectiveUnits, [effectiveUnits]);
@@ -1291,6 +1419,60 @@ export function AuthoringExplorer({
     );
   }
 
+  function solutionCandidatesFor(primary: PipelineSourceView) {
+    return state.sources
+      .filter((candidate) =>
+        candidate.source.present
+        && candidate.source.id !== primary.source.id
+        && candidate.source.acquisition !== "unsupported"
+      )
+      .sort((left, right) => {
+        const leftScore =
+          (solutionLike(left) ? 0 : 4)
+          + (left.source.sectionId === primary.source.sectionId ? 0 : 2)
+          + (left.source.kind === "file" ? 0 : 1);
+        const rightScore =
+          (solutionLike(right) ? 0 : 4)
+          + (right.source.sectionId === primary.source.sectionId ? 0 : 2)
+          + (right.source.kind === "file" ? 0 : 1);
+        return leftScore - rightScore || left.source.name.localeCompare(right.source.name);
+      });
+  }
+
+  async function assignSolutionSource(
+    primary: PipelineSourceView,
+    task: PipelineUnit,
+    solution: PipelineSourceView,
+  ) {
+    if (disabled || movingSourceId) return;
+    const previousTask = previousTaskFor(solution);
+    applyOptimisticPlacement(solution, {
+      targetUnitId: task.id,
+      hidden: false,
+      order: 1,
+      role: "solution",
+      relatedSourceId: primary.source.id,
+    });
+    setMovingSourceId(solution.source.id);
+    setMoveError("");
+    try {
+      let next = await saveMapping(solution, task, state, {
+        role: "solution",
+        relatedSourceId: primary.source.id,
+        order: 1,
+      });
+      if (previousTask && previousTask.id !== task.id) {
+        next = await removeEmptyTask(previousTask.id, next);
+      }
+      onState(next);
+    } catch (error) {
+      rollbackOptimisticPlacement(solution.source.id);
+      setMoveError(message(error));
+    } finally {
+      setMovingSourceId(undefined);
+    }
+  }
+
   function renderTask(task: PipelineUnit, siblingTasks: PipelineUnit[]) {
     const sources = sourcesFor(task.id);
     const siblingEntries = siblingTasks.flatMap((unit) =>
@@ -1316,7 +1498,7 @@ export function AuthoringExplorer({
           <div className="authoring-task-bundles">
             {primarySources.map((primary) => {
               const explicit = siblingEntries.find((entry) => {
-                const use = currentUse(entry.item);
+                const use = effectiveUse(entry.item);
                 return use?.role === "solution" && use.relatedSourceId === primary.source.id;
               });
               const matched = explicit?.item ?? matchingSolutionSource(primary, siblingSources);
@@ -1336,7 +1518,13 @@ export function AuthoringExplorer({
                       ) : (
                         <div className="authoring-task-solution-missing">
                           <span>Lösung fehlt</span>
-                          <small>manuell oder mit Agent erstellen</small>
+                          <SolutionPicker
+                            task={primary}
+                            candidates={solutionCandidatesFor(primary)}
+                            disabled={disabled || !!movingSourceId}
+                            onPick={(solution) => void assignSolutionSource(primary, task, solution)}
+                          />
+                          <small>oder später erstellen</small>
                         </div>
                       )}
                     </div>
