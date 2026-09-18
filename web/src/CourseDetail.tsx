@@ -141,7 +141,7 @@ export function CourseDetail({
       >
         <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
       </AppLink>
-      <header className="relative isolate min-h-36 overflow-hidden border-b border-border/60 sm:min-h-40">
+      <header className="relative isolate -mx-4 min-h-36 overflow-hidden border-b border-border/60 sm:-mx-8 sm:min-h-40 md:-mx-12 lg:-mx-16">
         <div
           className="pointer-events-none absolute -right-8 -top-10 h-[calc(100%+4rem)] w-[72%] opacity-80 sm:-right-12 sm:w-[58%]"
           style={{
@@ -155,7 +155,7 @@ export function CourseDetail({
         </div>
         <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-bg-0 via-bg-0/25 to-transparent" />
 
-        <div className="relative z-10 flex min-h-36 items-end py-5 pr-12 sm:min-h-40 sm:py-6">
+        <div className="relative z-10 flex min-h-36 items-end px-4 py-5 pr-12 sm:min-h-40 sm:px-8 sm:py-6 sm:pr-16 md:px-12 md:pr-20 lg:px-16 lg:pr-24">
           <div className="min-w-0 max-w-3xl">
             {semester && (
               <p className="mb-2 flex items-center gap-2 text-xs font-medium text-text-muted">
@@ -180,7 +180,7 @@ export function CourseDetail({
             onClick={() => setArtworkOpen(true)}
             aria-label="Kursbild ändern"
             title="Kursbild ändern"
-            className="absolute right-0 top-1 z-20 flex size-8 items-center justify-center rounded-md bg-bg-0/45 text-text-muted backdrop-blur-md transition-colors hover:bg-bg-0/70 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring"
+            className="absolute right-4 top-1 z-20 flex size-8 items-center justify-center rounded-md bg-bg-0/45 text-text-muted backdrop-blur-md transition-colors hover:bg-bg-0/70 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:right-8 md:right-12 lg:right-16"
           >
             <ImagePlus size={14} aria-hidden="true" />
           </button>
