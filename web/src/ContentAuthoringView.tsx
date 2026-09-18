@@ -541,7 +541,7 @@ export function ContentAuthoringView({
         {stale > 0 && <span className="content-authoring-warning"><AlertTriangle size={13}/>{stale} Quelle{stale === 1 ? "" : "n"} aktualisiert</span>}
       </div>
       {editing && <div className="content-authoring-actions">
-        <Button size="sm" variant="ghost" icon="refresh" label={blocks.length ? "Inhalte aktualisieren" : "Rohfassung erstellen"} disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
+        {blocks.length > 0 && <Button size="sm" variant="ghost" icon="refresh" label="Inhalte aktualisieren" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>}
         {stale > 0 && <Button size="sm" variant="ghost" label="Aktualisierte Raw-Fassungen übernehmen" disabled={busy || saving || aiBusy} onPress={() => void rebuildStale()}/>}
         {onCollapseView && <button type="button" className="content-panel-collapse" onClick={onCollapseView} aria-label="View einklappen" title="Collapse View"><PanelRightClose size={14}/></button>}
       </div>}
@@ -561,10 +561,10 @@ export function ContentAuthoringView({
           ? `${pipeline.pending} Quellen sind noch offen. Ordne sie unter Quellen zu oder blende sie aus.`
           : "Keine sichtbare Quelle ist einem sichtbaren Struktur-Eintrag zugeordnet."
         : "Noch keine editierbare Rohfassung aus der bestätigten Struktur."}</span>
-      <Button label="Rohfassung erstellen" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
+      <Button variant="primary" icon="sparkles" label="Rohfassung erstellen" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
     </div>}
 
-    {selection.kind !== "source" ? <div ref={readingRootRef}>{renderReadingSelection()}</div> : !selectedSummary ? <div className="content-authoring-empty">Diese Datei ist noch nicht als Inhalt materialisiert.</div> : <div className="content-source-detail" ref={activeBlockRef}>
+    {blocks.length > 0 && (selection.kind !== "source" ? <div ref={readingRootRef}>{renderReadingSelection()}</div> : !selectedSummary ? <div className="content-authoring-empty">Diese Datei ist noch nicht als Inhalt materialisiert.</div> : <div className="content-source-detail" ref={activeBlockRef}>
       <div className="content-source-meta">
         <Icon.File filename={selectedSummary.name} size={16}/><span>{statusLabel(selectedSummary)}</span>{sourcePages(selectedSummary) && <span>{sourcePages(selectedSummary)}</span>}{selectedSummary.stale && <AlertTriangle size={13}/>} {selectedSummary.status === "ready" && <Check size={13}/>}
       </div>
@@ -609,7 +609,7 @@ export function ContentAuthoringView({
           mobileSide={comparePane === "left" ? "before" : "after"}
         />}
       </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="content-raw"><code>{rawRevision?.content ?? ""}</code></pre> : null}
-    </div>}
+    </div>)}
 
     {selectedSummary && selectedView?.revision && editing ? <div className="content-ai-wrap">
       {aiStatus ? <div className="content-ai-status" role="status"><span>{aiStatus}</span><div><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div></div> : null}
