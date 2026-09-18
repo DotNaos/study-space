@@ -925,6 +925,27 @@ export function AuthoringExplorer({
     });
   }
 
+  async function clearMapping(
+    item: PipelineSourceView,
+    baseState = state,
+    reason = "Quellenzuordnung im Explorer zurückgesetzt.",
+  ) {
+    return api<PipelineState>(`${pipelinePath(courseId)}/mapping`, {
+      method: "POST",
+      body: JSON.stringify({
+        expectedRevision: baseState.revision,
+        items: [{
+          sourceId: item.source.id,
+          sourceVersion: item.source.sourceVersion,
+          disposition: "clear",
+          uses: [],
+        }],
+        actor: "user",
+        reason,
+      }),
+    });
+  }
+
   function setOptimisticStructure(units: PipelineUnit[]) {
     setOptimisticUnits(units);
   }
@@ -1153,6 +1174,33 @@ export function AuthoringExplorer({
     }
   }
 
+  async function resetSource(item: PipelineSourceView) {
+    if (disabled || movingSourceId) return;
+    const placement = sourcePlacement(state, item);
+    const previousTask = previousTaskFor(item);
+    applyOptimisticPlacement(item, {
+      targetUnitId: placement.defaultUnitId,
+      hidden: false,
+    });
+    setMovingSourceId(item.source.id);
+    setMoveError("");
+    try {
+      let next = await clearMapping(item);
+      if (previousTask && previousTask.id !== placement.defaultUnitId) {
+        next = await removeEmptyTask(previousTask.id, next);
+      }
+      onState(next);
+      const resetItem = next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item;
+      onSelectSource(resetItem, sourcePlacement(next, resetItem).currentUnitId ?? undefined);
+    } catch (error) {
+      rollbackOptimisticPlacement(item.source.id);
+      setMoveError(message(error));
+    } finally {
+      setMovingSourceId(undefined);
+      clearSourceDrag();
+    }
+  }
+
   async function moveToIgnored(item: PipelineSourceView) {
     if (disabled || movingSourceId) return;
     const previousUnitId = sourcePlacement(state, item).currentUnitId;
@@ -1347,6 +1395,13 @@ export function AuthoringExplorer({
   }
 
   async function moveSourceToTarget(item: PipelineSourceView, targetKey: string) {
+    if (targetKey.startsWith("solution:")) {
+      const [, taskId, primarySourceId] = targetKey.split(":");
+      const task = effectiveUnits.find((unit) => unit.id === taskId && unitKind(unit) === "tasks");
+      const primary = state.sources.find((candidate) => candidate.source.id === primarySourceId);
+      if (task && primary) await assignSolutionSource(primary, task, item);
+      return;
+    }
     if (targetKey === "ignored") {
       await moveToIgnored(item);
       return;
@@ -1378,6 +1433,7 @@ export function AuthoringExplorer({
       {currentScript && unitKind(current!) === "script" && <button type="button" onClick={() => void moveToTasks(item, currentScript)}><ListTodo size={13} aria-hidden="true" /><span>Move to Tasks</span></button>}
       {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}><BookOpen size={13} aria-hidden="true" /><span>Move to Content</span></button>}
       {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}><EyeOff size={13} aria-hidden="true" /><span>Move to Ignored</span></button>}
+      {(item.decision || optimisticPlacements[item.source.id]) && <button type="button" onClick={() => void resetSource(item)}><RotateCcw size={13} aria-hidden="true" /><span>Reset</span></button>}
       <MoveSubmenu>
         {scriptUnits.map((unit) => (
           <div className="authoring-source-menu-destination" key={unit.id}>
@@ -1445,7 +1501,23 @@ export function AuthoringExplorer({
     solution: PipelineSourceView,
   ) {
     if (disabled || movingSourceId) return;
+    if (solution.source.id === primary.source.id) {
+      setMoveError("Eine Aufgabenquelle kann nicht ihre eigene Lösung sein.");
+      return;
+    }
+    if (solution.source.acquisition === "unsupported") {
+      setMoveError("Diese Quelle kann nicht als Lösung verwendet werden.");
+      return;
+    }
+
     const previousTask = previousTaskFor(solution);
+    const existingSolution = sourcesFor(task.id).find((candidate) => {
+      if (candidate.source.id === solution.source.id) return false;
+      const use = effectiveUse(candidate);
+      return use?.role === "solution" && use.relatedSourceId === primary.source.id;
+    });
+    const existingDefault = existingSolution ? sourcePlacement(state, existingSolution).defaultUnitId : undefined;
+
     applyOptimisticPlacement(solution, {
       targetUnitId: task.id,
       hidden: false,
@@ -1453,13 +1525,44 @@ export function AuthoringExplorer({
       role: "solution",
       relatedSourceId: primary.source.id,
     });
+    if (existingSolution) {
+      applyOptimisticPlacement(existingSolution, {
+        targetUnitId: existingDefault,
+        hidden: false,
+      });
+    }
+
     setMovingSourceId(solution.source.id);
     setMoveError("");
     try {
-      let next = await saveMapping(solution, task, state, {
-        role: "solution",
-        relatedSourceId: primary.source.id,
-        order: 1,
+      const items: MappingItem[] = [{
+        sourceId: solution.source.id,
+        sourceVersion: solution.source.sourceVersion,
+        disposition: "use",
+        uses: [{
+          unitId: task.id,
+          role: "solution",
+          relatedSourceId: primary.source.id,
+          order: 1,
+        }],
+      }];
+      if (existingSolution) {
+        items.push({
+          sourceId: existingSolution.source.id,
+          sourceVersion: existingSolution.source.sourceVersion,
+          disposition: "clear",
+          uses: [],
+        });
+      }
+
+      let next = await api<PipelineState>(`${pipelinePath(courseId)}/mapping`, {
+        method: "POST",
+        body: JSON.stringify({
+          expectedRevision: state.revision,
+          items,
+          actor: "user",
+          reason: "Lösungsquelle im Explorer zugeordnet.",
+        }),
       });
       if (previousTask && previousTask.id !== task.id) {
         next = await removeEmptyTask(previousTask.id, next);
@@ -1467,6 +1570,7 @@ export function AuthoringExplorer({
       onState(next);
     } catch (error) {
       rollbackOptimisticPlacement(solution.source.id);
+      if (existingSolution) rollbackOptimisticPlacement(existingSolution.source.id);
       setMoveError(message(error));
     } finally {
       setMovingSourceId(undefined);
@@ -1510,7 +1614,12 @@ export function AuthoringExplorer({
               return (
                 <div className="authoring-task-bundle" key={primary.source.id}>
                   {renderSourceCard(primary, task.id)}
-                  <div className="authoring-task-solution" data-missing={!solutionEntry || undefined}>
+                  <div
+                    className="authoring-task-solution"
+                    data-missing={!solutionEntry || undefined}
+                    data-source-drop-target={"solution:" + task.id + ":" + primary.source.id}
+                    data-drop-active={dropTarget === "solution:" + task.id + ":" + primary.source.id || undefined}
+                  >
                     <span className="authoring-task-solution-icon"><CheckCheck size={13} aria-hidden="true" /></span>
                     <div className="authoring-task-solution-content">
                       {solutionEntry ? (
