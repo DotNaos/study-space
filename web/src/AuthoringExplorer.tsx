@@ -183,11 +183,12 @@ function ExtractionMark({
   );
 }
 
-function MoveSubmenu({ children }: { children: ReactNode }) {
+function MoveSubmenu({ children }: { children: (target: "content" | "tasks") => ReactNode }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<number | undefined>(undefined);
   const [open, setOpen] = useState(false);
+  const [target, setTarget] = useState<"content" | "tasks">("content");
   const [position, setPosition] = useState<{ top: number; left: number; width: number }>();
 
   const cancelClose = () => {
@@ -293,14 +294,34 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
             onFocus={cancelClose}
             onBlur={scheduleClose}
             onClick={(event) => {
-              if ((event.target as Element).closest?.("button")) {
+              if ((event.target as Element).closest?.("[data-submenu-destination]")) {
                 cancelClose();
                 setOpen(false);
                 setPosition(undefined);
               }
             }}
           >
-            {children}
+            <div className="authoring-source-submenu-mode" role="tablist" aria-label="Move destination type">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={target === "content"}
+                onClick={() => setTarget("content")}
+              >
+                Content
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={target === "tasks"}
+                onClick={() => setTarget("tasks")}
+              >
+                Tasks
+              </button>
+            </div>
+            <div className="authoring-source-submenu-destinations">
+              {children(target)}
+            </div>
           </div>,
           document.body,
         )}
@@ -643,13 +664,18 @@ export function AuthoringExplorer({
       {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}><BookOpen size={13} aria-hidden="true" /><span>Move to Content</span></button>}
       {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}><EyeOff size={13} aria-hidden="true" /><span>Move to Ignored</span></button>}
       <MoveSubmenu>
-        {scriptUnits.map((unit) => <span className="authoring-source-menu-destination" key={unit.id}>
-          <button type="button" role="menuitem" onClick={() => void moveToUnit(item, unit)}><span>{unitLabel(unit)}</span></button>
-          <button type="button" role="menuitem" data-destination-kind="tasks" onClick={() => void moveToTasks(item, unit)}>
+        {(target) => scriptUnits.map((unit) => (
+          <button
+            type="button"
+            role="menuitem"
+            data-submenu-destination
+            className="authoring-source-menu-destination"
+            key={unit.id}
+            onClick={() => void (target === "tasks" ? moveToTasks(item, unit) : moveToUnit(item, unit))}
+          >
             <span>{unitLabel(unit)}</span>
-            <span className="authoring-source-menu-task-badge">Tasks</span>
           </button>
-        </span>)}
+        ))}
       </MoveSubmenu>
     </>;
   }
