@@ -23,6 +23,8 @@ public static class MaterialEndpoints
             Results.Json(await catalog.StartImport(courseId, ct), statusCode: 202));
         routes.MapPost("/courses/{courseId:long}/reextract-pdfs", async (long courseId, MaterialCatalog catalog, CancellationToken ct) =>
             Results.Json(await catalog.StartPdfReextract(courseId, ct), statusCode: 202));
+        routes.MapPost("/courses/{courseId:long}/sources/{sourceId}/extract", async (long courseId, string sourceId, MaterialCatalog catalog, CancellationToken ct) =>
+            Results.Json(await catalog.StartSourceImport(courseId, sourceId, ct), statusCode: 202));
         routes.MapDelete("/courses/{courseId:long}/jobs/{jobId}", (long courseId, string jobId, IMaterialCatalog catalog, CancellationToken ct) => catalog.Cancel(courseId, jobId, ct));
         routes.MapGet("/{materialId}/revisions/{revision}", (string materialId, string revision, IMaterialCatalog catalog, CancellationToken ct) => catalog.GetDocument(materialId, revision, ct));
         routes.MapGet("/{materialId}/revisions/{revision}/assets/{assetId}", async (string materialId, string revision, string assetId, IMaterialCatalog catalog, HttpContext context, CancellationToken ct) =>

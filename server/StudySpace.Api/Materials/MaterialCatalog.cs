@@ -15,17 +15,18 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
         try { return Snapshot(await store.Read(courseId, ct) ?? new() { CourseId = courseId }); }
         finally { changes.Release(); }
     }
-    public Task<MaterialSnapshot> StartImport(long courseId, CancellationToken ct = default) => StartImport(courseId, false, ct);
-    public Task<MaterialSnapshot> StartPdfReextract(long courseId, CancellationToken ct = default) => StartImport(courseId, true, ct);
-    private async Task<MaterialSnapshot> StartImport(long courseId, bool reextractPdfs, CancellationToken ct)
+    public Task<MaterialSnapshot> StartImport(long courseId, CancellationToken ct = default) => StartImport(courseId, false, null, ct);
+    public Task<MaterialSnapshot> StartPdfReextract(long courseId, CancellationToken ct = default) => StartImport(courseId, true, null, ct);
+    public Task<MaterialSnapshot> StartSourceImport(long courseId, string sourceId, CancellationToken ct = default) => StartImport(courseId, false, sourceId, ct);
+    private async Task<MaterialSnapshot> StartImport(long courseId, bool reextractPdfs, string? sourceId, CancellationToken ct)
     {
-        if (courseId <= 0) throw MaterialStore.Missing();
+        if (courseId <= 0 || sourceId is not null && !ValidSourceId(sourceId)) throw MaterialStore.Missing();
         await changes.WaitAsync(ct);
         try
         {
             var state = await store.Read(courseId, ct) ?? new() { CourseId = courseId };
             if (state.Job?.Status is "queued" or "running") return Snapshot(state);
-            state.Job = new(Guid.NewGuid().ToString("N"), "queued", 0, 0, clock.GetUtcNow(), null, null, reextractPdfs);
+            state.Job = new(Guid.NewGuid().ToString("N"), "queued", 0, 0, clock.GetUtcNow(), null, null, reextractPdfs, sourceId);
             state.Status = "queued"; state.SnapshotId = null; state.InventoryReady = false; state.UpdatedAt = clock.GetUtcNow();
             await store.Write(state); return Snapshot(state);
         }
@@ -40,7 +41,7 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
             if (state.Job?.Id != jobId) throw MaterialStore.Missing();
             if (state.Job.Status is not ("queued" or "running")) return Snapshot(state);
             if (activeJob == jobId) activeCancellation?.Cancel();
-            foreach (var item in state.Items.Where(item => item.Status is "pending" or "downloading" or "extracting"))
+            foreach (var item in JobItems(state).Where(item => item.Status is "pending" or "downloading" or "extracting"))
             { item.Status = "cancelled"; item.Reason = "Import cancelled. Previously imported source copies remain available."; }
             await Finish(state, "cancelled", null); return Snapshot(state);
         }
@@ -76,7 +77,7 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
                 activeJob = state.Job!.Id; activeCancellation = run;
                 state.Job = state.Job with { Status = "running" }; state.Status = "running";
                 // An interrupted process never marks an unfinished item successful.
-                foreach (var item in state.Items.Where(item => item.Status is "downloading" or "extracting")) item.Status = "pending";
+                foreach (var item in JobItems(state).Where(item => item.Status is "downloading" or "extracting")) item.Status = "pending";
                 await store.Write(state);
             }
             finally { changes.Release(); }
@@ -87,11 +88,28 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
                 await Update(course, job, current =>
                 {
                     var previous = current.Items.ToDictionary(item => item.Source.Id);
-                    current.Items = inventory.Sources.Select(source => new MaterialItemState
+                    var selectedSourceId = current.Job!.SourceId;
+                    current.Items = inventory.Sources.Select(source =>
                     {
-                        Source = source, Revision = previous.GetValueOrDefault(source.Id)?.Revision,
-                        Status = source.UnavailableReason is null ? "pending" : "unsupported", Reason = source.UnavailableReason
+                        previous.TryGetValue(source.Id, out var prior);
+                        if (source.UnavailableReason is not null) return new MaterialItemState
+                        {
+                            Source = source, Revision = prior?.Revision, Status = "unsupported", Reason = source.UnavailableReason,
+                            Warnings = prior?.Warnings ?? [], Complete = prior?.Complete ?? false
+                        };
+                        if (selectedSourceId is null || source.Id == selectedSourceId) return new MaterialItemState
+                        {
+                            Source = source, Revision = prior?.Revision, Status = "pending", Warnings = prior?.Warnings ?? [],
+                            Complete = prior?.Complete ?? false
+                        };
+                        if (prior is not null) return new MaterialItemState
+                        {
+                            Source = source, Revision = prior.Revision, Status = prior.Status, Reason = prior.Reason, Warnings = prior.Warnings,
+                            Attempts = prior.Attempts, CandidateRevision = prior.CandidateRevision, Complete = prior.Complete
+                        };
+                        return new MaterialItemState { Source = source, Status = "not-imported" };
                     }).ToList();
+                    if (selectedSourceId is not null && !current.Items.Any(item => item.Source.Id == selectedSourceId)) throw MaterialStore.Missing();
                     current.InventoryReady = true;
                 }, run.Token);
             }
@@ -99,7 +117,7 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
             {
                 run.Token.ThrowIfCancellationRequested();
                 var current = await store.Read(course, run.Token) ?? throw MaterialStore.Missing();
-                var pending = current.Items.FirstOrDefault(item => item.Status == "pending");
+                var pending = JobItems(current).FirstOrDefault(item => item.Status == "pending");
                 if (pending is null) break;
                 await ImportOne(course, job, pending, current.Job!.ReextractPdfs, run.Token);
             }
@@ -211,7 +229,8 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
             var state = await store.Read(courseId, ct) ?? throw MaterialStore.Missing();
             if (state.Job?.Id != jobId || state.Job.Status != "running") throw new OperationCanceledException();
             update(state); state.UpdatedAt = clock.GetUtcNow();
-            state.Job = state.Job with { Total = state.Items.Count, Completed = state.Items.Count(item => IsTerminal(item.Status)) };
+            var jobItems = JobItems(state).ToArray();
+            state.Job = state.Job with { Total = jobItems.Length, Completed = jobItems.Count(item => IsTerminal(item.Status)) };
             await store.Write(state);
         }
         finally { changes.Release(); }
@@ -219,14 +238,18 @@ public sealed class MaterialCatalog(MaterialStore store, IMaterialSourceProvider
     private async Task Finish(MaterialCourseState state, string jobStatus, string? error)
     {
         state.UpdatedAt = clock.GetUtcNow();
+        var jobItems = JobItems(state).ToArray();
         state.Job = state.Job! with { Status = jobStatus, FinishedAt = state.UpdatedAt, Error = error,
-            Completed = state.Items.Count(item => IsTerminal(item.Status)), Total = state.Items.Count };
+            Completed = jobItems.Count(item => IsTerminal(item.Status)), Total = jobItems.Length };
         state.Status = jobStatus == "cancelled" ? "cancelled" : jobStatus == "failed" ? "failed" :
             state.Items.Count > 0 && state.Items.All(item => item.Status == "ready" && item.Complete) ? "ready" : "partial";
         var identity = Snapshot(state) with { SnapshotId = null, Job = null, UpdatedAt = null };
         state.SnapshotId = MaterialStore.Hash(JsonSerializer.SerializeToUtf8Bytes(identity, MaterialStore.Json));
         await store.Write(state); await store.WriteSnapshot(Snapshot(state));
     }
+    private static IEnumerable<MaterialItemState> JobItems(MaterialCourseState state) =>
+        state.Job?.SourceId is { } sourceId ? state.Items.Where(item => item.Source.Id == sourceId) : state.Items;
+    private static bool ValidSourceId(string value) => value.Length == 64 && value.All(ch => ch is >= 'a' and <= 'f' or >= '0' and <= '9');
     private static MaterialSnapshot Snapshot(MaterialCourseState state)
     {
         var entries = state.Items.Select(item => new MaterialEntry(item.Source.Id, item.Revision, item.Source.Name, item.Source.Kind,

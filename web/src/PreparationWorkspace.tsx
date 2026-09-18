@@ -35,7 +35,7 @@ export function PreparationWorkspace({
   onState: (state: PipelineState) => void;
   onFocus: () => void;
   onGuard?: (guard: (() => Promise<boolean>) | null) => void;
-  onRefresh: () => void;
+  onRefresh: () => Promise<PipelineState | undefined> | void;
 }) {
   const firstUnit = useMemo(() => state.units
     .filter(unit => unitKind(unit) === "script" && unit.parentId === null && !unitHidden(unit, state.units))
@@ -146,7 +146,7 @@ export function PreparationWorkspace({
           state={state}
           selection={selection}
           refreshing={busy}
-          onRefresh={onRefresh}
+          onRefresh={() => { void onRefresh(); }}
           onSelectScript={() => setSelection({ kind: "script" })}
           onSelectUnit={selectUnit}
           onSelectSource={selectSource}
@@ -171,6 +171,7 @@ export function PreparationWorkspace({
           onSelectSource={(id, unitId) => setSelection({ kind: "source", id, unitId })}
           onTocChange={updateToc}
           onCollapseView={() => { setViewCollapsed(true); setExplorerCollapsed(false); }}
+          onRefreshPipeline={onRefresh}
         />
       </main>}
     </div> : <div className="preparation-workspace-panels">

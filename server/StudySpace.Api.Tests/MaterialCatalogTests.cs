@@ -26,6 +26,26 @@ public sealed class MaterialCatalogTests : IDisposable
     }
 
 
+    [Fact] public async Task SingleSourceImportOnlyProcessesTheRequestedMaterial()
+    {
+        using var catalog = Catalog();
+        var firstId = MaterialStore.Hash("scope:7:first");
+        var secondId = MaterialStore.Hash("scope:7:second");
+        var queued = await catalog.StartSourceImport(7, firstId);
+        Assert.Equal(firstId, queued.Job!.SourceId);
+        await catalog.RunNext(default);
+        var first = await catalog.GetSnapshot(7);
+        Assert.Equal("ready", first.Materials.Single(item => item.Id == firstId).Status);
+        Assert.Equal("not-imported", first.Materials.Single(item => item.Id == secondId).Status);
+        Assert.Equal(1, source.Reads); Assert.Equal(1, extractor.Calls);
+        Assert.Equal(1, first.Job!.Total); Assert.Equal(1, first.Job.Completed);
+
+        await catalog.StartSourceImport(7, secondId); await catalog.RunNext(default);
+        var second = await catalog.GetSnapshot(7);
+        Assert.All(second.Materials, item => Assert.Equal("ready", item.Status));
+        Assert.Equal(2, source.Reads); Assert.Equal(2, extractor.Calls);
+    }
+
     [Fact] public async Task PdfReextractCreatesANewImmutableRevisionWhileNormalRefreshReusesCurrentProfile()
     {
         source.Pdf = true; using var catalog = Catalog();

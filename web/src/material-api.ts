@@ -91,12 +91,19 @@ export function materialDocumentPath(
     ? `/api/materials/${id}/revisions/${revision}`
     : undefined;
 }
+export const readMaterialSnapshot = (courseId: number, signal?: AbortSignal) =>
+  api<MaterialSnapshot>(materialCoursePath(courseId), { signal });
+export const extractMaterialSource = (courseId: number, sourceId: string) =>
+  api<MaterialSnapshot>(`${materialCoursePath(courseId)}/sources/${encodeURIComponent(sourceId)}/extract`, {
+    method: "POST",
+  });
+
 export function useMaterialSnapshot(courseId: number) {
   const [snapshot, setSnapshot] = useState<MaterialSnapshot>();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const refresh = useCallback(async () => {
-    const value = await api<MaterialSnapshot>(materialCoursePath(courseId));
+    const value = await readMaterialSnapshot(courseId);
     setSnapshot(value);
     setError("");
     return value;

@@ -7,6 +7,7 @@ import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
 import { Composer, type AiOption } from "./ui-ai";
 import { AlertTriangle, Check, Code2, Columns2, FileDiff, FileText, PanelRightClose, PencilLine, Rows3 } from "lucide-react";
 import { message } from "./api";
+import { extractMaterialSource, readMaterialSnapshot } from "./material-api";
 import type { PipelineState } from "./pipeline-api";
 import { unitHidden, unitKind, unitLabel } from "./learning-structure";
 import { buildContentOutline, type ContentUnitNode } from "./content-authoring-model";
@@ -119,6 +120,7 @@ export function ContentAuthoringView({
   onSelectSource,
   onTocChange,
   onCollapseView,
+  onRefreshPipeline,
 }: {
   courseId: number;
   courseName: string;
@@ -128,6 +130,7 @@ export function ContentAuthoringView({
   onSelectSource: (id: string, unitId?: string) => void;
   onTocChange?: (items: ContentTocItem[]) => void;
   onCollapseView?: () => void;
+  onRefreshPipeline?: () => Promise<PipelineState | undefined> | void;
 }) {
   const [workspace, setWorkspace] = useState<ContentWorkspace>();
   const [views, setViews] = useState<Record<string, ContentBlockView>>({});
@@ -142,6 +145,7 @@ export function ContentAuthoringView({
   const [draftRevisionId, setDraftRevisionId] = useState<string>();
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [extractingSourceId, setExtractingSourceId] = useState<string>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [aiProvider, setAiProvider] = useState<"codex" | "chatgpt">("codex");
@@ -202,6 +206,7 @@ export function ContentAuthoringView({
   const blocks = useMemo(() => (workspace?.blocks ?? []).filter(block => block.included), [workspace]);
   const outline = useMemo(() => buildContentOutline(blocks, pipeline.units), [blocks, pipeline.units]);
   const selectedSummary = selected ? blocks.find(block => block.id === selected) : undefined;
+  const selectedPipelineSource = selected ? pipeline.sources.find(item => item.source.id === selected) : undefined;
   const selectedView = selected ? views[selected] : undefined;
   const rawRevision = selected ? rawRevisions[selected] : undefined;
   const originalUrl = selectedSummary ? originalMaterialUrl(selectedSummary) : undefined;
@@ -317,6 +322,44 @@ export function ContentAuthoringView({
       }
     } catch (error) { setError(message(error)); }
     finally { setBusy(false); }
+  }
+
+  async function extractSelectedPdf() {
+    const source = selectedPipelineSource?.source;
+    if (!selected || !source || source.mimeType !== "application/pdf" || source.acquisition === "unsupported" || extractingSourceId) return;
+    setExtractingSourceId(selected);
+    setError("");
+    try {
+      let snapshot = await extractMaterialSource(courseId, source.id);
+      const deadline = Date.now() + 9 * 60 * 1000;
+      while (snapshot.job?.status === "queued" || snapshot.job?.status === "running") {
+        if (Date.now() >= deadline) throw new Error("Die PDF-Extraktion läuft länger als erwartet. Prüfe den Material-Status erneut.");
+        await new Promise(resolve => window.setTimeout(resolve, 1200));
+        snapshot = await readMaterialSnapshot(courseId);
+      }
+      const material = snapshot.materials.find(item => item.id === source.id);
+      if (material?.status !== "ready") {
+        throw new Error(material?.reason ?? snapshot.job?.error ?? "Die PDF-Extraktion konnte nicht abgeschlossen werden.");
+      }
+      const refreshedPipeline = await onRefreshPipeline?.();
+      if (!refreshedPipeline) throw new Error("Die Quellenstruktur konnte nach der Extraktion nicht aktualisiert werden.");
+      const nextWorkspace = await materializeContent(courseId, refreshedPipeline.revision);
+      setWorkspace(nextWorkspace);
+      await hydrate(nextWorkspace);
+      if (selected && nextWorkspace.blocks.some(block => block.id === selected && block.currentRevisionId)) {
+        const view = await readContentBlock(courseId, selected);
+        setViews(current => ({ ...current, [selected]: view }));
+        const content = view.revision?.content ?? "";
+        setDraft(content); setSavedDraft(content);
+        setDraftBlockId(selected); setDraftRevisionId(view.revision?.id);
+        setRawRevisions(current => { const nextRaw = { ...current }; delete nextRaw[selected]; return nextRaw; });
+        if (view.revision) void ensureRawRevision(selected, view.revision);
+      }
+    } catch (error) {
+      setError(message(error));
+    } finally {
+      setExtractingSourceId(current => current === selected ? undefined : current);
+    }
   }
 
   async function save() {
@@ -568,7 +611,12 @@ export function ContentAuthoringView({
       <div className="content-source-meta">
         <Icon.File filename={selectedSummary.name} size={16}/><span>{statusLabel(selectedSummary)}</span>{sourcePages(selectedSummary) && <span>{sourcePages(selectedSummary)}</span>}{selectedSummary.stale && <AlertTriangle size={13}/>} {selectedSummary.status === "ready" && <Check size={13}/>}
       </div>
-      {!selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : !draftReady ? <Loading label="Bearbeitete Fassung wird geladen …"/> : tab === "content" ? <>
+      {editing && selectedSummary.status === "not-ready" && selectedPipelineSource?.source.mimeType === "application/pdf" && selectedPipelineSource.source.acquisition !== "unsupported" ? <div className="content-source-extraction-empty">
+        <span className="content-source-extraction-icon"><Icon.File filename={selectedSummary.name} size={20}/></span>
+        <strong>{extractingSourceId === selected ? "PDF wird extrahiert …" : "PDF noch nicht extrahiert"}</strong>
+        <span>{extractingSourceId === selected ? "Study Space liest die Quelle ein und bereitet den Inhalt auf." : "Extrahiere diese Quelle, bevor du daraus eine editierbare Rohfassung erstellst."}</span>
+        <Button variant="primary" icon="file-text" label={extractingSourceId === selected ? "Extraktion läuft …" : "PDF extrahieren"} disabled={busy || !!extractingSourceId} onPress={() => void extractSelectedPdf()}/>
+      </div> : !selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : !draftReady ? <Loading label="Bearbeitete Fassung wird geladen …"/> : tab === "content" ? <>
         {editing ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/> : <div className="content-current-render"><MarkdownRenderer value={draft}/></div>}
         {editing && <div className="content-block-footer">
           <span>{saving ? "Speichert…" : draft === savedDraft ? `Revision ${selectedView.revision.id.slice(0, 8)}` : "Änderungen werden automatisch gespeichert"}</span>
