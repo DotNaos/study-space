@@ -14,14 +14,16 @@ type ShaderSpec = {
 };
 
 const shaderPalettes: ShaderPalette[] = [
-  { background: "#07111f", colors: ["#5f7cff", "#9d5cff", "#32e0c4"] },
-  { background: "#16091f", colors: ["#ff4db8", "#765cff", "#45d7ff"] },
-  { background: "#071914", colors: ["#20d6a4", "#67e8f9", "#f2c94c"] },
-  { background: "#0b1020", colors: ["#4cc9f0", "#4361ee", "#f72585"] },
-  { background: "#181008", colors: ["#ff9f43", "#feca57", "#5f27cd"] },
-  { background: "#111021", colors: ["#b47cff", "#60a5fa", "#f472b6"] },
-  { background: "#07171a", colors: ["#2dd4bf", "#38bdf8", "#a3e635"] },
-  { background: "#160d12", colors: ["#fb7185", "#f59e0b", "#818cf8"] },
+  { background: "#08101b", colors: ["#8395c8", "#b9a7d8", "#76b6bd"] },
+  { background: "#130d18", colors: ["#b7819c", "#c39bc8", "#c3a66d"] },
+  { background: "#071411", colors: ["#73a995", "#85b8ae", "#c2b47b"] },
+  { background: "#0d1016", colors: ["#7895ad", "#9b8eb3", "#b78d74"] },
+  { background: "#0d0d18", colors: ["#7d83b8", "#9c88bd", "#b88196"] },
+  { background: "#0a1216", colors: ["#7aa7b4", "#93a6c3", "#8bb39b"] },
+  { background: "#10130b", colors: ["#99aa74", "#b19b75", "#78a8a4"] },
+  { background: "#160e10", colors: ["#b57d7f", "#b89582", "#9788b0"] },
+  { background: "#0a0f12", colors: ["#7c8f99", "#8da5ad", "#aa9e8b"] },
+  { background: "#100d14", colors: ["#9889a8", "#aa8492", "#8197ad"] },
 ];
 
 const vertexShaderSource = `
@@ -70,11 +72,11 @@ float noise2(vec2 p) {
 
 float fbm(vec2 p) {
   float value = 0.0;
-  float amplitude = 0.5;
-  mat2 m = mat2(0.80, -0.60, 0.60, 0.80);
+  float amplitude = 0.52;
+  mat2 m = mat2(0.82, -0.57, 0.57, 0.82);
   for (int i = 0; i < 5; i++) {
     value += amplitude * noise2(p);
-    p = m * p * 2.03 + 7.13;
+    p = m * p * 2.03 + 4.71;
     amplitude *= 0.5;
   }
   return value;
@@ -86,76 +88,111 @@ mat2 rotate2(float angle) {
   return mat2(c, -s, s, c);
 }
 
-vec3 paletteRamp(float t) {
+vec3 ramp(float t) {
   t = clamp(t, 0.0, 1.0);
-  return t < 0.5
-    ? mix(u_a, u_b, smoothstep(0.0, 0.5, t))
-    : mix(u_b, u_c, smoothstep(0.5, 1.0, t));
+  vec3 first = mix(u_a, u_b, smoothstep(0.02, 0.58, t));
+  return mix(first, u_c, smoothstep(0.52, 1.0, t) * 0.72);
+}
+
+vec3 softScreen(vec3 base, vec3 layer, float amount) {
+  vec3 screened = 1.0 - (1.0 - base) * (1.0 - layer);
+  return mix(base, screened, amount);
 }
 
 void main() {
   vec2 uv = v_uv;
   float aspect = u_resolution.x / max(u_resolution.y, 1.0);
   vec2 p = (uv - 0.5) * vec2(aspect, 1.0) * 2.0;
-  float baseNoise = fbm(p * 1.35 + u_seed * 5.0);
+  float angle = (u_seed - 0.5) * 1.15;
+  vec2 rp = rotate2(angle) * p;
+  float n0 = fbm(rp * 1.15 + vec2(u_seed * 8.3, 2.1));
+  float n1 = fbm(rp * 2.0 + vec2(5.7, u_seed * 6.4));
   vec3 color = u_background;
 
+  // Silk / folded surface
   if (u_variant < 0.5) {
-    float warp = sin(p.x * 2.4 + u_seed * 17.0) * 0.28;
-    float bands = 0.5 + 0.5 * sin((p.y + warp + baseNoise * 0.24) * 10.5);
-    float highlight = pow(bands, 4.0);
-    color = mix(u_background, paletteRamp(bands), 0.58 + 0.34 * highlight);
-  } else if (u_variant < 1.5) {
-    vec2 q = vec2(
-      fbm(p * 1.9 + vec2(u_seed * 4.0, 1.7)),
-      fbm(p * 1.9 + vec2(5.3, u_seed * 3.0))
-    );
-    vec2 r = vec2(
-      fbm(p * 2.8 + q * 2.4 + vec2(8.1, 2.2)),
-      fbm(p * 2.8 + q * 2.4 + vec2(1.8, 7.4))
-    );
-    float field = fbm(p * 2.25 + r * 3.0);
-    color = mix(u_background, paletteRamp(field), 0.76);
-    color += u_c * pow(max(0.0, field - 0.62), 3.0) * 1.4;
-  } else if (u_variant < 2.5) {
-    float field = fbm(rotate2(u_seed * 3.2) * p * 2.45);
-    float contourDistance = abs(fract(field * 8.0 + baseNoise * 0.35) - 0.5);
-    float contours = 1.0 - smoothstep(0.035, 0.11, contourDistance);
-    color = mix(u_background, paletteRamp(field), 0.48);
-    color += mix(u_a, u_c, field) * contours * 0.58;
-  } else if (u_variant < 3.5) {
-    vec2 gp = rotate2(0.35 + u_seed * 2.2) * p;
-    gp += 0.13 * vec2(
-      noise2(p * 2.8 + u_seed * 9.0),
-      noise2(p * 2.8 + 4.7 - u_seed * 3.0)
-    );
-    vec2 gridPos = abs(fract(gp * 3.2) - 0.5);
-    float grid = 1.0 - smoothstep(0.025, 0.075, min(gridPos.x, gridPos.y));
-    float diagonal = 0.5 + 0.5 * sin((gp.x + gp.y) * 4.0 + baseNoise * 5.0);
-    color = mix(u_background, paletteRamp(diagonal), 0.36 + grid * 0.46);
-    color += u_b * grid * 0.23;
-  } else {
-    float field = 0.0;
-    vec3 weighted = vec3(0.0);
-    for (int i = 0; i < 7; i++) {
-      vec2 point = hash22(vec2(float(i) + 2.3, u_seed * 71.0 + 0.7)) * 2.0 - 1.0;
-      point.x *= aspect;
-      vec2 delta = p - point;
-      float influence = 0.055 / (dot(delta, delta) + 0.035);
-      field += influence;
-      vec3 nodeColor = i - (i / 3) * 3 == 0 ? u_a : (i - (i / 3) * 3 == 1 ? u_b : u_c);
-      weighted += nodeColor * influence;
-    }
-    vec3 blobColor = weighted / max(field, 0.001);
-    float body = smoothstep(0.45, 1.8, field);
-    float rim = smoothstep(1.0, 2.8, field) - smoothstep(2.8, 5.0, field);
-    color = mix(u_background, blobColor, body * 0.76);
-    color += u_c * rim * 0.20;
+    float warp = fbm(rp * 1.25 + vec2(n1 * 1.7, n0 * 1.2));
+    float fold = sin((rp.x * 1.28 + rp.y * 0.72 + warp * 1.6) * 2.6 + u_seed * 12.0);
+    float shade = 0.5 + 0.5 * fold;
+    shade = mix(shade, n0, 0.34);
+    float highlight = pow(max(0.0, 1.0 - abs(fold)), 5.0);
+    color = mix(u_background, ramp(shade), 0.44);
+    color = softScreen(color, mix(u_a, u_b, shade), highlight * 0.18);
   }
 
-  float vignette = smoothstep(1.15, 0.25, length((uv - 0.5) * vec2(1.18, 1.0)));
-  color *= 0.78 + vignette * 0.28;
-  color += (hash21(gl_FragCoord.xy + u_seed * 999.0) - 0.5) * 0.018;
+  // Cloudy / aurora-like volume
+  else if (u_variant < 1.5) {
+    vec2 q = vec2(
+      fbm(rp * 1.15 + vec2(1.7, u_seed * 7.0)),
+      fbm(rp * 1.15 + vec2(6.1, 3.0 + u_seed * 5.0))
+    );
+    float cloud = fbm(rp * 1.65 + q * 2.15);
+    float veil = fbm(rp * vec2(0.7, 2.1) + q * 0.9);
+    float value = smoothstep(0.2, 0.86, cloud * 0.72 + veil * 0.28);
+    color = mix(u_background, ramp(value), 0.48);
+    color = softScreen(color, mix(u_b, u_c, value), pow(value, 3.0) * 0.12);
+  }
+
+  // Liquid lenses / glassy cells
+  else if (u_variant < 2.5) {
+    float field = 0.0;
+    vec3 tint = vec3(0.0);
+    for (int i = 0; i < 6; i++) {
+      vec2 center = hash22(vec2(float(i) * 2.17 + 0.3, u_seed * 91.0 + 2.0)) * 2.0 - 1.0;
+      center.x *= aspect;
+      vec2 d = rp - center;
+      float radius = 0.28 + 0.18 * hash21(vec2(float(i), u_seed * 33.0));
+      float lens = exp(-dot(d, d) / (radius * radius));
+      field += lens;
+      vec3 lc = i < 2 ? u_a : (i < 4 ? u_b : u_c);
+      tint += lc * lens;
+    }
+    tint /= max(field, 0.001);
+    float body = smoothstep(0.12, 1.15, field);
+    float rim = smoothstep(0.25, 0.82, field) - smoothstep(0.82, 1.55, field);
+    color = mix(u_background, tint, body * 0.42);
+    color = softScreen(color, tint, rim * 0.18);
+  }
+
+  // Topographic / geological field
+  else if (u_variant < 3.5) {
+    vec2 warp = vec2(n0, n1) - 0.5;
+    float field = fbm(rp * 1.7 + warp * 0.7);
+    float phase = fract(field * 9.0 + u_seed * 3.0);
+    float line = 1.0 - smoothstep(0.015, 0.055, abs(phase - 0.5));
+    float broad = smoothstep(0.18, 0.82, field);
+    color = mix(u_background, ramp(broad), 0.32);
+    color = softScreen(color, mix(u_a, u_c, broad), line * 0.15);
+  }
+
+  // Prism / caustic interference
+  else {
+    vec2 q = rotate2(0.5 + u_seed) * rp;
+    float f1 = sin(q.x * 2.2 + n0 * 2.1 + u_seed * 7.0);
+    float f2 = sin(q.y * 2.7 - n1 * 1.8 - u_seed * 5.0);
+    float f3 = sin((q.x + q.y) * 1.4 + (n0 - n1) * 2.6);
+    float interference = 0.5 + 0.5 * (f1 + f2 + f3) / 3.0;
+    interference = mix(interference, n0, 0.34);
+    float glow = pow(smoothstep(0.56, 0.93, interference), 2.4);
+    color = mix(u_background, ramp(interference), 0.38);
+    color = softScreen(color, mix(u_b, u_c, interference), glow * 0.14);
+  }
+
+  // A soft off-center light source gives every thumbnail some depth.
+  vec2 lightCenter = vec2(
+    (hash21(vec2(u_seed, 1.0)) - 0.5) * aspect * 0.85,
+    (hash21(vec2(2.0, u_seed)) - 0.5) * 0.65
+  );
+  float light = exp(-dot(p - lightCenter, p - lightCenter) * 0.72);
+  color = softScreen(color, mix(u_a, u_b, 0.5), light * 0.08);
+
+  float vignette = smoothstep(1.35, 0.12, length((uv - 0.5) * vec2(1.05, 1.0)));
+  color *= 0.76 + vignette * 0.29;
+
+  // Very subtle film grain avoids flat digital gradients without becoming noisy.
+  float grain = hash21(gl_FragCoord.xy + u_seed * 997.0) - 0.5;
+  color += grain * 0.009;
+
   gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
 `;
@@ -169,12 +206,21 @@ function hashArtworkSeed(value: string) {
   return hash >>> 0;
 }
 
+function mixSeed(seed: number) {
+  let value = seed ^ (seed >>> 16);
+  value = Math.imul(value, 0x7feb352d);
+  value ^= value >>> 15;
+  value = Math.imul(value, 0x846ca68b);
+  return (value ^ (value >>> 16)) >>> 0;
+}
+
 function shaderSpec(course: Course): ShaderSpec {
   const seed = hashArtworkSeed(`${course.id}:${course.name}:${course.shortName}`);
+  const mixed = mixSeed(seed);
   return {
     seed,
-    variant: seed % 5,
-    palette: shaderPalettes[(seed >>> 4) % shaderPalettes.length],
+    variant: mixed % 5,
+    palette: shaderPalettes[(mixed >>> 7) % shaderPalettes.length],
   };
 }
 
@@ -315,9 +361,12 @@ function renderer() {
 
 function ShaderCourseArtwork({ course }: { course: Course }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const spec = useMemo(() => shaderSpec(course), [course.id, course.name, course.shortName]);
+  const spec = useMemo(
+    () => shaderSpec(course),
+    [course.id, course.name, course.shortName],
+  );
   const [ready, setReady] = useState(false);
-  const fallback = `linear-gradient(135deg, ${spec.palette.background}, ${spec.palette.colors[0]}55, ${spec.palette.colors[1]}44)`;
+  const fallback = `radial-gradient(circle at 30% 25%, ${spec.palette.colors[0]}44, transparent 48%), linear-gradient(145deg, ${spec.palette.background}, ${spec.palette.colors[1]}22)`;
 
   useEffect(() => {
     const canvas = canvasRef.current;
