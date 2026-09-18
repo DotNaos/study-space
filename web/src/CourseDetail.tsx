@@ -141,42 +141,43 @@ export function CourseDetail({
       >
         <ArrowLeft size={15} aria-hidden="true" /> Alle Kurse
       </AppLink>
-      <header className="flex items-start justify-between gap-4 border-b border-border pb-5 sm:items-center sm:gap-6">
-        <div className="min-w-0 flex-1">
-          {semester && (
-            <p className="mb-1.5 flex items-center gap-2 text-xs font-medium text-text-muted">
-              <CalendarDays size={14} aria-hidden="true" />
-              {semester.shortLabel}
-            </p>
-          )}
-          <h1 className="break-words text-xl font-medium leading-snug tracking-tight sm:text-2xl">
-            {course.name}
-          </h1>
-          {subtitle && (
-            <p className="mt-1 break-words text-xs leading-5 text-text-muted">
-              {subtitle}
-            </p>
-          )}
+      <header className="relative isolate overflow-hidden rounded-xl border border-border bg-bg-1">
+        <div className="absolute -inset-2">
+          <CourseArtwork course={course} eager className="h-full w-full" />
         </div>
-        <button
-          type="button"
-          onClick={() => setArtworkOpen(true)}
-          disabled={!moodleConnected || !onCourseChanged}
-          aria-label="Kursbild ändern"
-          title="Kursbild ändern"
-          className="group relative mt-1 shrink-0 rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring disabled:cursor-default sm:mt-0"
-        >
-          <CourseArtwork
-            course={course}
-            eager
-            className="size-14 sm:h-20 sm:w-28"
-          />
-          {moodleConnected && onCourseChanged && (
-            <span className="absolute bottom-0 right-0 rounded-tl-md rounded-br-lg bg-bg-0/90 p-1.5 text-text-muted">
-              <ImagePlus size={14} aria-hidden="true" />
-            </span>
-          )}
-        </button>
+        <div className="absolute inset-0 bg-gradient-to-r from-bg-0 via-bg-0/80 to-bg-0/15" />
+        <div className="absolute inset-0 bg-gradient-to-t from-bg-0/85 via-bg-0/10 to-bg-0/20" />
+
+        <div className="relative z-10 flex min-h-44 items-end px-5 py-6 sm:min-h-52 sm:px-7 sm:py-7">
+          <div className="min-w-0 max-w-3xl">
+            {semester && (
+              <p className="mb-2 flex items-center gap-2 text-xs font-medium text-text-muted">
+                <CalendarDays size={14} aria-hidden="true" />
+                {semester.shortLabel}
+              </p>
+            )}
+            <h1 className="break-words text-2xl font-medium leading-snug tracking-tight sm:text-3xl">
+              {course.name}
+            </h1>
+            {subtitle && (
+              <p className="mt-1.5 break-words text-sm leading-5 text-text-muted">
+                {subtitle}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {moodleConnected && onCourseChanged && (
+          <button
+            type="button"
+            onClick={() => setArtworkOpen(true)}
+            aria-label="Kursbild ändern"
+            title="Kursbild ändern"
+            className="absolute right-3 top-3 z-20 flex size-9 items-center justify-center rounded-lg border border-border/80 bg-bg-0/60 text-text-muted shadow-sm backdrop-blur-md transition-colors hover:bg-bg-0/80 hover:text-text focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus-ring sm:right-4 sm:top-4"
+          >
+            <ImagePlus size={15} aria-hidden="true" />
+          </button>
+        )}
       </header>
       {artworkOpen && onCourseChanged && (
         <Suspense fallback={<Loading label="Bildeditor wird geöffnet …" />}>
