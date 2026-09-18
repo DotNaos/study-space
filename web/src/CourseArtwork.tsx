@@ -14,14 +14,14 @@ type ShaderSpec = {
 };
 
 const shaderPalettes: ShaderPalette[] = [
-  { background: "#6B82F2", colors: ["#EAF0FF", "#66D9FF", "#9A7BFF"] },
-  { background: "#10B99E", colors: ["#B8FFE9", "#36E6C8", "#5C87FF"] },
-  { background: "#F08A18", colors: ["#FFE2B7", "#FFB33A", "#FF6E2B"] },
-  { background: "#9678F4", colors: ["#FFB2EA", "#86CBFF", "#D8B4FF"] },
-  { background: "#249FD8", colors: ["#C8F7FF", "#5EDFFF", "#777CFF"] },
-  { background: "#E46A86", colors: ["#FFD0DD", "#FF9EC4", "#9C8BFF"] },
-  { background: "#54B86C", colors: ["#D5FFD9", "#7CE8AF", "#39C9D7"] },
-  { background: "#F3A12C", colors: ["#FFF0C5", "#FFCC55", "#FF7B63"] },
+  { background: "#5877F4", colors: ["#E5EEFF", "#53DFFF", "#A27CFF"] },
+  { background: "#15B7A1", colors: ["#D2FFF1", "#4BE1C5", "#4D8CFF"] },
+  { background: "#F08B28", colors: ["#FFE5B3", "#FFBC4C", "#FF7152"] },
+  { background: "#9275F2", colors: ["#FFB5E9", "#77D2FF", "#D8BEFF"] },
+  { background: "#1FA5DD", colors: ["#D1F8FF", "#55D9FF", "#7578F4"] },
+  { background: "#E76091", colors: ["#FFD2E2", "#FF91C2", "#8580FF"] },
+  { background: "#42B978", colors: ["#D8FFE3", "#68E6A8", "#32CBD4"] },
+  { background: "#F29A2C", colors: ["#FFF0BE", "#FFD05B", "#FF8069"] },
 ];
 
 const vertexShaderSource = `
@@ -75,25 +75,66 @@ vec4 petal(
   q.x += bend * q.y * q.y;
 
   float y = q.y / max(scale.y, 0.001);
-  float width = scale.x * pow(max(0.0, 1.0 - y * y), 0.56);
+  float width = scale.x * (0.12 + 0.88 * pow(max(0.0, 1.0 - y * y), 0.54));
   float x = abs(q.x) / max(width, 0.001);
   float distanceField = max(abs(y), x);
-  float mask = 1.0 - smoothstep(0.91, 1.025, distanceField);
+  float mask = 1.0 - smoothstep(0.88, 1.02, distanceField);
 
-  float crossLight = smoothstep(-scale.x, scale.x, q.x * lightDirection);
-  float centerFold = exp(-abs(q.x) / max(scale.x * 0.23, 0.001));
-  float tipGlow = smoothstep(1.0, -0.15, abs(y));
+  float crossLight = clamp(
+    0.5 + 0.5 * q.x / max(scale.x, 0.001) * lightDirection,
+    0.0,
+    1.0
+  );
+  float centerFold = exp(-pow(q.x / max(scale.x * 0.22, 0.001), 2.0));
+  float innerLight = pow(max(0.0, 1.0 - abs(y)), 0.7);
+  float rim = smoothstep(0.68, 0.98, distanceField) * mask;
 
-  vec3 shaded = petalColor * (0.78 + crossLight * 0.22);
-  shaded = screenBlend(shaded, vec3(1.0) * centerFold * 0.16);
-  shaded = screenBlend(shaded, vec3(1.0) * tipGlow * 0.035);
+  vec3 shaded = petalColor * (0.79 + crossLight * 0.21);
+  shaded = mix(
+    shaded,
+    screenBlend(shaded, vec3(0.74)),
+    centerFold * innerLight * 0.22
+  );
+  shaded = mix(shaded, screenBlend(shaded, vec3(0.64)), rim * 0.10);
 
   return vec4(shaded, mask);
 }
 
-vec3 compositePetal(vec3 base, vec4 layer, float opacity) {
-  vec3 luminous = screenBlend(base, layer.rgb);
-  return mix(base, luminous, layer.a * opacity);
+vec4 sheet(
+  vec2 p,
+  vec2 center,
+  float angle,
+  vec2 scale,
+  float bend,
+  float foldOffset,
+  vec3 sheetColor,
+  float lightDirection
+) {
+  vec2 q = rotate2(angle) * (p - center);
+  q.x += bend * q.y * q.y;
+  vec2 n = q / max(scale, vec2(0.001));
+
+  float distanceField = pow(abs(n.x), 3.0) + pow(abs(n.y), 2.2);
+  float mask = 1.0 - smoothstep(0.84, 1.04, distanceField);
+  float crossLight = clamp(0.5 + 0.5 * n.x * lightDirection, 0.0, 1.0);
+  float crease = exp(-pow((n.x - foldOffset) * 5.4, 2.0));
+  float middle = pow(max(0.0, 1.0 - abs(n.y)), 0.55);
+  float rim = smoothstep(0.58, 0.96, distanceField) * mask;
+
+  vec3 shaded = sheetColor * (0.80 + crossLight * 0.20);
+  shaded = mix(
+    shaded,
+    screenBlend(shaded, vec3(0.76)),
+    crease * middle * 0.20
+  );
+  shaded = mix(shaded, screenBlend(shaded, vec3(0.62)), rim * 0.08);
+
+  return vec4(shaded, mask);
+}
+
+vec3 compositeForm(vec3 base, vec4 layer, float opacity) {
+  vec3 translucent = mix(base, layer.rgb, 0.82);
+  return mix(base, translucent, layer.a * opacity);
 }
 
 void main() {
@@ -105,123 +146,186 @@ void main() {
   float seedB = hash21(vec2(9.1, u_seed * 53.0));
   float seedC = hash21(vec2(u_seed * 31.0, 6.4));
 
-  // Bright, clean base gradient. The artwork should read as a designed cover,
-  // not a dark procedural texture.
-  float diagonal = clamp(uv.x * 0.62 + (1.0 - uv.y) * 0.38, 0.0, 1.0);
-  vec3 color = mix(u_background, u_b, diagonal * 0.26);
-  vec2 softPoint = vec2(0.24 + seedA * 0.25, 0.18 + seedB * 0.22);
-  float softLight = exp(-dot(uv - softPoint, uv - softPoint) * 4.8);
-  color = mix(color, screenBlend(color, u_a), softLight * 0.38);
+  // Clean editorial base: saturated enough to feel alive, but the large forms
+  // carry the composition instead of procedural texture.
+  float diagonal = clamp(uv.x * 0.58 + (1.0 - uv.y) * 0.42, 0.0, 1.0);
+  vec3 color = mix(u_background, u_b, 0.08 + diagonal * 0.20);
+  vec2 softPoint = vec2(0.20 + seedA * 0.24, 0.17 + seedB * 0.20);
+  float softLight = exp(-dot(uv - softPoint, uv - softPoint) * 5.2);
+  color = mix(color, screenBlend(color, u_a * 0.72), softLight * 0.28);
 
   if (u_variant < 0.5) {
-    // Radial bloom: large overlapping petals with one clear focal point.
-    vec2 center = vec2((seedA - 0.5) * aspect * 0.26, (seedB - 0.5) * 0.20);
-    for (int i = 0; i < 5; i++) {
+    // Radial bloom: one clear flower-like focal point.
+    vec2 center = vec2(
+      (-0.08 + (seedA - 0.5) * 0.20) * aspect,
+      -0.06 + (seedB - 0.5) * 0.16
+    );
+    for (int i = 0; i < 6; i++) {
       float fi = float(i);
-      float angle = fi * 1.256637 + seedC * 0.72;
-      vec2 petalCenter = center + vec2(cos(angle), sin(angle)) * vec2(0.18 * aspect, 0.13);
-      vec3 pc = i == 0 || i == 3 ? u_a : (i == 1 || i == 4 ? u_b : u_c);
+      float angle = fi * 1.047198 + seedC * 0.46;
+      vec2 petalCenter =
+        center +
+        vec2(cos(angle), sin(angle)) * vec2(0.20 * aspect, 0.16);
+      vec3 pc = i == 0 || i == 3
+        ? u_a
+        : (i == 1 || i == 4 ? u_c : u_b);
       vec4 layer = petal(
         p,
         petalCenter,
         angle + 1.5708,
-        vec2(0.50 + seedA * 0.12, 0.92 + seedB * 0.16),
-        (seedC - 0.5) * 0.22,
+        vec2(0.52 + seedA * 0.08, 0.86 + seedB * 0.12),
+        (seedC - 0.5) * 0.16,
         pc,
         i == 0 || i == 2 ? 1.0 : -1.0
       );
-      color = compositePetal(color, layer, 0.66);
+      color = compositeForm(color, layer, 0.82);
     }
   } else if (u_variant < 1.5) {
-    // Folded fan: broad soft leaves sweeping across the thumbnail.
-    float baseAngle = -0.72 + seedA * 0.55;
+    // Asymmetrical petal cluster with deliberate negative space.
+    vec2 anchor = vec2(
+      (0.50 + (seedA - 0.5) * 0.12) * aspect,
+      -0.20 + (seedB - 0.5) * 0.18
+    );
+    vec4 a = petal(
+      p,
+      anchor + vec2(-0.18 * aspect, 0.02),
+      2.28 + seedC * 0.18,
+      vec2(0.70, 1.18),
+      -0.12,
+      u_a,
+      -1.0
+    );
+    vec4 b = petal(
+      p,
+      anchor + vec2(0.02 * aspect, 0.22),
+      2.78 + seedC * 0.12,
+      vec2(0.64, 1.04),
+      0.16,
+      u_c,
+      1.0
+    );
+    vec4 c = petal(
+      p,
+      anchor + vec2(-0.02 * aspect, -0.34),
+      1.78 + seedC * 0.16,
+      vec2(0.58, 0.92),
+      -0.08,
+      u_b,
+      -1.0
+    );
+    color = compositeForm(color, a, 0.86);
+    color = compositeForm(color, b, 0.76);
+    color = compositeForm(color, c, 0.72);
+  } else if (u_variant < 2.5) {
+    // Folded fan / ribbons sweeping upward from the lower-left.
+    float baseAngle = -0.56 + (seedA - 0.5) * 0.16;
     for (int i = 0; i < 4; i++) {
       float fi = float(i);
-      float angle = baseAngle + fi * 0.34;
-      vec2 center = vec2(-0.42 * aspect + fi * 0.25 * aspect, -0.25 + fi * 0.11);
-      vec3 pc = i == 0 ? u_a : (i == 1 ? u_b : (i == 2 ? u_c : mix(u_a, u_c, 0.5)));
-      vec4 layer = petal(
+      float angle = baseAngle + fi * 0.27;
+      vec2 center = vec2(
+        (-0.50 + fi * 0.27) * aspect,
+        -0.22 + fi * 0.12 + (seedB - 0.5) * 0.08
+      );
+      vec3 sc = i == 0
+        ? u_a
+        : (i == 1 ? u_c : (i == 2 ? u_b : mix(u_a, u_c, 0.56)));
+      vec4 layer = sheet(
         p,
         center,
-        angle + 1.5708,
-        vec2(0.58 + fi * 0.035, 1.12 - fi * 0.055),
-        0.08 + fi * 0.035,
-        pc,
+        angle,
+        vec2(0.82 - fi * 0.055, 0.42 + fi * 0.025),
+        0.13 + fi * 0.035,
+        -0.18 + fi * 0.11,
+        sc,
         mod(fi, 2.0) < 1.0 ? 1.0 : -1.0
       );
-      color = compositePetal(color, layer, 0.62);
-    }
-  } else if (u_variant < 2.5) {
-    // Twin blooms: two simple flower-like forms, intentionally low-detail.
-    vec2 center0 = vec2(-0.34 * aspect, 0.20);
-    vec2 center1 = vec2(0.42 * aspect, -0.20);
-    for (int i = 0; i < 6; i++) {
-      float fi = float(i);
-      bool second = i >= 3;
-      float localIndex = second ? fi - 3.0 : fi;
-      vec2 center = second ? center1 : center0;
-      center += vec2((seedA - 0.5) * 0.12, (seedB - 0.5) * 0.10);
-      float angle = localIndex * 2.0944 + (second ? 0.74 : 0.0) + seedC * 0.45;
-      vec3 pc = localIndex < 0.5 ? (second ? u_c : u_a)
-        : (localIndex < 1.5 ? (second ? u_a : u_b) : (second ? u_b : u_c));
-      vec4 layer = petal(
-        p,
-        center + vec2(cos(angle), sin(angle)) * vec2(0.16 * aspect, 0.11),
-        angle + 1.5708,
-        vec2(0.45, 0.76),
-        (seedA - 0.5) * 0.18,
-        pc,
-        localIndex < 1.5 ? 1.0 : -1.0
-      );
-      color = compositePetal(color, layer, 0.58);
+      color = compositeForm(color, layer, 0.78 - fi * 0.035);
     }
   } else if (u_variant < 3.5) {
-    // Close-up bloom: oversized petals intentionally cropped by the card.
-    vec2 center = vec2((seedA - 0.58) * aspect * 0.55, (seedB - 0.42) * 0.42);
-    for (int i = 0; i < 4; i++) {
-      float fi = float(i);
-      float angle = -0.55 + fi * 0.76 + seedC * 0.38;
-      vec3 pc = i == 0 ? u_a : (i == 1 ? u_b : (i == 2 ? u_c : mix(u_a, u_b, 0.45));
-      vec4 layer = petal(
-        p,
-        center + vec2(cos(angle), sin(angle)) * vec2(0.18 * aspect, 0.13),
-        angle + 1.5708,
-        vec2(0.72, 1.30),
-        (fi - 1.5) * 0.08,
-        pc,
-        i < 2 ? 1.0 : -1.0
-      );
-      color = compositePetal(color, layer, 0.60);
-    }
+    // Cropped macro petals: oversized forms originate outside the card.
+    vec2 origin = vec2(
+      (-0.58 + (seedA - 0.5) * 0.16) * aspect,
+      -0.48 + (seedB - 0.5) * 0.12
+    );
+    vec4 a = petal(
+      p,
+      origin + vec2(0.14 * aspect, 0.10),
+      -0.28 + seedC * 0.14,
+      vec2(0.96, 1.52),
+      -0.11,
+      u_a,
+      1.0
+    );
+    vec4 b = petal(
+      p,
+      origin + vec2(0.52 * aspect, 0.16),
+      0.44 + seedC * 0.12,
+      vec2(0.88, 1.38),
+      0.12,
+      u_c,
+      -1.0
+    );
+    vec4 c = petal(
+      p,
+      origin + vec2(0.84 * aspect, 0.48),
+      0.98 + seedC * 0.10,
+      vec2(0.72, 1.18),
+      0.09,
+      u_b,
+      1.0
+    );
+    color = compositeForm(color, a, 0.78);
+    color = compositeForm(color, b, 0.80);
+    color = compositeForm(color, c, 0.70);
   } else {
-    // Ribbon petals: three smooth folded forms with lots of negative space.
-    float baseAngle = 0.34 + seedA * 0.65;
-    for (int i = 0; i < 3; i++) {
-      float fi = float(i);
-      vec2 center = vec2((-0.36 + fi * 0.37) * aspect, -0.18 + fi * 0.19);
-      float angle = baseAngle + (fi - 1.0) * 0.44;
-      vec3 pc = i == 0 ? u_a : (i == 1 ? u_b : u_c);
-      vec4 layer = petal(
-        p,
-        center,
-        angle + 1.5708,
-        vec2(0.66, 1.18),
-        (fi - 1.0) * 0.16,
-        pc,
-        i == 1 ? -1.0 : 1.0
-      );
-      color = compositePetal(color, layer, 0.64);
-    }
+    // Three giant folded sheets with strong transparent overlap.
+    vec4 a = sheet(
+      p,
+      vec2((-0.18 + (seedA - 0.5) * 0.10) * aspect, 0.22),
+      0.48 + seedC * 0.12,
+      vec2(1.04, 0.54),
+      -0.10,
+      -0.16,
+      u_a,
+      1.0
+    );
+    vec4 b = sheet(
+      p,
+      vec2((0.24 + (seedB - 0.5) * 0.10) * aspect, -0.12),
+      -0.62 + seedC * 0.08,
+      vec2(1.00, 0.48),
+      0.16,
+      0.12,
+      u_c,
+      -1.0
+    );
+    vec4 c = sheet(
+      p,
+      vec2(-0.10 * aspect, -0.48 + seedA * 0.12),
+      0.10 + seedC * 0.08,
+      vec2(0.86, 0.38),
+      -0.18,
+      0.02,
+      u_b,
+      1.0
+    );
+    color = compositeForm(color, a, 0.74);
+    color = compositeForm(color, b, 0.78);
+    color = compositeForm(color, c, 0.66);
   }
 
-  // Gentle white bloom like a studio light across translucent petals.
-  vec2 glowPoint = vec2((seedC - 0.5) * aspect * 0.65, 0.18 - seedA * 0.38);
-  float glow = exp(-dot(p - glowPoint, p - glowPoint) * 1.15);
-  color = screenBlend(color, vec3(1.0) * glow * 0.13);
+  // Broad studio light gives the translucent forms a polished finish.
+  vec2 glowPoint = vec2((seedC - 0.5) * aspect * 0.58, 0.30 - seedA * 0.42);
+  float glow = exp(-dot(p - glowPoint, p - glowPoint) * 1.30);
+  color = screenBlend(color, vec3(1.0) * glow * 0.11);
 
-  // Slight edge falloff keeps bright cards composed without muddying the colors.
-  float edge = smoothstep(1.15, 0.35, length((uv - 0.5) * vec2(1.05, 0.92)));
-  color *= 0.91 + edge * 0.09;
+  // Keep only a very light frame so the palette never turns muddy.
+  float edge = 1.0 - smoothstep(
+    0.38,
+    1.16,
+    length((uv - 0.5) * vec2(1.04, 0.90))
+  );
+  color *= 0.95 + edge * 0.05;
 
   gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
 }
@@ -396,7 +500,7 @@ function ShaderCourseArtwork({ course }: { course: Course }) {
     [course.id, course.name, course.shortName],
   );
   const [ready, setReady] = useState(false);
-  const fallback = `radial-gradient(circle at 30% 25%, ${spec.palette.colors[0]}44, transparent 48%), linear-gradient(145deg, ${spec.palette.background}, ${spec.palette.colors[1]}22)`;
+  const fallback = `radial-gradient(ellipse at 24% 22%, ${spec.palette.colors[0]}cc 0%, ${spec.palette.colors[0]}55 34%, transparent 62%), radial-gradient(ellipse at 82% 76%, ${spec.palette.colors[2]}aa 0%, transparent 58%), linear-gradient(145deg, ${spec.palette.background}, ${spec.palette.colors[1]})`;
 
   useEffect(() => {
     const canvas = canvasRef.current;
