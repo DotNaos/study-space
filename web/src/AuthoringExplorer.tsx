@@ -26,10 +26,8 @@ import {
 import { api, message } from "./api";
 import {
   readContentBlock,
-  readContentRevision,
   readContentWorkspace,
   type ContentBlockSummary,
-  type ContentRevision,
 } from "./content-api";
 import { unitHidden, unitKind, unitLabel } from "./learning-structure";
 import {
@@ -53,17 +51,9 @@ function sameUnitDraft(left: PipelineUnit, right: PipelineUnit) {
     && JSON.stringify(left.scriptUnitIds ?? []) === JSON.stringify(right.scriptUnitIds ?? []);
 }
 
-type HeadingNode = {
-  id: string;
-  label: string;
-  level: number;
-  children: HeadingNode[];
-};
-
 type SourcePreview = {
-  block?: ContentBlockSummary;
-  headings: HeadingNode[];
   extraction?: { engine: string; version: string };
+  contentState: "none" | "raw" | "edited";
 };
 
 function hasFileExtension(value: string) {
@@ -71,100 +61,11 @@ function hasFileExtension(value: string) {
   return /\.[a-z0-9][a-z0-9_-]{0,11}$/i.test(name);
 }
 
-function cleanHeading(value: string) {
-  return value
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/[*_`~]/g, "")
-    .replace(/\\([#$%&_{}])/g, "$1")
-    .trim();
-}
-
-function markdownOutline(markdown: string): HeadingNode[] {
-  const headings = markdown
-    .split(/\r?\n/)
-    .flatMap((line, index) => {
-      const match = /^(#{1,6})\s+(.+?)\s*$/.exec(line.trim());
-      if (!match) return [];
-      const label = cleanHeading(match[2]);
-      return label
-        ? [{ id: `heading-${index}-${label.slice(0, 24)}`, label, level: match[1].length }]
-        : [];
-    });
-  if (!headings.length) return [];
-
-  const base = Math.min(...headings.map((item) => item.level));
-  const roots: HeadingNode[] = [];
-  const stack: HeadingNode[] = [];
-  for (const item of headings) {
-    const node: HeadingNode = {
-      id: item.id,
-      label: item.label,
-      level: Math.max(1, item.level - base + 1),
-      children: [],
-    };
-    while (stack.length >= node.level) stack.pop();
-    const parent = stack.at(-1);
-    if (parent) parent.children.push(node);
-    else roots.push(node);
-    stack.push(node);
-  }
-  return roots;
-}
-
-async function rawRevision(courseId: number, block: ContentBlockSummary) {
-  if (!block.currentRevisionId) return undefined;
-  const view = await readContentBlock(courseId, block.id);
-  let revision = view.revision ?? undefined;
-  const seen = new Set<string>();
-  while (
-    revision?.parentRevisionId &&
-    !["materialized", "reset"].includes(revision.kind) &&
-    !seen.has(revision.id)
-  ) {
-    seen.add(revision.id);
-    revision = await readContentRevision(
-      courseId,
-      block.id,
-      revision.parentRevisionId,
-    );
-  }
-  return revision;
-}
-
 function taskOwner(units: PipelineUnit[], task: PipelineUnit) {
   const scripts = units
     .filter((unit) => unitKind(unit) === "script" && !unitHidden(unit, units))
     .sort((a, b) => a.order - b.order);
   return scripts.find((script) => (task.scriptUnitIds ?? []).includes(script.id));
-}
-
-function HeadingTree({
-  nodes,
-  depth = 0,
-  onSelect,
-}: {
-  nodes: HeadingNode[];
-  depth?: number;
-  onSelect: () => void;
-}) {
-  if (!nodes.length) return null;
-  return (
-    <ul className="authoring-explorer-headings" data-depth={depth}>
-      {nodes.map((node) => (
-        <li key={node.id}>
-          <button type="button" onClick={onSelect} title={node.label}>
-            {node.children.length ? (
-              <ChevronDown size={12} aria-hidden="true" />
-            ) : (
-              <span className="authoring-explorer-heading-spacer" />
-            )}
-            <span>{node.label}</span>
-          </button>
-          <HeadingTree nodes={node.children} depth={depth + 1} onSelect={onSelect} />
-        </li>
-      ))}
-    </ul>
-  );
 }
 
 function ExtractionMark({
@@ -204,6 +105,16 @@ function ExtractionMark({
       <Circle size={11} />
     </span>
   );
+}
+
+function ContentStateMark({ preview }: { preview?: SourcePreview }) {
+  const state = preview?.contentState ?? "none";
+  if (state === "none") return null;
+  const label = state === "edited" ? "Edited" : "Raw";
+  const title = state === "edited"
+    ? "Bearbeitete Fassung vorhanden"
+    : "Nur Raw-Fassung vorhanden";
+  return <span className="authoring-source-version" data-state={state} title={title}>{label}</span>;
 }
 
 function MoveSubmenu({ children }: { children: ReactNode }) {
@@ -337,7 +248,6 @@ function SourceCard({
   item,
   preview,
   selected,
-  compact = false,
   onSelect,
   menu,
   moving = false,
@@ -345,14 +255,11 @@ function SourceCard({
   item: PipelineSourceView;
   preview?: SourcePreview;
   selected: boolean;
-  compact?: boolean;
   onSelect: () => void;
   menu?: ReactNode;
   moving?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
   const menuRef = useRef<HTMLDetailsElement>(null);
-  const metadata = preview?.extraction;
 
   useEffect(() => {
     const dismissMenu = (event: PointerEvent) => {
@@ -369,29 +276,19 @@ function SourceCard({
     <article
       className="authoring-source-card"
       data-selected={selected || undefined}
-      data-compact={compact || undefined}
       data-moving={moving || undefined}
     >
       <div className="authoring-source-card-head">
-        {!compact ? (
-          <button
-            type="button"
-            className="authoring-source-disclosure"
-            aria-label={open ? "Datei einklappen" : "Datei aufklappen"}
-            onClick={() => setOpen((value) => !value)}
-          >
-            {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-          </button>
-        ) : (
-          <span className="authoring-source-disclosure-spacer" />
-        )}
         <button type="button" className="authoring-source-open" onClick={onSelect} title={item.source.name}>
           {hasFileExtension(item.source.name)
             ? <Icon.File filename={item.source.name} size={15} />
             : <ExternalLink className="authoring-source-external-icon" size={15} aria-hidden="true" />}
           <span>{item.source.name}</span>
         </button>
-        <ExtractionMark item={item} preview={preview} />
+        <div className="authoring-source-status">
+          <ContentStateMark preview={preview} />
+          <ExtractionMark item={item} preview={preview} />
+        </div>
         <details ref={menuRef} className="authoring-source-menu">
           <summary aria-label={`Aktionen für ${item.source.name}`} title="Aktionen">
             <MoreHorizontal size={14} />
@@ -402,22 +299,6 @@ function SourceCard({
           </div>
         </details>
       </div>
-      {!compact && open && (
-        <div className="authoring-source-card-body">
-          {item.source.materialRevision && metadata && (
-            <div className="authoring-source-extraction-meta">
-              <span>{metadata.version || metadata.engine}</span>
-            </div>
-          )}
-          {preview?.headings.length ? (
-            <HeadingTree nodes={preview.headings} onSelect={onSelect} />
-          ) : (
-            <button type="button" className="authoring-source-empty-outline" onClick={onSelect}>
-              {item.source.materialRevision ? "No headings found" : "Not extracted"}
-            </button>
-          )}
-        </div>
-      )}
     </article>
   );
 }
@@ -697,12 +578,17 @@ export function AuthoringExplorer({
             .filter((item) => item.source.present)
             .map(async (item) => {
               const block = blocksBySource.get(item.source.id);
-              let revision: ContentRevision | undefined;
               let document: MaterialDocument | undefined;
+              let contentState: SourcePreview["contentState"] = "none";
               try {
-                if (block?.currentRevisionId) revision = await rawRevision(courseId, block);
+                if (block?.currentRevisionId) {
+                  const view = await readContentBlock(courseId, block.id, controller.signal);
+                  if (view.revision) {
+                    contentState = ["materialized", "reset"].includes(view.revision.kind) ? "raw" : "edited";
+                  }
+                }
               } catch {
-                // Explorer previews are best effort; the selected View owns error reporting.
+                // Compact Explorer status is best effort; the selected View owns error reporting.
               }
               try {
                 const path = item.source.materialRevision
@@ -716,8 +602,7 @@ export function AuthoringExplorer({
               return [
                 item.source.id,
                 {
-                  block,
-                  headings: markdownOutline(revision?.content ?? ""),
+                  contentState,
                   extraction: provenance
                     ? { engine: provenance.engine, version: provenance.version }
                     : undefined,
@@ -1295,13 +1180,12 @@ export function AuthoringExplorer({
     </>;
   }
 
-  function renderSourceCard(item: PipelineSourceView, unitId?: string, compact = false) {
+  function renderSourceCard(item: PipelineSourceView, unitId?: string) {
     return (
       <SourceCard
         item={item}
         preview={previews[item.source.id]}
         selected={selection.kind === "source" && selection.id === item.source.id}
-        compact={compact}
         onSelect={() => onSelectSource(item, unitId)}
         menu={sourceMenu(item)}
         moving={movingSourceId === item.source.id}
@@ -1578,7 +1462,7 @@ export function AuthoringExplorer({
               <ReorderSourceList
                 items={ignored}
                 targetKey="ignored"
-                renderItem={(item) => renderSourceCard(item, undefined, true)}
+                renderItem={(item) => renderSourceCard(item)}
                 onDragStart={startSourceDrag}
                 onDragMove={updateSourceDrag}
                 onDragEnd={finishSourceDrag}
