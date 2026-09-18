@@ -301,24 +301,18 @@ function MoveSubmenu({ children }: { children: (target: "content" | "tasks") => 
               }
             }}
           >
-            <div className="authoring-source-submenu-mode" role="tablist" aria-label="Move destination type">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={target === "content"}
-                onClick={() => setTarget("content")}
-              >
-                Content
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={target === "tasks"}
-                onClick={() => setTarget("tasks")}
-              >
-                Tasks
-              </button>
-            </div>
+            <button
+              type="button"
+              className="authoring-source-submenu-mode"
+              role="switch"
+              aria-checked={target === "tasks"}
+              onClick={() => setTarget((current) => current === "tasks" ? "content" : "tasks")}
+            >
+              <span className="authoring-source-submenu-mode-label">Tasks</span>
+              <span className="authoring-source-submenu-switch" aria-hidden="true">
+                <span />
+              </span>
+            </button>
             <div className="authoring-source-submenu-destinations">
               {children(target)}
             </div>
