@@ -1,7 +1,7 @@
 import "./authoring-explorer.css";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { motion, useMotionValue, useSpring } from "motion/react";
+import { Reorder } from "motion/react";
 import { Icon } from "@dotnaos/ui-base";
 import {
   AlertCircle,
@@ -323,22 +323,16 @@ function SourceCard({
   selected,
   compact = false,
   onSelect,
-  onDragStart,
-  onDragEnd,
   menu,
   moving = false,
-  dragging = false,
 }: {
   item: PipelineSourceView;
   preview?: SourcePreview;
   selected: boolean;
   compact?: boolean;
   onSelect: () => void;
-  onDragStart: (event: DragEvent<HTMLElement>) => void;
-  onDragEnd: () => void;
   menu?: ReactNode;
   moving?: boolean;
-  dragging?: boolean;
 }) {
   const [open, setOpen] = useState(true);
   const menuRef = useRef<HTMLDetailsElement>(null);
@@ -361,10 +355,6 @@ function SourceCard({
       data-selected={selected || undefined}
       data-compact={compact || undefined}
       data-moving={moving || undefined}
-      data-dragging={dragging || undefined}
-      draggable={!moving}
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
     >
       <div className="authoring-source-card-head">
         {!compact ? (
@@ -416,48 +406,70 @@ function SourceCard({
   );
 }
 
-function SourceDragOverlay({
-  item,
-  preview,
-  left,
-  top,
-  width,
+function ReorderSourceList({
+  items,
+  targetKey,
+  renderItem,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+  disabled = false,
 }: {
-  item: PipelineSourceView;
-  preview?: SourcePreview;
-  left: number;
-  top: number;
-  width: number;
+  items: PipelineSourceView[];
+  targetKey: string;
+  renderItem: (item: PipelineSourceView) => ReactNode;
+  onDragStart: (item: PipelineSourceView, targetKey: string) => void;
+  onDragMove: (point: { x: number; y: number }) => void;
+  onDragEnd: (item: PipelineSourceView, targetKey: string, order: string[]) => void;
+  disabled?: boolean;
 }) {
-  const rawX = useMotionValue(left);
-  const rawY = useMotionValue(top);
-  const x = useSpring(rawX, { stiffness: 850, damping: 55, mass: 0.42 });
-  const y = useSpring(rawY, { stiffness: 850, damping: 55, mass: 0.42 });
+  const sourceIds = items.map((item) => item.source.id);
+  const sourceKey = sourceIds.join("\u0000");
+  const [order, setOrder] = useState(sourceIds);
+  const orderRef = useRef(sourceIds);
 
   useEffect(() => {
-    rawX.set(left);
-    rawY.set(top);
-  }, [left, top, rawX, rawY]);
+    orderRef.current = sourceIds;
+    setOrder(sourceIds);
+  }, [sourceKey]);
+
+  const updateOrder = (next: string[]) => {
+    orderRef.current = next;
+    setOrder(next);
+  };
+
+  const byId = new Map(items.map((item) => [item.source.id, item]));
 
   return (
-    <motion.div
-      className="authoring-source-drag-overlay"
-      aria-hidden="true"
-      initial={{ opacity: 0, scale: 0.97 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.12, ease: "easeOut" }}
-      style={{ x, y, width }}
+    <Reorder.Group
+      as="div"
+      axis="y"
+      values={order}
+      onReorder={updateOrder}
+      className="authoring-reorder-list"
     >
-      <span className="authoring-source-drag-overlay-disclosure"><ChevronDown size={13} /></span>
-      <span className="authoring-source-drag-overlay-main">
-        {hasFileExtension(item.source.name)
-          ? <Icon.File filename={item.source.name} size={15} />
-          : <ExternalLink className="authoring-source-external-icon" size={15} />}
-        <span>{item.source.name}</span>
-      </span>
-      <ExtractionMark item={item} preview={preview} />
-      <MoreHorizontal size={14} />
-    </motion.div>
+      {order.map((id) => {
+        const item = byId.get(id);
+        if (!item) return null;
+        return (
+          <Reorder.Item
+            as="div"
+            key={id}
+            value={id}
+            className="authoring-reorder-item"
+            dragListener={!disabled}
+            dragMomentum={false}
+            dragElastic={0.035}
+            whileDrag={{ scale: 1.012 }}
+            onDragStart={() => onDragStart(item, targetKey)}
+            onDrag={(_, info) => onDragMove(info.point)}
+            onDragEnd={() => onDragEnd(item, targetKey, orderRef.current)}
+          >
+            {renderItem(item)}
+          </Reorder.Item>
+        );
+      })}
+    </Reorder.Group>
   );
 }
 
@@ -489,9 +501,8 @@ export function AuthoringExplorer({
   onCollapse: () => void;
 }) {
   const [previews, setPreviews] = useState<Record<string, SourcePreview>>({});
-  const [dragSourceId, setDragSourceId] = useState<string>();
-  const [dragOverlay, setDragOverlay] = useState<{ x: number; y: number; width: number }>();
   const [dropTarget, setDropTarget] = useState<string>();
+  const dropTargetRef = useRef<string | undefined>(undefined);
   const [movingSourceId, setMovingSourceId] = useState<string>();
   const [movingTaskId, setMovingTaskId] = useState<string>();
   const [collapsedUnits, setCollapsedUnits] = useState<Set<string>>(() => new Set());
@@ -574,24 +585,6 @@ export function AuthoringExplorer({
     [state],
   );
 
-  const dragItem = useMemo(
-    () => dragSourceId ? state.sources.find((item) => item.source.id === dragSourceId) : undefined,
-    [dragSourceId, state.sources],
-  );
-
-  useEffect(() => {
-    if (!dragSourceId) return;
-    const update = (event: Event) => {
-      const dragEvent = event as globalThis.DragEvent;
-      if (!dragEvent.clientX && !dragEvent.clientY) return;
-      setDragOverlay((current) => current
-        ? { ...current, x: dragEvent.clientX, y: dragEvent.clientY }
-        : current);
-    };
-    document.addEventListener("dragover", update, true);
-    return () => document.removeEventListener("dragover", update, true);
-  }, [dragSourceId]);
-
   function sourcesFor(unitId: string) {
     return activeSources
       .filter((item) => sourcePlacement(state, item).currentUnitId === unitId)
@@ -606,48 +599,35 @@ export function AuthoringExplorer({
     .filter((unit) => unitKind(unit) === "script")
     .sort((a, b) => a.order - b.order), [visibleUnits]);
 
-  function dragStart(item: PipelineSourceView, event: DragEvent<HTMLElement>) {
-    if (disabled || movingSourceId) { event.preventDefault(); return; }
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("application/x-study-source", item.source.id);
-    event.dataTransfer.setData("text/plain", item.source.id);
-
-    const ghost = document.createElement("span");
-    ghost.style.position = "fixed";
-    ghost.style.left = "0";
-    ghost.style.top = "0";
-    ghost.style.width = "1px";
-    ghost.style.height = "1px";
-    ghost.style.opacity = "0";
-    ghost.style.pointerEvents = "none";
-    document.body.appendChild(ghost);
-    event.dataTransfer.setDragImage(ghost, 0, 0);
-    requestAnimationFrame(() => ghost.remove());
-
-    const rect = event.currentTarget.getBoundingClientRect();
-    setDragSourceId(item.source.id);
-    setDragOverlay({ x: event.clientX, y: event.clientY, width: rect.width });
-    setMoveError("");
+  function setActiveDropTarget(target?: string) {
+    dropTargetRef.current = target;
+    setDropTarget(target);
   }
 
-  function dragEnd() {
-    setDragSourceId(undefined);
-    setDragOverlay(undefined);
-    setDropTarget(undefined);
+  function clearSourceDrag() {
+    setActiveDropTarget(undefined);
   }
 
-  function sourceFromDrag(event: DragEvent<HTMLElement>) {
-    const id = event.dataTransfer.getData("application/x-study-source") || dragSourceId;
-    return id ? state.sources.find((item) => item.source.id === id) : undefined;
+  function dropTargetAt(point: { x: number; y: number }) {
+    let best: { target: string; area: number } | undefined;
+    for (const element of document.querySelectorAll<HTMLElement>("[data-source-drop-target]")) {
+      const rect = element.getBoundingClientRect();
+      if (
+        point.x < rect.left || point.x > rect.right ||
+        point.y < rect.top || point.y > rect.bottom ||
+        rect.width <= 0 || rect.height <= 0
+      ) continue;
+      const target = element.dataset.sourceDropTarget;
+      if (!target) continue;
+      const area = rect.width * rect.height;
+      if (!best || area < best.area) best = { target, area };
+    }
+    return best?.target;
   }
 
-  function allowDrop(event: DragEvent<HTMLElement>, target: string) {
-    const carriesSource = !!dragSourceId || Array.from(event.dataTransfer.types).includes("application/x-study-source");
-    if (!carriesSource || disabled || movingSourceId) return;
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-
-    if (target.startsWith("content:")) {
+  function updateSourceDrag(point: { x: number; y: number }) {
+    const target = dropTargetAt(point);
+    if (target?.startsWith("content:")) {
       const id = target.slice("content:".length);
       setCollapsedUnits((current) => {
         if (!current.has(id)) return current;
@@ -655,7 +635,7 @@ export function AuthoringExplorer({
         next.delete(id);
         return next;
       });
-    } else if (target.startsWith("tasks:")) {
+    } else if (target?.startsWith("tasks:")) {
       const id = target.slice("tasks:".length);
       setCollapsedTasks((current) => {
         if (!current.has(id)) return current;
@@ -664,8 +644,13 @@ export function AuthoringExplorer({
         return next;
       });
     }
+    if (dropTargetRef.current !== target) setActiveDropTarget(target);
+  }
 
-    if (dropTarget !== target) setDropTarget(target);
+  function startSourceDrag(_item: PipelineSourceView, origin: string) {
+    if (disabled || movingSourceId) return;
+    setActiveDropTarget(origin);
+    setMoveError("");
   }
 
   async function saveMapping(item: PipelineSourceView, target: PipelineUnit | undefined, baseState = state) {
@@ -724,7 +709,7 @@ export function AuthoringExplorer({
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, target.id);
     } catch (error) { setMoveError(message(error)); }
-    finally { setMovingSourceId(undefined); dragEnd(); }
+    finally { setMovingSourceId(undefined); clearSourceDrag(); }
   }
 
   async function moveToIgnored(item: PipelineSourceView) {
@@ -740,7 +725,7 @@ export function AuthoringExplorer({
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item);
     } catch (error) { setMoveError(message(error)); }
-    finally { setMovingSourceId(undefined); dragEnd(); }
+    finally { setMovingSourceId(undefined); clearSourceDrag(); }
   }
 
   async function moveToTasks(item: PipelineSourceView, script: PipelineUnit) {
@@ -773,7 +758,7 @@ export function AuthoringExplorer({
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, savedTask.id);
     } catch (error) { setMoveError(message(error)); }
-    finally { setMovingSourceId(undefined); dragEnd(); }
+    finally { setMovingSourceId(undefined); clearSourceDrag(); }
   }
 
   async function moveTaskToContent(task: PipelineUnit) {
@@ -799,22 +784,76 @@ export function AuthoringExplorer({
     finally { setMovingTaskId(undefined); }
   }
 
-  function dropOnUnit(event: DragEvent<HTMLElement>, unit: PipelineUnit) {
-    event.preventDefault(); event.stopPropagation();
-    const item = sourceFromDrag(event);
-    if (item) void moveToUnit(item, unit);
+
+  function unitForTargetKey(targetKey: string) {
+    const match = /^(?:content|task):(.+)$/.exec(targetKey);
+    return match ? state.units.find((unit) => unit.id === match[1]) : undefined;
   }
 
-  function dropOnTasks(event: DragEvent<HTMLElement>, script: PipelineUnit) {
-    event.preventDefault(); event.stopPropagation();
-    const item = sourceFromDrag(event);
-    if (item) void moveToTasks(item, script);
+  async function saveSourceOrder(targetKey: string, order: string[]) {
+    const target = unitForTargetKey(targetKey);
+    if (!target) return;
+    const current = sourcesFor(target.id).map((item) => item.source.id);
+    if (current.length === order.length && current.every((id, index) => id === order[index])) return;
+
+    const byId = new Map(state.sources.map((item) => [item.source.id, item]));
+    const items: MappingItem[] = order.flatMap((id, index) => {
+      const item = byId.get(id);
+      if (!item) return [];
+      return [{
+        sourceId: item.source.id,
+        sourceVersion: item.source.sourceVersion,
+        disposition: "use" as const,
+        uses: [{
+          unitId: target.id,
+          role: placementRole(item, target),
+          order: index,
+        }],
+      }];
+    });
+    if (!items.length) return;
+
+    setMovingSourceId(order[0]);
+    try {
+      const next = await api<PipelineState>(`${pipelinePath(courseId)}/mapping`, {
+        method: "POST",
+        body: JSON.stringify({
+          expectedRevision: state.revision,
+          items,
+          actor: "user",
+          reason: "Quellen im Explorer neu sortiert.",
+        }),
+      });
+      onState(next);
+    } catch (error) {
+      setMoveError(message(error));
+    } finally {
+      setMovingSourceId(undefined);
+    }
   }
 
-  function dropOnIgnored(event: DragEvent<HTMLElement>) {
-    event.preventDefault(); event.stopPropagation();
-    const item = sourceFromDrag(event);
-    if (item) void moveToIgnored(item);
+  async function moveSourceToTarget(item: PipelineSourceView, targetKey: string) {
+    if (targetKey === "ignored") {
+      await moveToIgnored(item);
+      return;
+    }
+    if (targetKey.startsWith("tasks:")) {
+      const script = state.units.find((unit) => unit.id === targetKey.slice("tasks:".length));
+      if (script) await moveToTasks(item, script);
+      return;
+    }
+    const target = unitForTargetKey(targetKey);
+    if (target) await moveToUnit(item, target);
+  }
+
+  function finishSourceDrag(item: PipelineSourceView, origin: string, order: string[]) {
+    const target = dropTargetRef.current ?? origin;
+    clearSourceDrag();
+    if (target === origin) {
+      if (target !== "ignored") void saveSourceOrder(target, order);
+      return;
+    }
+    void moveSourceToTarget(item, target);
   }
 
   function sourceMenu(item: PipelineSourceView) {
@@ -853,6 +892,20 @@ export function AuthoringExplorer({
     </>;
   }
 
+  function renderSourceCard(item: PipelineSourceView, unitId?: string, compact = false) {
+    return (
+      <SourceCard
+        item={item}
+        preview={previews[item.source.id]}
+        selected={selection.kind === "source" && selection.id === item.source.id}
+        compact={compact}
+        onSelect={() => onSelectSource(item, unitId)}
+        menu={sourceMenu(item)}
+        moving={movingSourceId === item.source.id}
+      />
+    );
+  }
+
   function renderTask(task: PipelineUnit) {
     const sources = sourcesFor(task.id);
 
@@ -861,27 +914,18 @@ export function AuthoringExplorer({
         <li
           className="authoring-task-item authoring-task-item-sources"
           key={task.id}
+          data-source-drop-target={`task:${task.id}`}
           data-drop-active={dropTarget === `task:${task.id}` || undefined}
-          onDragOver={(event) => allowDrop(event, `task:${task.id}`)}
-          onDragLeave={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `task:${task.id}`) setDropTarget(undefined);
-          }}
-          onDrop={(event) => dropOnUnit(event, task)}
         >
-          {sources.map((item) => (
-            <SourceCard
-              key={item.source.id}
-              item={item}
-              preview={previews[item.source.id]}
-              selected={selection.kind === "source" && selection.id === item.source.id}
-              onSelect={() => onSelectSource(item, task.id)}
-              onDragStart={(event) => dragStart(item, event)}
-              onDragEnd={dragEnd}
-              menu={sourceMenu(item)}
-              moving={movingSourceId === item.source.id}
-              dragging={dragSourceId === item.source.id}
-            />
-          ))}
+          <ReorderSourceList
+            items={sources}
+            targetKey={`task:${task.id}`}
+            renderItem={(item) => renderSourceCard(item, task.id)}
+            onDragStart={startSourceDrag}
+            onDragMove={updateSourceDrag}
+            onDragEnd={finishSourceDrag}
+            disabled={disabled || !!movingSourceId}
+          />
         </li>
       );
     }
@@ -892,12 +936,8 @@ export function AuthoringExplorer({
         className="authoring-task-item"
         key={task.id}
         data-moving={movingTaskId === task.id || undefined}
+        data-source-drop-target={`task:${task.id}`}
         data-drop-active={dropTarget === `task:${task.id}` || undefined}
-        onDragOver={(event) => allowDrop(event, `task:${task.id}`)}
-        onDragLeave={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `task:${task.id}`) setDropTarget(undefined);
-        }}
-        onDrop={(event) => dropOnUnit(event, task)}
       >
         <div className="authoring-task-row">
           <button
@@ -961,10 +1001,8 @@ export function AuthoringExplorer({
         className="authoring-unit"
         data-depth={depth}
         key={unit.id}
+        data-source-drop-target={`content:${unit.id}`}
         data-drop-active={dropTarget === `content:${unit.id}` || undefined}
-        onDragOver={(event) => { event.stopPropagation(); allowDrop(event, `content:${unit.id}`); }}
-        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `content:${unit.id}`) setDropTarget(undefined); }}
-        onDrop={(event) => dropOnUnit(event, unit)}
       >
         <div className="authoring-unit-heading" data-selected={selected || undefined}>
           <button
@@ -987,28 +1025,21 @@ export function AuthoringExplorer({
           </button>
         </div>
         {!collapsed && <div className="authoring-unit-content">
-          {sources.map((item) => (
-            <SourceCard
-              key={item.source.id}
-              item={item}
-              preview={previews[item.source.id]}
-              selected={selection.kind === "source" && selection.id === item.source.id}
-              onSelect={() => onSelectSource(item, unit.id)}
-              onDragStart={(event) => dragStart(item, event)}
-              onDragEnd={dragEnd}
-              menu={sourceMenu(item)}
-              moving={movingSourceId === item.source.id}
-              dragging={dragSourceId === item.source.id}
-            />
-          ))}
+          <ReorderSourceList
+            items={sources}
+            targetKey={`content:${unit.id}`}
+            renderItem={(item) => renderSourceCard(item, unit.id)}
+            onDragStart={startSourceDrag}
+            onDragMove={updateSourceDrag}
+            onDragEnd={finishSourceDrag}
+            disabled={disabled || !!movingSourceId}
+          />
           {children.map((child) => renderUnit(child, depth + 1))}
           <div
             className="authoring-task-section"
             data-empty={!tasks.length || undefined}
+            data-source-drop-target={`tasks:${unit.id}`}
             data-drop-active={dropTarget === `tasks:${unit.id}` || undefined}
-            onDragOver={(event) => { event.stopPropagation(); allowDrop(event, `tasks:${unit.id}`); }}
-            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `tasks:${unit.id}`) setDropTarget(undefined); }}
-            onDrop={(event) => dropOnTasks(event, unit)}
           >
             <button
               type="button"
@@ -1076,10 +1107,8 @@ export function AuthoringExplorer({
         <section
           className="authoring-ignored"
           aria-label="Ignored"
+          data-source-drop-target="ignored"
           data-drop-active={dropTarget === "ignored" || undefined}
-          onDragOver={(event) => allowDrop(event, "ignored")}
-          onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === "ignored") setDropTarget(undefined); }}
-          onDrop={dropOnIgnored}
         >
           <div className="authoring-ignored-title">
             <span>Ignored</span>
@@ -1087,21 +1116,15 @@ export function AuthoringExplorer({
           </div>
           {ignored.length ? (
             <div className="authoring-ignored-list">
-              {ignored.map((item) => (
-                <SourceCard
-                  key={item.source.id}
-                  item={item}
-                  preview={previews[item.source.id]}
-                  selected={selection.kind === "source" && selection.id === item.source.id}
-                  compact
-                  onSelect={() => onSelectSource(item)}
-                  onDragStart={(event) => dragStart(item, event)}
-                  onDragEnd={dragEnd}
-                  menu={sourceMenu(item)}
-                  moving={movingSourceId === item.source.id}
-                  dragging={dragSourceId === item.source.id}
-                />
-              ))}
+              <ReorderSourceList
+                items={ignored}
+                targetKey="ignored"
+                renderItem={(item) => renderSourceCard(item, undefined, true)}
+                onDragStart={startSourceDrag}
+                onDragMove={updateSourceDrag}
+                onDragEnd={finishSourceDrag}
+                disabled={disabled || !!movingSourceId}
+              />
             </div>
           ) : (
             <div className="authoring-ignored-empty">Drop files here to ignore them</div>
@@ -1109,16 +1132,6 @@ export function AuthoringExplorer({
         </section>
       </div>
 
-      {dragItem && dragOverlay && typeof document !== "undefined" && createPortal(
-        <SourceDragOverlay
-          item={dragItem}
-          preview={previews[dragItem.source.id]}
-          left={Math.max(8, Math.min(dragOverlay.x + 12, window.innerWidth - Math.min(dragOverlay.width, 420) - 8))}
-          top={Math.max(8, Math.min(dragOverlay.y + 12, window.innerHeight - 48))}
-          width={Math.min(dragOverlay.width, 420)}
-        />,
-        document.body,
-      )}
     </div>
   );
 }
