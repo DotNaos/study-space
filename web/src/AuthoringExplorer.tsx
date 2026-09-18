@@ -6,6 +6,7 @@ import { Icon } from "@dotnaos/ui-base";
 import {
   AlertCircle,
   BookOpen,
+  CheckCheck,
   ChevronDown,
   ChevronRight,
   Circle,
@@ -35,8 +36,9 @@ import {
   type MaterialDocument,
 } from "./material-api";
 import { pipelinePath, type MappingItem, type PipelineSourceView, type PipelineState, type PipelineUnit } from "./pipeline-api";
-import { placementRole, sourcePlacement } from "./source-placement";
+import { currentUse, placementRole, sourcePlacement } from "./source-placement";
 import type { StructureSave } from "./structure-autosave";
+import { matchingSolutionSource, matchingTaskSource, solutionLike, taskLike } from "./task-pairing";
 import type { ContentSelection } from "./ContentAuthoringView";
 
 function sameUnitDraft(left: PipelineUnit, right: PipelineUnit) {
@@ -761,15 +763,22 @@ export function AuthoringExplorer({
     setMoveError("");
   }
 
-  async function saveMapping(item: PipelineSourceView, target: PipelineUnit | undefined, baseState = state) {
+  async function saveMapping(
+    item: PipelineSourceView,
+    target: PipelineUnit | undefined,
+    baseState = state,
+    options: { role?: string; relatedSourceId?: string | null; order?: number } = {},
+  ) {
+    const role = target ? options.role ?? placementRole(item, target) : undefined;
     const mapping: MappingItem = target ? {
       sourceId: item.source.id,
       sourceVersion: item.source.sourceVersion,
       disposition: "use",
       uses: [{
         unitId: target.id,
-        role: placementRole(item, target),
-        order: baseState.sources.filter((candidate) => sourcePlacement(baseState, candidate).currentUnitId === target.id).length,
+        role: role!,
+        relatedSourceId: role === "solution" ? options.relatedSourceId ?? currentUse(item)?.relatedSourceId ?? null : null,
+        order: options.order ?? baseState.sources.filter((candidate) => sourcePlacement(baseState, candidate).currentUnitId === target.id).length,
       }],
     } : {
       sourceId: item.source.id,
@@ -986,10 +995,24 @@ export function AuthoringExplorer({
       ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
       : undefined;
     const optimisticOrder = sourcesFor(target.id).filter((candidate) => candidate.source.id !== item.source.id).length;
+    const taskTarget = unitKind(target) === "tasks";
+    const taskPrimary = taskTarget && solutionLike(item)
+      ? sourcesFor(target.id).filter(taskLike)
+      : [];
+    if (taskTarget && solutionLike(item) && taskPrimary.length !== 1) {
+      setMoveError("Die Lösung braucht genau eine eindeutige Aufgabenquelle in diesem Task.");
+      clearSourceDrag();
+      return;
+    }
     applyOptimisticPlacement(item, { targetUnitId: target.id, hidden: false, order: optimisticOrder });
     setMovingSourceId(item.source.id); setMoveError("");
     try {
-      let next = await saveMapping(item, target);
+      const options = taskTarget
+        ? solutionLike(item)
+          ? { role: "solution", relatedSourceId: taskPrimary[0].source.id, order: optimisticOrder }
+          : { role: "task", order: optimisticOrder }
+        : {};
+      let next = await saveMapping(item, target, state, options);
       if (previousTask && previousTask.id !== target.id) next = await removeEmptyTask(previousTask.id, next);
       onState(next);
       onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, target.id);
@@ -1024,27 +1047,96 @@ export function AuthoringExplorer({
     }
   }
 
+  function taskUnitForSource(sourceId: string, script: PipelineUnit) {
+    return explorerUnits
+      .filter((unit) => unitKind(unit) === "tasks" && (unit.scriptUnitIds ?? []).includes(script.id))
+      .find((unit) => sourcesFor(unit.id).some((candidate) => candidate.source.id === sourceId));
+  }
+
+  function previousTaskFor(item: PipelineSourceView) {
+    const unitId = sourcePlacement(state, item).currentUnitId;
+    return unitId ? state.units.find((unit) => unit.id === unitId && unitKind(unit) === "tasks") : undefined;
+  }
+
   async function moveToTasks(item: PipelineSourceView, script: PipelineUnit) {
     if (disabled || movingSourceId) return;
-    const previousUnitId = sourcePlacement(state, item).currentUnitId;
-    const previousTask = previousUnitId
-      ? state.units.find((unit) => unit.id === previousUnitId && unitKind(unit) === "tasks")
+
+    const available = state.sources.filter((candidate) => candidate.source.present);
+    const pairable = available.filter((candidate) => candidate.decision?.disposition !== "exclude");
+    const solution = solutionLike(item);
+    const primary = solution ? matchingTaskSource(item, pairable) : item;
+    if (!primary) {
+      setMoveError("Keine eindeutige Aufgabenquelle für " + item.source.name + " gefunden.");
+      clearSourceDrag();
+      return;
+    }
+
+    const pairedSolution = !solution && taskLike(primary)
+      ? matchingSolutionSource(primary, pairable.filter((candidate) => {
+          const use = currentUse(candidate);
+          return !use || use.role === "task" || use.role === "solution";
+        }))
       : undefined;
-    const task = createTaskUnit(item, script);
+    const solutionSource = solution ? item : pairedSolution;
+    const oldTasks = [primary, solutionSource]
+      .filter((candidate): candidate is PipelineSourceView => !!candidate)
+      .map(previousTaskFor)
+      .filter((unit): unit is PipelineUnit => !!unit);
+
+    let task = taskUnitForSource(primary.source.id, script);
+    const created = !task;
+    if (!task) task = createTaskUnit(primary, script);
+
     addOptimisticUnit(task);
-    applyOptimisticPlacement(item, { targetUnitId: task.id, hidden: false, order: 0 });
-    setMovingSourceId(item.source.id); setMoveError("");
+    applyOptimisticPlacement(primary, { targetUnitId: task.id, hidden: false, order: 0 });
+    if (solutionSource) applyOptimisticPlacement(solutionSource, { targetUnitId: task.id, hidden: false, order: 1 });
+
+    setMovingSourceId(item.source.id);
+    setMoveError("");
     try {
-      const structured = await onSave([...state.units, task], state.revision);
-      onState(structured);
-      const savedTask = structured.units.find((unit) => unit.id === task.id) ?? task;
-      let next = await saveMapping(item, savedTask, structured);
-      if (previousTask && previousTask.id !== savedTask.id) next = await removeEmptyTask(previousTask.id, next);
+      let next = state;
+      if (created) {
+        next = await onSave([...state.units, task], state.revision);
+        onState(next);
+        task = next.units.find((unit) => unit.id === task!.id) ?? task;
+      }
+
+      const primaryPlacement = sourcePlacement(state, primary);
+      const primaryUse = currentUse(primary);
+      if (primaryPlacement.currentUnitId !== task.id || primaryUse?.role !== "task") {
+        next = await saveMapping(primary, task, next, { role: "task", order: 0 });
+      }
+
+      if (solutionSource) {
+        const currentSolution = next.sources.find((candidate) => candidate.source.id === solutionSource.source.id) ?? solutionSource;
+        const solutionUse = currentUse(currentSolution);
+        const solutionPlacement = sourcePlacement(next, currentSolution);
+        if (
+          solutionPlacement.currentUnitId !== task.id
+          || solutionUse?.role !== "solution"
+          || solutionUse.relatedSourceId !== primary.source.id
+        ) {
+          next = await saveMapping(solutionSource, task, next, {
+            role: "solution",
+            relatedSourceId: primary.source.id,
+            order: 1,
+          });
+        }
+      }
+
+      for (const oldTask of oldTasks.filter((candidate) => candidate.id !== task!.id).filter((candidate, index, all) =>
+        all.findIndex((unit) => unit.id === candidate.id) === index
+      )) {
+        next = await removeEmptyTask(oldTask.id, next);
+      }
+
       onState(next);
-      onSelectSource(next.sources.find((candidate) => candidate.source.id === item.source.id) ?? item, savedTask.id);
+      const selected = next.sources.find((candidate) => candidate.source.id === primary.source.id) ?? primary;
+      onSelectSource(selected, task.id);
     } catch (error) {
-      rollbackOptimisticPlacement(item.source.id);
-      rollbackOptimisticUnit(task.id);
+      rollbackOptimisticPlacement(primary.source.id);
+      if (solutionSource) rollbackOptimisticPlacement(solutionSource.source.id);
+      if (created) rollbackOptimisticUnit(task.id);
       setMoveError(message(error));
     } finally {
       setMovingSourceId(undefined);
@@ -1091,13 +1183,16 @@ export function AuthoringExplorer({
     const items: MappingItem[] = order.flatMap((id, index) => {
       const item = byId.get(id);
       if (!item) return [];
+      const role = placementRole(item, target);
+      const existing = currentUse(item);
       return [{
         sourceId: item.source.id,
         sourceVersion: item.source.sourceVersion,
         disposition: "use" as const,
         uses: [{
           unitId: target.id,
-          role: placementRole(item, target),
+          role,
+          relatedSourceId: role === "solution" ? existing?.relatedSourceId ?? null : null,
           order: index,
         }],
       }];
@@ -1196,20 +1291,79 @@ export function AuthoringExplorer({
     );
   }
 
-  function renderTask(task: PipelineUnit) {
+  function renderTask(task: PipelineUnit, siblingTasks: PipelineUnit[]) {
     const sources = sourcesFor(task.id);
+    const siblingEntries = siblingTasks.flatMap((unit) =>
+      sourcesFor(unit.id).map((item) => ({ item, unit })),
+    );
+    const siblingSources = siblingEntries.map((entry) => entry.item);
+    const primarySources = sources.filter(taskLike);
+
+    if (primarySources.length === 0 && sources.length > 0 && sources.every(solutionLike)) {
+      const pairedElsewhere = sources.every((solution) => !!matchingTaskSource(solution, siblingSources));
+      if (pairedElsewhere) return null;
+    }
+
+    if (primarySources.length > 0) {
+      const pairedIds = new Set<string>();
+      return (
+        <li
+          className="authoring-task-item authoring-task-item-sources"
+          key={task.id}
+          data-source-drop-target={"task:" + task.id}
+          data-drop-active={dropTarget === "task:" + task.id || undefined}
+        >
+          <div className="authoring-task-bundles">
+            {primarySources.map((primary) => {
+              const explicit = siblingEntries.find((entry) => {
+                const use = currentUse(entry.item);
+                return use?.role === "solution" && use.relatedSourceId === primary.source.id;
+              });
+              const matched = explicit?.item ?? matchingSolutionSource(primary, siblingSources);
+              const solutionEntry = matched
+                ? siblingEntries.find((entry) => entry.item.source.id === matched.source.id)
+                : undefined;
+              if (matched) pairedIds.add(matched.source.id);
+
+              return (
+                <div className="authoring-task-bundle" key={primary.source.id}>
+                  {renderSourceCard(primary, task.id)}
+                  <div className="authoring-task-solution" data-missing={!solutionEntry || undefined}>
+                    <span className="authoring-task-solution-icon"><CheckCheck size={13} aria-hidden="true" /></span>
+                    <div className="authoring-task-solution-content">
+                      {solutionEntry ? (
+                        renderSourceCard(solutionEntry.item, solutionEntry.unit.id)
+                      ) : (
+                        <div className="authoring-task-solution-missing">
+                          <span>Lösung fehlt</span>
+                          <small>manuell oder mit Agent erstellen</small>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+            {sources
+              .filter((item) => !primarySources.some((primary) => primary.source.id === item.source.id))
+              .filter((item) => !pairedIds.has(item.source.id))
+              .map((item) => <div key={item.source.id} className="authoring-task-unpaired">{renderSourceCard(item, task.id)}</div>)}
+          </div>
+        </li>
+      );
+    }
 
     if (sources.length > 0) {
       return (
         <li
           className="authoring-task-item authoring-task-item-sources"
           key={task.id}
-          data-source-drop-target={`task:${task.id}`}
-          data-drop-active={dropTarget === `task:${task.id}` || undefined}
+          data-source-drop-target={"task:" + task.id}
+          data-drop-active={dropTarget === "task:" + task.id || undefined}
         >
           <ReorderSourceList
             items={sources}
-            targetKey={`task:${task.id}`}
+            targetKey={"task:" + task.id}
             renderItem={(item) => renderSourceCard(item, task.id)}
             onDragStart={startSourceDrag}
             onDragMove={updateSourceDrag}
@@ -1226,8 +1380,8 @@ export function AuthoringExplorer({
         className="authoring-task-item"
         key={task.id}
         data-moving={movingTaskId === task.id || undefined}
-        data-source-drop-target={`task:${task.id}`}
-        data-drop-active={dropTarget === `task:${task.id}` || undefined}
+        data-source-drop-target={"task:" + task.id}
+        data-drop-active={dropTarget === "task:" + task.id || undefined}
       >
         <div className="authoring-task-row">
           <button
@@ -1241,7 +1395,7 @@ export function AuthoringExplorer({
           </button>
           {owner && (
             <details className="authoring-task-menu">
-              <summary aria-label={`Aktionen für ${unitLabel(task)}`} title="Aktionen">
+              <summary aria-label={"Aktionen für " + unitLabel(task)} title="Aktionen">
                 <MoreHorizontal size={14} />
               </summary>
               <div>
@@ -1394,7 +1548,7 @@ export function AuthoringExplorer({
             {!tasksCollapsed && (
               <>
                 {tasks.length ? (
-                  <ul>{tasks.map(renderTask)}</ul>
+                  <ul>{tasks.map((task) => renderTask(task, tasks))}</ul>
                 ) : (
                   <div className="authoring-task-drop">Drop here</div>
                 )}
