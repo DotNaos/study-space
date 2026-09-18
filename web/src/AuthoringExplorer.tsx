@@ -48,6 +48,11 @@ type SourcePreview = {
   extraction?: { engine: string; version: string };
 };
 
+function hasFileExtension(value: string) {
+  const name = value.split(/[\\/]/).at(-1)?.trim() ?? "";
+  return /\.[a-z0-9][a-z0-9_-]{0,11}$/i.test(name);
+}
+
 function cleanHeading(value: string) {
   return value
     .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
@@ -370,7 +375,9 @@ function SourceCard({
           <span className="authoring-source-disclosure-spacer" />
         )}
         <button type="button" className="authoring-source-open" onClick={onSelect} title={item.source.name}>
-          <Icon.File filename={item.source.name} size={15} />
+          {hasFileExtension(item.source.name)
+            ? <Icon.File filename={item.source.name} size={15} />
+            : <ExternalLink className="authoring-source-external-icon" size={15} aria-hidden="true" />}
           <span>{item.source.name}</span>
         </button>
         <ExtractionMark item={item} preview={preview} />
@@ -818,7 +825,10 @@ export function AuthoringExplorer({
             onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null) && dropTarget === `tasks:${unit.id}`) setDropTarget(undefined); }}
             onDrop={(event) => dropOnTasks(event, unit)}
           >
-            <div className="authoring-task-section-title">Tasks</div>
+            <div className="authoring-task-section-title">
+              <ListTodo size={13} aria-hidden="true" />
+              <span>Tasks</span>
+            </div>
             {tasks.length ? (
               <ul>{tasks.map(renderTask)}</ul>
             ) : (

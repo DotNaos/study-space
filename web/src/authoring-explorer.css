@@ -150,6 +150,7 @@
   cursor: pointer;
 }
 .authoring-source-open span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.authoring-source-external-icon { flex:0 0 auto; color:var(--color-text-muted); }
 .authoring-extraction-mark { display: inline-flex; align-items: center; justify-content: center; color: var(--color-text-muted); }
 .authoring-extraction-mark[data-state=ready] { color: var(--color-success, #2f855a); }
 .authoring-extraction-mark[data-state=issue] { color: var(--color-warning); }
@@ -232,6 +233,9 @@
   border-radius: .4rem;
 }
 .authoring-task-section-title {
+  display:flex;
+  align-items:center;
+  gap:.35rem;
   padding: .22rem .38rem;
   color: var(--color-text-muted);
   font-size: .61rem;
@@ -239,6 +243,7 @@
   text-transform: uppercase;
   letter-spacing: .045em;
 }
+.authoring-task-section-title svg { flex:0 0 auto; color:var(--color-warning); }
 .authoring-task-section ul { list-style: none; margin: 0; padding: 0; }
 .authoring-task-item { min-width: 0; }
 .authoring-task-item[data-moving=true] { opacity:.55; pointer-events:none; }
