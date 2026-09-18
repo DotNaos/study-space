@@ -1,5 +1,4 @@
-import "./content-authoring.css";
-import "./content-authoring-workspace.css";
+import "./content-authoring-overrides.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Icon } from "@dotnaos/ui-base";
 import { MarkdownEditor, MarkdownRenderer } from "@dotnaos/ui/markdown-editor";
@@ -39,6 +38,18 @@ export type ContentSelection =
 export type ContentTocItem = { id: string; label: string; level: number };
 
 type ContentTab = "content" | "pdf-current" | "edited-raw" | "raw";
+
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
+const tabButtonClass = "relative grid size-8 min-w-8 flex-none place-items-center rounded-[.35rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text disabled:cursor-default disabled:opacity-35";
+const tabButtonSelectedClass = "bg-bg-1 text-text after:absolute after:right-[.35rem] after:bottom-[-.32rem] after:left-[.35rem] after:h-px after:bg-accent after:content-['']";
+const mobileCompareClass = "hidden items-center gap-[.15rem] rounded-[.4rem] border border-border bg-bg-1 p-[.15rem] max-[800px]:inline-flex";
+const mobileCompareButtonClass = "min-h-[1.8rem] rounded-[.3rem] px-[.6rem] py-1 text-[.7rem] text-text-muted";
+const mobileCompareButtonActiveClass = "bg-bg-0 text-text";
+const diffModeButtonClass = "grid size-[1.9rem] place-items-center rounded-[.3rem] text-text-muted hover:bg-bg-0 hover:text-text";
+const diffModeButtonActiveClass = "bg-bg-0 text-text shadow-sm";
 
 function statusLabel(block: ContentBlockSummary) {
   if (block.stale) return "Quelle aktualisiert";
@@ -97,17 +108,22 @@ function ProvenancePreview({
   }
   if (cursor < content.length) parts.push({ key: `gap-${cursor}`, text: content.slice(cursor) });
 
-  return <div className="content-provenance-preview">
+  return <div className="flex flex-col gap-[.15rem]">
     {parts.map(part => part.page ? <div
       key={part.key}
-      className="content-provenance-hunk"
-      data-source-page={part.page}
-      data-active={activePage === part.page || undefined}
+      className={cx(
+        "relative mx-[-.55rem] cursor-pointer rounded-[.2rem] border-l-2 border-transparent px-[.55rem] py-[.15rem] transition-colors",
+        "hover:border-accent hover:bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]",
+        activePage === part.page && "border-accent bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)]",
+      )}
       onMouseEnter={() => onHoverPage(part.page)}
       onMouseLeave={() => onHoverPage(undefined)}
       onClick={() => onPinPage(part.page!)}
       title={`Original: Seite ${part.page}`}
-    ><MarkdownRenderer value={part.text}/></div> : <MarkdownRenderer key={part.key} value={part.text}/>)}
+    >
+      {activePage === part.page && <span className="absolute top-[.2rem] right-[.3rem] rounded-[.25rem] bg-bg-1 px-[.3rem] py-[.05rem] text-[.6rem] leading-[1.2] text-text-muted">S. {part.page}</span>}
+      <MarkdownRenderer value={part.text}/>
+    </div> : <MarkdownRenderer key={part.key} value={part.text}/>)}
   </div>;
 }
 
@@ -519,44 +535,67 @@ export function ContentAuthoringView({
   function renderReadingBlock(block: ContentBlockSummary, unitId?: string) {
     const view = views[block.id];
     const preview = view?.revision?.content;
-    return <article className="content-reading-block" key={block.id}>
-      {editing && <button type="button" className="content-reading-source" onClick={() => onSelectSource(block.id, unitId)} title={`${block.name} bearbeiten`}>
-        <Icon.File filename={block.name} size={15}/><span>{block.name}</span>{sourcePages(block) && <small>{sourcePages(block)}</small>}<small className="content-reading-edit-label"><PencilLine size={11}/>Bearbeiten</small>
+    return <article className="min-w-0" key={block.id}>
+      {editing && <button
+        type="button"
+        className="mb-[.45rem] flex max-w-full items-center gap-[.4rem] rounded-[.35rem] bg-transparent px-[.3rem] py-[.2rem] text-[.67rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text"
+        onClick={() => onSelectSource(block.id, unitId)}
+        title={`${block.name} bearbeiten`}
+      >
+        <Icon.File filename={block.name} size={15}/>
+        <span className="min-w-0 truncate">{block.name}</span>
+        {sourcePages(block) && <small className="ml-auto whitespace-nowrap text-[.6rem] text-text-muted">{sourcePages(block)}</small>}
+        <small className="ml-[.15rem] inline-flex items-center gap-[.2rem] whitespace-nowrap text-[.6rem] text-accent"><PencilLine size={11}/>Bearbeiten</small>
       </button>}
-      {preview ? <div className="content-reading-markdown"><MarkdownRenderer value={preview}/></div> : <div className="content-preview-placeholder">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div>}
+      {preview ? <div className="min-w-0 [&>:first-child]:mt-0 [&>:last-child]:mb-0"><MarkdownRenderer value={preview}/></div> : <div className="block p-3 text-[.72rem] text-text-muted">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div>}
     </article>;
   }
 
   function renderReadingNode(node: ContentUnitNode, depth = 0, task = false) {
     const linkedTasks = task ? [] : taskNodesFor(node.unit.id);
-    return <section className="content-reading-unit" data-task={task||undefined} data-depth={depth} key={node.unit.id}>
-      <header className="content-reading-unit-head">
-        {task && <PencilLine size={14}/>}<h2>{unitLabel(node.unit)}</h2>{task && <span>Aufgabe</span>}
+    const depthClass = depth === 1
+      ? "ml-[.65rem] border-l border-border pl-4 max-[800px]:ml-1 max-[800px]:pl-[.55rem]"
+      : depth >= 2
+        ? "ml-[.45rem] border-l border-border pl-[.8rem] max-[800px]:ml-1 max-[800px]:pl-[.55rem]"
+        : "";
+    const headingSize = depth === 0 ? "text-[.95rem]" : depth === 1 ? "text-[.84rem]" : "text-[.78rem]";
+    return <section
+      className={cx(
+        "flex min-w-0 flex-col gap-3",
+        depthClass,
+        task && "rounded-[.4rem] border-l-2 border-warning bg-[color-mix(in_srgb,var(--color-warning)_5%,transparent)] px-3 py-[.65rem]",
+      )}
+      key={node.unit.id}
+    >
+      <header className={cx("flex min-w-0 items-center gap-[.45rem]", task && "text-warning")}>
+        {task && <PencilLine size={14}/>}
+        <h2 className={cx("m-0 min-w-0 font-[620] leading-[1.3] text-text", headingSize)}>{unitLabel(node.unit)}</h2>
+        {task && <span className="rounded-full bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] px-[.35rem] py-[.12rem] text-[.6rem] text-warning">Aufgabe</span>}
       </header>
       {node.blocks.map(block => renderReadingBlock(block, node.unit.id))}
       {node.children.map(child => renderReadingNode(child, depth + 1, task))}
-      {linkedTasks.length > 0 && <div className="content-reading-task-group">
-        <div className="content-reading-task-label">Aufgaben</div>
+      {linkedTasks.length > 0 && <div className="mt-[.35rem] flex flex-col gap-[.55rem]">
+        <div className="text-[.64rem] font-semibold uppercase tracking-[.04em] text-text-muted">Aufgaben</div>
         {linkedTasks.map(item => renderReadingNode(item, depth + 1, true))}
       </div>}
     </section>;
   }
 
   function renderReadingSelection() {
-    if (selection.kind === "script") return <div className="content-reading-script">
+    if (selection.kind === "script") return <div className="flex flex-col gap-[1.45rem] px-[1.35rem] pt-[1.15rem] pb-8 max-[800px]:px-[.85rem] max-[800px]:pt-[.9rem] max-[800px]:pb-[1.4rem]">
       {outline.script.map(node => renderReadingNode(node))}
-      {outline.taskGroups.filter(group => !group.scriptUnit).length > 0 && <section className="content-reading-unassigned-tasks">
+      {outline.taskGroups.filter(group => !group.scriptUnit).length > 0 && <section className="flex flex-col gap-[.7rem] border-t border-border pt-[.9rem] [&>h2]:m-0 [&>h2]:text-[.82rem]">
         <h2>Aufgaben</h2>{outline.taskGroups.filter(group => !group.scriptUnit).flatMap(group => group.tasks).map(node => renderReadingNode(node, 0, true))}
       </section>}
-      {outline.unassignedBlocks.length > 0 && <section className="content-reading-unassigned"><h2>Weitere Inhalte</h2>{outline.unassignedBlocks.map(block => renderReadingBlock(block))}</section>}
+      {outline.unassignedBlocks.length > 0 && <section className="flex flex-col gap-[.7rem] border-t border-border pt-[.9rem] [&>h2]:m-0 [&>h2]:text-[.82rem]"><h2>Weitere Inhalte</h2>{outline.unassignedBlocks.map(block => renderReadingBlock(block))}</section>}
     </div>;
 
     if (selection.kind === "unit") {
       const scriptNode = findNode(outline.script, selection.id);
       const taskNode = outline.taskGroups.flatMap(group => group.tasks).map(root => findNode([root], selection.id)).find((node): node is ContentUnitNode => !!node);
       const node = scriptNode ?? taskNode;
-      if (!node) return <div className="content-authoring-empty">Dieser Eintrag enthält noch keinen aufbereiteten Inhalt.</div>;
-      return <div className="content-reading-script">{renderReadingNode(node, 0, unitKind(node.unit) === "tasks")}</div>;
+      if (!node) return <div className="grid min-h-72 place-items-center gap-[.8rem] text-[.8rem] text-text-muted">Dieser Eintrag enthält noch keinen aufbereiteten Inhalt.</div>;
+      return <div className="flex flex-col gap-[1.45rem] px-[1.35rem] pt-[1.15rem] pb-8 max-[800px]:px-[.85rem] max-[800px]:pt-[.9rem] max-[800px]:pb-[1.4rem]">{renderReadingNode(node, 0, unitKind(node.unit) === "tasks")}</div>;
     }
 
     return null;
@@ -574,32 +613,35 @@ export function ContentAuthoringView({
     { id: "chatgpt", label: "ChatGPT", selected: aiProvider === "chatgpt" },
   ];
 
-  if (loading) return <div className="content-authoring-loading"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
+  if (loading) return <div className="p-8"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
-  return <div className="content-authoring content-authoring-panel" data-editing={editing||undefined}>
-    <header className="content-authoring-head">
-      <div className="content-authoring-title">
-        <strong>{selectedTitle}</strong>
-        {selected && <span>{saving ? "Speichert…" : draft !== savedDraft ? "Nicht gespeichert" : "Gespeichert"}</span>}
-        {stale > 0 && <span className="content-authoring-warning"><AlertTriangle size={13}/>{stale} Quelle{stale === 1 ? "" : "n"} aktualisiert</span>}
+  return <div className="content-authoring m-0 max-w-none bg-bg-0 p-0 pb-44 max-[760px]:pb-48" data-editing={editing||undefined}>
+    <header className={cx(
+      "content-authoring-header sticky top-0 z-[4] flex items-center justify-between gap-4 border-b border-border bg-bg-1 px-4 max-[800px]:static max-[800px]:px-[.8rem] max-[800px]:py-[.65rem]",
+      editing ? "h-[3.35rem] min-h-[3.35rem] py-0" : "min-h-[3.25rem] py-[.7rem]",
+    )}>
+      <div className="flex min-w-0 items-baseline gap-[.55rem]">
+        <strong className="max-w-[min(38rem,65vw)] truncate text-[.82rem] font-semibold max-[800px]:max-w-[55vw]">{selectedTitle}</strong>
+        {selected && <span className="text-[.66rem] text-text-muted">{saving ? "Speichert…" : draft !== savedDraft ? "Nicht gespeichert" : "Gespeichert"}</span>}
+        {stale > 0 && <span className="inline-flex items-center gap-1 text-[.66rem] text-text-muted"><AlertTriangle size={13}/>{stale} Quelle{stale === 1 ? "" : "n"} aktualisiert</span>}
       </div>
-      {editing && <div className="content-authoring-actions">
+      {editing && <div className="flex items-center gap-2 max-[760px]:w-full max-[760px]:justify-between">
         {blocks.length > 0 && <Button size="sm" variant="ghost" icon="refresh" label="Inhalte aktualisieren" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>}
         {stale > 0 && <Button size="sm" variant="ghost" label="Aktualisierte Raw-Fassungen übernehmen" disabled={busy || saving || aiBusy} onPress={() => void rebuildStale()}/>}
-        {onCollapseView && <button type="button" className="content-panel-collapse" onClick={onCollapseView} aria-label="View einklappen" title="Collapse View"><PanelRightClose size={14}/></button>}
+        {onCollapseView && <button type="button" className="grid size-[1.9rem] flex-none place-items-center rounded-[.4rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text" onClick={onCollapseView} aria-label="View einklappen" title="Collapse View"><PanelRightClose size={14}/></button>}
       </div>}
     </header>
 
-    {selectedSummary && <div className="content-view-tabs" role="tablist" aria-label={`${selectedSummary.name} Ansicht`}>
-      <button type="button" role="tab" aria-label="Inhalt" title="Inhalt" aria-selected={tab === "content"} onClick={() => setTab("content")}><FileText size={16}/></button>
-      <button type="button" role="tab" aria-label="PDF mit bearbeitetem Inhalt vergleichen" title="PDF ↔ Bearbeitet" aria-selected={tab === "pdf-current"} disabled={!isPdf} onClick={() => { setTab("pdf-current"); setComparePane("left"); }}><Columns2 size={16}/></button>
-      <button type="button" role="tab" aria-label="Raw mit bearbeitetem Inhalt vergleichen" title="Git-Diff: Raw ↔ Bearbeitet" aria-selected={tab === "edited-raw"} disabled={!selectedView?.revision} onClick={() => { setTab("edited-raw"); setComparePane("left"); }}><FileDiff size={16}/></button>
-      <button type="button" role="tab" aria-label="Raw anzeigen" title="Raw" aria-selected={tab === "raw"} disabled={!selectedView?.revision} onClick={() => setTab("raw")}><Code2 size={16}/></button>
+    {selectedSummary && <div className="flex min-h-[2.35rem] items-center gap-[.15rem] overflow-x-auto border-b border-border bg-bg-0 px-4 py-[.3rem] max-[800px]:px-[.7rem] max-[800px]:py-1" role="tablist" aria-label={`${selectedSummary.name} Ansicht`}>
+      <button className={cx(tabButtonClass, tab === "content" && tabButtonSelectedClass)} type="button" role="tab" aria-label="Inhalt" title="Inhalt" aria-selected={tab === "content"} onClick={() => setTab("content")}><FileText size={16}/></button>
+      <button className={cx(tabButtonClass, tab === "pdf-current" && tabButtonSelectedClass)} type="button" role="tab" aria-label="PDF mit bearbeitetem Inhalt vergleichen" title="PDF ↔ Bearbeitet" aria-selected={tab === "pdf-current"} disabled={!isPdf} onClick={() => { setTab("pdf-current"); setComparePane("left"); }}><Columns2 size={16}/></button>
+      <button className={cx(tabButtonClass, tab === "edited-raw" && tabButtonSelectedClass)} type="button" role="tab" aria-label="Raw mit bearbeitetem Inhalt vergleichen" title="Git-Diff: Raw ↔ Bearbeitet" aria-selected={tab === "edited-raw"} disabled={!selectedView?.revision} onClick={() => { setTab("edited-raw"); setComparePane("left"); }}><FileDiff size={16}/></button>
+      <button className={cx(tabButtonClass, tab === "raw" && tabButtonSelectedClass)} type="button" role="tab" aria-label="Raw anzeigen" title="Raw" aria-selected={tab === "raw"} disabled={!selectedView?.revision} onClick={() => setTab("raw")}><Code2 size={16}/></button>
     </div>}
 
-    {error && <Notice>{error}</Notice>}
-    {!blocks.length && <div className="content-materialize-hint">
-      <span>{contentCandidateCount === 0
+    {error && <div className="mx-4 my-3"><Notice>{error}</Notice></div>}
+    {!blocks.length && <div className="mx-auto grid min-h-[calc(min(76vh,58rem)-8rem)] place-content-center justify-items-center gap-4 px-4 py-8 text-center text-[.76rem] text-text-muted max-[760px]:min-h-56 max-[760px]:px-3 max-[760px]:py-6">
+      <span className="max-w-[34rem] leading-[1.55]">{contentCandidateCount === 0
         ? pipeline.pending > 0
           ? `${pipeline.pending} Quellen sind noch offen. Ordne sie unter Quellen zu oder blende sie aus.`
           : "Keine sichtbare Quelle ist einem sichtbaren Struktur-Eintrag zugeordnet."
@@ -607,61 +649,67 @@ export function ContentAuthoringView({
       <Button variant="primary" icon="sparkles" label="Rohfassung erstellen" disabled={busy || !canMaterialize} onPress={() => void refresh()}/>
     </div>}
 
-    {blocks.length > 0 && (selection.kind !== "source" ? <div ref={readingRootRef}>{renderReadingSelection()}</div> : !selectedSummary ? <div className="content-authoring-empty">Diese Datei ist noch nicht als Inhalt materialisiert.</div> : <div className="content-source-detail" ref={activeBlockRef}>
-      <div className="content-source-meta">
+    {blocks.length > 0 && (selection.kind !== "source" ? <div ref={readingRootRef}>{renderReadingSelection()}</div> : !selectedSummary ? <div className="grid min-h-72 place-items-center gap-[.8rem] text-[.8rem] text-text-muted">Diese Datei ist noch nicht als Inhalt materialisiert.</div> : <div className="px-[1.1rem] pt-4 pb-6 max-[800px]:p-[.8rem]" ref={activeBlockRef}>
+      <div className="mb-[.8rem] flex items-center gap-[.45rem] text-[.65rem] text-text-muted [&>span+span]:border-l [&>span+span]:border-border [&>span+span]:pl-[.45rem]">
         <Icon.File filename={selectedSummary.name} size={16}/><span>{statusLabel(selectedSummary)}</span>{sourcePages(selectedSummary) && <span>{sourcePages(selectedSummary)}</span>}{selectedSummary.stale && <AlertTriangle size={13}/>} {selectedSummary.status === "ready" && <Check size={13}/>}
       </div>
-      {editing && selectedSummary.status === "not-ready" && selectedPipelineSource?.source.mimeType === "application/pdf" && selectedPipelineSource.source.acquisition !== "unsupported" ? <div className="content-source-extraction-empty">
-        <span className="content-source-extraction-icon"><Icon.File filename={selectedSummary.name} size={20}/></span>
-        <strong>{extractingSourceId === selected ? "PDF wird extrahiert …" : "PDF noch nicht extrahiert"}</strong>
-        <span>{extractingSourceId === selected ? "Study Space liest die Quelle ein und bereitet den Inhalt auf." : "Extrahiere diese Quelle, bevor du daraus eine editierbare Rohfassung erstellst."}</span>
+      {editing && selectedSummary.status === "not-ready" && selectedPipelineSource?.source.mimeType === "application/pdf" && selectedPipelineSource.source.acquisition !== "unsupported" ? <div className="grid min-h-[22rem] place-content-center justify-items-center gap-[.7rem] px-4 py-8 text-center text-text-muted">
+        <span className="inline-flex size-10 items-center justify-center rounded-[.55rem] bg-bg-1 text-text-muted"><Icon.File filename={selectedSummary.name} size={20}/></span>
+        <strong className="text-[.8rem] font-[650] text-text">{extractingSourceId === selected ? "PDF wird extrahiert …" : "PDF noch nicht extrahiert"}</strong>
+        <span className="max-w-[29rem] text-[.68rem] leading-[1.5]">{extractingSourceId === selected ? "Study Space liest die Quelle ein und bereitet den Inhalt auf." : "Extrahiere diese Quelle, bevor du daraus eine editierbare Rohfassung erstellst."}</span>
         <Button variant="primary" icon="file-text" label={extractingSourceId === selected ? "Extraktion läuft …" : "PDF extrahieren"} disabled={busy || !!extractingSourceId} onPress={() => void extractSelectedPdf()}/>
-      </div> : !selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="content-preview-placeholder">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : !draftReady ? <Loading label="Bearbeitete Fassung wird geladen …"/> : tab === "content" ? <>
-        {editing ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/> : <div className="content-current-render"><MarkdownRenderer value={draft}/></div>}
-        {editing && <div className="content-block-footer">
+      </div> : !selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="p-3 text-[.72rem] text-text-muted">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : !draftReady ? <Loading label="Bearbeitete Fassung wird geladen …"/> : tab === "content" ? <>
+        {editing ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/> : <div className="h-[68vh] min-h-64 overflow-auto px-[.9rem] py-[.8rem] [&>:first-child]:mt-0 [&>:last-child]:mb-0"><MarkdownRenderer value={draft}/></div>}
+        {editing && <div className="mt-[.6rem] flex items-center justify-between gap-3 px-0 pt-[.45rem] pb-[.1rem] text-[.68rem] text-text-muted">
           <span>{saving ? "Speichert…" : draft === savedDraft ? `Revision ${selectedView.revision.id.slice(0, 8)}` : "Änderungen werden automatisch gespeichert"}</span>
           <Button size="sm" variant="ghost" label="Auf Raw zurücksetzen" disabled={busy || saving} onPress={() => void reset()}/>
         </div>}
       </> : tab === "pdf-current" && originalUrl ? <>
-        <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
-          <button type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>PDF</button>
-          <button type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Jetzt</button>
+        <div className={mobileCompareClass} role="group" aria-label="Vergleichsansicht">
+          <button className={cx(mobileCompareButtonClass, comparePane === "left" && mobileCompareButtonActiveClass)} type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>PDF</button>
+          <button className={cx(mobileCompareButtonClass, comparePane === "right" && mobileCompareButtonActiveClass)} type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Jetzt</button>
         </div>
-        <div className="content-compare">
-          <div className="content-compare-pane content-compare-pdf" data-mobile-visible={comparePane === "left" || undefined}>
-            <div className="content-compare-label">Original PDF</div>
+        <div className="grid min-h-[32rem] grid-cols-2 gap-[.65rem] max-[800px]:block">
+          <div className={cx(
+            "min-w-0 overflow-hidden rounded-md border border-border bg-bg-0",
+            comparePane === "left" ? "max-[800px]:block" : "max-[800px]:hidden",
+          )}>
+            <div className="h-9 border-b border-border px-[.8rem] py-[.65rem] text-[.68rem] font-semibold uppercase tracking-[.04em] text-text-muted">Original PDF</div>
             <PdfViewer source={originalUrl} title={selectedSummary.name} initialPage={selectedSummary.placements[0]?.firstPage ?? 1} page={activeSourcePage} onPageChange={setSourcePage} customize={{className:"h-[68vh] min-h-[32rem]",reason:"Compare preserved source with current rendered Study Space content"}}/>
           </div>
-          <div className="content-compare-pane content-compare-current" data-mobile-visible={comparePane === "right" || undefined}>
-            <div className="content-compare-label">Jetzt</div>
-            <div className="content-current-render"><ProvenancePreview content={draft} view={selectedView} activePage={activeSourcePage} onHoverPage={setHoveredSourcePage} onPinPage={setSourcePage}/></div>
+          <div className={cx(
+            "min-w-0 overflow-hidden rounded-md border border-border bg-bg-0",
+            comparePane === "right" ? "max-[800px]:block" : "max-[800px]:hidden",
+          )}>
+            <div className="h-9 border-b border-border px-[.8rem] py-[.65rem] text-[.68rem] font-semibold uppercase tracking-[.04em] text-text-muted">Jetzt</div>
+            <div className="h-[68vh] min-h-64 overflow-auto px-[.9rem] py-[.8rem] [&>:first-child]:mt-0 [&>:last-child]:mb-0"><ProvenancePreview content={draft} view={selectedView} activePage={activeSourcePage} onHoverPage={setHoveredSourcePage} onPinPage={setSourcePage}/></div>
           </div>
         </div>
       </> : tab === "edited-raw" ? <>
-        <div className="content-diff-toolbar">
-          {diffMode === "split" && <div className="content-compare-mobile-switch" role="group" aria-label="Vergleichsansicht">
-            <button type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>Raw</button>
-            <button type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Bearbeitet</button>
+        <div className="mb-[.45rem] flex items-center justify-end gap-[.45rem] max-[800px]:items-center">
+          {diffMode === "split" && <div className={cx(mobileCompareClass, "mr-auto")} role="group" aria-label="Vergleichsansicht">
+            <button className={cx(mobileCompareButtonClass, comparePane === "left" && mobileCompareButtonActiveClass)} type="button" aria-pressed={comparePane === "left"} onClick={() => setComparePane("left")}>Raw</button>
+            <button className={cx(mobileCompareButtonClass, comparePane === "right" && mobileCompareButtonActiveClass)} type="button" aria-pressed={comparePane === "right"} onClick={() => setComparePane("right")}>Bearbeitet</button>
           </div>}
-          <div className="content-diff-mode" role="group" aria-label="Diff-Darstellung">
-            <button type="button" aria-label="Inline Diff" title="Inline" aria-pressed={diffMode === "inline"} onClick={() => setDiffMode("inline")}><Rows3 size={15}/></button>
-            <button type="button" aria-label="Side-by-side Diff" title="Side by side" aria-pressed={diffMode === "split"} onClick={() => setDiffMode("split")}><Columns2 size={15}/></button>
+          <div className="inline-flex items-center gap-[.1rem] rounded-[.4rem] border border-border bg-bg-1 p-[.12rem]" role="group" aria-label="Diff-Darstellung">
+            <button className={cx(diffModeButtonClass, diffMode === "inline" && diffModeButtonActiveClass)} type="button" aria-label="Inline Diff" title="Inline" aria-pressed={diffMode === "inline"} onClick={() => setDiffMode("inline")}><Rows3 size={15}/></button>
+            <button className={cx(diffModeButtonClass, diffMode === "split" && diffModeButtonActiveClass)} type="button" aria-label="Side-by-side Diff" title="Side by side" aria-pressed={diffMode === "split"} onClick={() => setDiffMode("split")}><Columns2 size={15}/></button>
           </div>
         </div>
-        {rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <TextDiff
+        {rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <div className="[&_.text-diff]:h-[68vh] [&_.text-diff]:min-h-[32rem] max-[800px]:[&_.text-diff]:h-[62vh] max-[800px]:[&_.text-diff]:min-h-96"><TextDiff
           before={rawRevision?.content ?? ""}
           after={draft}
           mode={diffMode}
           beforeLabel="Raw"
           afterLabel="Bearbeitet"
           mobileSide={comparePane === "left" ? "before" : "after"}
-        />}
-      </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="content-raw"><code>{rawRevision?.content ?? ""}</code></pre> : null}
+        /></div>}
+      </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-[.45rem] border border-border bg-bg-1 p-4 font-mono text-[.7rem] leading-[1.55] text-text"><code>{rawRevision?.content ?? ""}</code></pre> : null}
     </div>)}
 
-    {selectedSummary && selectedView?.revision && editing ? <div className="content-ai-wrap">
-      {aiStatus ? <div className="content-ai-status" role="status"><span>{aiStatus}</span><div><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div></div> : null}
-      <div className="content-ai-context" title={aiContextLabel}>{aiContextLabel}</div>
+    {selectedSummary && selectedView?.revision && editing ? <div className="fixed right-[clamp(.75rem,3vw,2rem)] bottom-[clamp(.75rem,2vw,1.5rem)] left-[max(calc(50%_-_29rem),.75rem)] z-30 ml-auto max-w-[58rem] rounded-xl border border-border bg-[color-mix(in_srgb,var(--color-bg-0)_94%,transparent)] p-[.35rem] shadow-[0_12px_36px_rgb(0_0_0/.18)] backdrop-blur-[12px] max-[760px]:right-[.35rem] max-[760px]:bottom-[max(.35rem,env(safe-area-inset-bottom))] max-[760px]:left-[.35rem] max-[760px]:w-auto max-[760px]:max-w-none [&_[data-ui-component=Composer]]:min-w-0">
+      {aiStatus ? <div className="flex items-center justify-between gap-2 px-[.35rem] pt-[.15rem] pb-[.3rem] text-[.68rem] text-text-muted max-[760px]:items-start" role="status"><span className="min-w-0 truncate max-[760px]:line-clamp-2 max-[760px]:whitespace-normal">{aiStatus}</span><div className="flex flex-none items-center gap-[.15rem]"><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div></div> : null}
+      <div className="min-w-0 truncate px-[.55rem] pt-[.15rem] pb-[.35rem] text-[.67rem] text-text-muted" title={aiContextLabel}>{aiContextLabel}</div>
       <Composer
         value={aiPrompt}
         onChange={setAiPrompt}

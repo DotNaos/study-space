@@ -55,6 +55,10 @@ function sameUnitDraft(left: PipelineUnit, right: PipelineUnit) {
     && JSON.stringify(left.scriptUnitIds ?? []) === JSON.stringify(right.scriptUnitIds ?? []);
 }
 
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
 type SourcePreview = {
   extraction?: { engine: string; version: string };
   contentState: "none" | "raw" | "edited";
@@ -97,18 +101,18 @@ function ExtractionMark({
 
   if (problem)
     return (
-      <span className="authoring-extraction-mark" data-state="issue" title={title}>
+      <span className="inline-flex items-center justify-center text-warning" title={title}>
         <AlertCircle size={13} />
       </span>
     );
   if (hasExtraction)
     return (
-      <span className="authoring-extraction-mark" data-state="ready" title={title}>
-        <span className="authoring-extraction-dot" />
+      <span className="inline-flex items-center justify-center text-success" title={title}>
+        <span className="size-[.48rem] rounded-full bg-current" />
       </span>
     );
   return (
-    <span className="authoring-extraction-mark" data-state={unsupported ? "unsupported" : "empty"} title={title}>
+    <span className="inline-flex items-center justify-center text-text-muted" title={title}>
       <Circle size={11} />
     </span>
   );
@@ -121,7 +125,13 @@ function ContentStateMark({ preview }: { preview?: SourcePreview }) {
   const title = state === "edited"
     ? "Bearbeitete Fassung vorhanden"
     : "Nur Raw-Fassung vorhanden";
-  return <span className="authoring-source-version" data-state={state} title={title}>{label}</span>;
+  return <span
+    className={cx(
+      "inline-flex min-h-[1.15rem] items-center rounded-full border border-border px-[.3rem] py-[.08rem] text-[.52rem] font-semibold leading-none tracking-[.01em] text-text-muted",
+      state === "edited" && "border-[color-mix(in_srgb,var(--color-accent)_40%,var(--color-border))] bg-[color-mix(in_srgb,var(--color-accent)_9%,transparent)] text-[color-mix(in_srgb,var(--color-accent)_72%,var(--color-text))]",
+    )}
+    title={title}
+  >{label}</span>;
 }
 
 function MoveSubmenu({ children }: { children: ReactNode }) {
@@ -258,6 +268,7 @@ function SourceCard({
   onSelect,
   menu,
   moving = false,
+  compact = false,
 }: {
   item: PipelineSourceView;
   preview?: SourcePreview;
@@ -265,6 +276,7 @@ function SourceCard({
   onSelect: () => void;
   menu?: ReactNode;
   moving?: boolean;
+  compact?: boolean;
 }) {
   const menuRef = useRef<HTMLDetailsElement>(null);
 
@@ -281,23 +293,33 @@ function SourceCard({
 
   return (
     <article
-      className="authoring-source-card"
+      className={cx(
+        "authoring-source-card min-w-0 my-[.02rem] overflow-visible rounded-[.34rem] bg-transparent transition-colors hover:bg-bg-1",
+        selected && "bg-bg-1",
+        moving && "pointer-events-none opacity-55",
+      )}
       data-selected={selected || undefined}
       data-moving={moving || undefined}
     >
-      <div className="authoring-source-card-head">
-        <button type="button" className="authoring-source-open" onClick={onSelect} title={item.source.name}>
+      <div className={cx(
+        "authoring-source-card-head grid grid-cols-[minmax(0,1fr)_auto_1.5rem] items-center gap-[.22rem] pr-[.08rem] pl-[.16rem]",
+        compact ? "min-h-[1.55rem] py-0" : "min-h-[1.72rem] py-[.03rem]",
+      )}>
+        <button type="button" className={cx(
+          "authoring-source-open flex min-w-0 items-center gap-[.34rem] bg-transparent px-[.08rem] py-[.12rem] text-left text-text",
+          compact ? "text-[.61rem] text-text-muted" : "text-[.66rem]",
+        )} onClick={onSelect} title={item.source.name}>
           {hasFileExtension(item.source.name)
             ? <Icon.File filename={item.source.name} size={15} />
-            : <ExternalLink className="authoring-source-external-icon" size={15} aria-hidden="true" />}
-          <span>{item.source.name}</span>
+            : <ExternalLink className="shrink-0 text-text-muted" size={15} aria-hidden="true" />}
+          <span className="min-w-0 truncate">{item.source.name}</span>
         </button>
-        <div className="authoring-source-status">
+        <div className="flex min-w-max items-center justify-end gap-[.3rem]">
           <ContentStateMark preview={preview} />
           <ExtractionMark item={item} preview={preview} />
         </div>
-        <details ref={menuRef} className="authoring-source-menu">
-          <summary aria-label={`Aktionen für ${item.source.name}`} title="Aktionen">
+        <details ref={menuRef} className="authoring-source-menu relative">
+          <summary className="inline-flex size-[1.35rem] cursor-pointer list-none items-center justify-center rounded-[.28rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text [&::-webkit-details-marker]:hidden" aria-label={`Aktionen für ${item.source.name}`} title="Aktionen">
             <MoreHorizontal size={14} />
           </summary>
           <div>
@@ -350,7 +372,7 @@ function ReorderSourceList({
       axis="y"
       values={order}
       onReorder={updateOrder}
-      className="authoring-reorder-list"
+      className="block min-w-0"
     >
       {order.map((id) => {
         const item = byId.get(id);
@@ -360,7 +382,7 @@ function ReorderSourceList({
             as="div"
             key={id}
             value={id}
-            className="authoring-reorder-item"
+            className="relative min-w-0 cursor-grab list-none active:cursor-grabbing"
             dragListener={!disabled}
             dragMomentum={false}
             dragElastic={0.025}
@@ -451,7 +473,7 @@ function SolutionPicker({
       <button
         ref={triggerRef}
         type="button"
-        className="authoring-solution-picker-trigger"
+        className="grid min-h-[2.45rem] w-full grid-cols-[1.55rem_minmax(0,1fr)] items-center gap-[.35rem] rounded-[.4rem] border border-dashed border-[color-mix(in_srgb,var(--color-border)_82%,transparent)] bg-transparent px-[.48rem] py-[.35rem] text-left text-text-muted transition-colors hover:border-border hover:bg-bg-1 hover:text-text aria-expanded:border-border aria-expanded:bg-bg-1 aria-expanded:text-text disabled:cursor-default disabled:opacity-45"
         disabled={disabled}
         aria-haspopup="menu"
         aria-expanded={open}
@@ -461,10 +483,10 @@ function SolutionPicker({
           return next;
         })}
       >
-        <span className="authoring-solution-picker-trigger-icon"><Plus size={14} aria-hidden="true" /></span>
-        <span className="authoring-solution-picker-trigger-copy">
-          <strong>Lösung hinzufügen</strong>
-          <small>Quelle auswählen oder später erstellen</small>
+        <span className="inline-flex size-[1.45rem] items-center justify-center rounded-[.32rem] bg-bg-1 text-text-muted"><Plus size={14} aria-hidden="true" /></span>
+        <span className="grid min-w-0 gap-[.08rem]">
+          <strong className="text-[.6rem] font-semibold text-current">Lösung hinzufügen</strong>
+          <small className="truncate text-[.52rem] font-normal text-text-muted">Quelle auswählen oder später erstellen</small>
         </span>
       </button>
       {open && position && typeof document !== "undefined" && createPortal(
@@ -551,8 +573,8 @@ function SectionActions({
   };
 
   return (
-    <details ref={ref} className="authoring-unit-menu">
-      <summary aria-label={`Aktionen für ${unitLabel(unit)}`} title="Aktionen">
+    <details ref={ref} className="authoring-unit-menu group/unit-menu relative">
+      <summary className="pointer-events-none inline-flex size-[1.55rem] cursor-pointer list-none items-center justify-center rounded-[.32rem] text-text-muted opacity-0 transition-[opacity,background-color,color] hover:bg-bg-2 hover:text-text focus-visible:bg-bg-2 focus-visible:text-text group-hover/unit:pointer-events-auto group-hover/unit:opacity-100 group-focus-within/unit:pointer-events-auto group-focus-within/unit:opacity-100 group-open/unit-menu:pointer-events-auto group-open/unit-menu:opacity-100 [&::-webkit-details-marker]:hidden" aria-label={`Aktionen für ${unitLabel(unit)}`} title="Aktionen">
         <MoreHorizontal size={14} />
       </summary>
       <div>
@@ -582,7 +604,7 @@ function SectionReorderItem({
   const handle = (
     <button
       type="button"
-      className="authoring-unit-drag-handle authoring-unit-control"
+      className="pointer-events-none inline-flex size-[1.55rem] cursor-grab items-center justify-center rounded-[.32rem] text-text-muted opacity-0 transition-[opacity,background-color,color] hover:bg-bg-2 hover:text-text focus-visible:bg-bg-2 focus-visible:text-text active:cursor-grabbing disabled:cursor-default disabled:opacity-35 group-hover/unit:pointer-events-auto group-hover/unit:opacity-100 group-focus-within/unit:pointer-events-auto group-focus-within/unit:opacity-100"
       aria-label={`${unitLabel(unit)} verschieben`}
       title="Verschieben"
       disabled={disabled}
@@ -606,7 +628,7 @@ function SectionReorderItem({
       layout="position"
       layoutId={`authoring-unit-${unit.id}`}
       transition={{ layout: { type: "spring", stiffness: 360, damping: 32, mass: 0.72 } }}
-      className="authoring-unit-reorder-item"
+      className="min-w-0"
       onDragEnd={onDragEnd}
     >
       {children(handle)}
@@ -642,7 +664,7 @@ function ReorderSectionList({
   };
 
   return (
-    <Reorder.Group as="div" axis="y" values={order} onReorder={update} className="authoring-unit-reorder-list">
+    <Reorder.Group as="div" axis="y" values={order} onReorder={update} className="min-w-0">
       {order.map((id) => {
         const unit = byId.get(id);
         if (!unit) return null;
@@ -1490,7 +1512,7 @@ export function AuthoringExplorer({
     </>;
   }
 
-  function renderSourceCard(item: PipelineSourceView, unitId?: string) {
+  function renderSourceCard(item: PipelineSourceView, unitId?: string, compact = false) {
     return (
       <SourceCard
         item={item}
@@ -1499,6 +1521,7 @@ export function AuthoringExplorer({
         onSelect={() => onSelectSource(item, unitId)}
         menu={sourceMenu(item)}
         moving={movingSourceId === item.source.id}
+        compact={compact}
       />
     );
   }
@@ -1622,12 +1645,15 @@ export function AuthoringExplorer({
       const pairedIds = new Set<string>();
       return (
         <li
-          className="authoring-task-item authoring-task-item-sources"
+          className={cx(
+            "authoring-task-item min-w-0",
+            dropTarget === "task:" + task.id && "rounded-[.35rem] outline-2 -outline-offset-2 outline-accent",
+          )}
           key={task.id}
           data-source-drop-target={"task:" + task.id}
           data-drop-active={dropTarget === "task:" + task.id || undefined}
         >
-          <div className="authoring-task-bundles">
+          <div className="grid min-w-0 gap-[.16rem]">
             {primarySources.map((primary) => {
               const explicit = siblingEntries.find((entry) => {
                 const use = effectiveUse(entry.item);
@@ -1640,18 +1666,22 @@ export function AuthoringExplorer({
               if (matched) pairedIds.add(matched.source.id);
 
               return (
-                <div className="authoring-task-bundle" key={primary.source.id}>
+                <div className="min-w-0 rounded-[.36rem]" key={primary.source.id}>
                   {renderSourceCard(primary, task.id)}
                   <div
-                    className="authoring-task-solution"
+                    className={cx(
+                      "authoring-task-solution grid min-w-0 items-center text-text-muted",
+                      solutionEntry ? "ml-[1.05rem] mt-[.02rem] mb-[.12rem] grid-cols-[1.25rem_minmax(0,1fr)]" : "ml-5 mt-[.02rem] mb-[.12rem] grid-cols-[minmax(0,1fr)]",
+                      dropTarget === "solution:" + task.id + ":" + primary.source.id && "rounded-[.35rem] outline-2 -outline-offset-2 outline-accent",
+                    )}
                     data-missing={!solutionEntry || undefined}
                     data-source-drop-target={"solution:" + task.id + ":" + primary.source.id}
                     data-drop-active={dropTarget === "solution:" + task.id + ":" + primary.source.id || undefined}
                   >
-                    <span className="authoring-task-solution-icon"><CheckCheck size={13} aria-hidden="true" /></span>
-                    <div className="authoring-task-solution-content">
+                    {solutionEntry && <span className="inline-flex h-[1.45rem] w-5 items-center justify-center text-text-muted"><CheckCheck size={13} aria-hidden="true" /></span>}
+                    <div className="min-w-0">
                       {solutionEntry ? (
-                        renderSourceCard(solutionEntry.item, solutionEntry.unit.id)
+                        renderSourceCard(solutionEntry.item, solutionEntry.unit.id, true)
                       ) : (
                         <SolutionPicker
                           task={primary}
@@ -1668,7 +1698,7 @@ export function AuthoringExplorer({
             {sources
               .filter((item) => !primarySources.some((primary) => primary.source.id === item.source.id))
               .filter((item) => !pairedIds.has(item.source.id))
-              .map((item) => <div key={item.source.id} className="authoring-task-unpaired">{renderSourceCard(item, task.id)}</div>)}
+              .map((item) => <div key={item.source.id} className="opacity-72">{renderSourceCard(item, task.id)}</div>)}
           </div>
         </li>
       );
@@ -1677,7 +1707,10 @@ export function AuthoringExplorer({
     if (sources.length > 0) {
       return (
         <li
-          className="authoring-task-item authoring-task-item-sources"
+          className={cx(
+            "authoring-task-item min-w-0",
+            dropTarget === "task:" + task.id && "rounded-[.35rem] outline-2 -outline-offset-2 outline-accent",
+          )}
           key={task.id}
           data-source-drop-target={"task:" + task.id}
           data-drop-active={dropTarget === "task:" + task.id || undefined}
@@ -1698,21 +1731,27 @@ export function AuthoringExplorer({
     const owner = taskOwner(explorerUnits, task);
     return (
       <li
-        className="authoring-task-item"
+        className={cx("authoring-task-item min-w-0", movingTaskId === task.id && "pointer-events-none opacity-55")}
         key={task.id}
         data-moving={movingTaskId === task.id || undefined}
         data-source-drop-target={"task:" + task.id}
         data-drop-active={dropTarget === "task:" + task.id || undefined}
       >
-        <div className="authoring-task-row">
+        <div className={cx(
+          "authoring-task-row grid min-w-0 grid-cols-[minmax(0,1fr)_1.7rem] items-center rounded-[.35rem]",
+          dropTarget === "task:" + task.id && "outline-2 -outline-offset-2 outline-accent",
+        )}>
           <button
             type="button"
-            className="authoring-task-open"
+            className={cx(
+              "flex min-h-[1.8rem] w-full min-w-0 items-center gap-[.42rem] rounded-[.35rem] bg-transparent px-[.42rem] py-1 text-left text-[.67rem] text-text transition-colors hover:bg-bg-1",
+              selection.kind === "unit" && selection.id === task.id && "bg-bg-1",
+            )}
             data-selected={selection.kind === "unit" && selection.id === task.id || undefined}
             onClick={() => onSelectUnit(task)}
           >
             <ListTodo size={13} aria-hidden="true" />
-            <span>{unitLabel(task)}</span>
+            <span className="min-w-0 truncate">{unitLabel(task)}</span>
           </button>
           {owner && (
             <details className="authoring-task-menu">
@@ -1768,23 +1807,32 @@ export function AuthoringExplorer({
 
     return (
       <section
-        className="authoring-unit"
+        className={cx(
+          "mt-[.18rem] min-w-0",
+          depth === 1 && "ml-[.55rem]",
+          depth >= 2 && "ml-4",
+        )}
         data-depth={depth}
         data-hidden={hidden || undefined}
         data-drop-active={dropTarget === `content:${unit.id}` || undefined}
       >
         <div
-          className="authoring-unit-heading"
+          className={cx(
+            "group/unit grid min-w-0 grid-cols-[minmax(0,1fr)_1.7rem_1.7rem_1.7rem] items-center rounded-[.4rem] transition-colors hover:bg-bg-1 focus-within:bg-bg-1",
+            selected && "bg-bg-1",
+            hidden && "text-text-muted",
+          )}
           data-selected={selected || undefined}
           data-hidden={hidden || undefined}
           data-source-drop-target={`content:${unit.id}`}
         >
           {renaming ? (
-            <div className="authoring-unit-rename">
-              <span className="authoring-unit-rename-chevron">
+            <div className="flex min-h-8 min-w-0 items-center gap-[.42rem] pt-[.22rem] pr-[.28rem] pb-[.22rem] pl-[.38rem]">
+              <span className="inline-flex shrink-0 text-text-muted">
                 {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
               </span>
               <input
+                className="h-[1.55rem] w-full min-w-0 rounded-[.3rem] border border-focus-ring bg-bg-0 px-[.35rem] py-[.15rem] text-[.72rem] font-semibold text-text outline-none"
                 autoFocus
                 value={renameValue}
                 aria-label={`${unit.title} umbenennen`}
@@ -1802,25 +1850,28 @@ export function AuthoringExplorer({
           ) : (
             <button
               type="button"
-              className="authoring-unit-toggle"
+              className={cx(
+                "flex min-h-8 w-full min-w-0 items-center gap-[.42rem] bg-transparent px-[.38rem] py-[.28rem] text-left text-[.72rem] font-semibold",
+                hidden ? "text-text-muted" : "text-text",
+              )}
               aria-expanded={!collapsed && !hidden}
               onClick={() => toggleUnitCollapsed(unit.id)}
             >
               {collapsed ? <ChevronRight size={14} aria-hidden="true" /> : <ChevronDown size={14} aria-hidden="true" />}
-              <span>{unitLabel(unit)}</span>
-              {hidden && <EyeOff className="authoring-unit-hidden-mark" size={12} aria-hidden="true" />}
+              <span className="min-w-0 truncate">{unitLabel(unit)}</span>
+              {hidden && <EyeOff className="ml-[.15rem] shrink-0 text-text-muted" size={12} aria-hidden="true" />}
             </button>
           )}
           {!hidden ? <button
             type="button"
-            className="authoring-unit-view authoring-unit-control"
+            className="pointer-events-none inline-flex size-[1.55rem] items-center justify-center rounded-[.32rem] text-text-muted opacity-0 transition-[opacity,background-color,color] hover:bg-bg-2 hover:text-text focus-visible:bg-bg-2 focus-visible:text-text group-hover/unit:pointer-events-auto group-hover/unit:opacity-100 group-focus-within/unit:pointer-events-auto group-focus-within/unit:opacity-100"
             aria-label={unitLabel(unit) + " öffnen"}
             title="Öffnen"
             onClick={() => onSelectUnit(unit)}
           >
             <ArrowUpRight size={14} aria-hidden="true" />
-          </button> : <span className="authoring-unit-control-spacer" />}
-          {dragHandle ?? <span className="authoring-unit-control-spacer" />}
+          </button> : <span className="size-[1.55rem]" />}
+          {dragHandle ?? <span className="size-[1.55rem]" />}
           <SectionActions
             unit={unit}
             hidden={!!unit.hidden}
@@ -1833,7 +1884,7 @@ export function AuthoringExplorer({
           />
         </div>
 
-        {!collapsed && !hidden && <div className="authoring-unit-content" data-source-drop-target={`content:${unit.id}`}>
+        {!collapsed && !hidden && <div className="pt-[.12rem] pr-0 pb-[.12rem] pl-[.8rem]" data-source-drop-target={`content:${unit.id}`}>
           <ReorderSourceList
             items={sources}
             targetKey={`content:${unit.id}`}
@@ -1850,14 +1901,16 @@ export function AuthoringExplorer({
             onOrder={(order) => reorderSectionSiblings(unit.id, order)}
           />
           <div
-            className="authoring-task-section"
+            className="my-[.3rem] mb-[.2rem] rounded-[.4rem]"
             data-empty={!tasks.length || undefined}
             data-source-drop-target={`tasks:${unit.id}`}
-            data-drop-active={dropTarget === `tasks:${unit.id}` || undefined}
           >
             <button
               type="button"
-              className="authoring-task-section-title"
+              className={cx(
+                "flex min-h-[1.8rem] w-full items-center gap-[.35rem] rounded-[.35rem] bg-transparent px-[.38rem] py-[.22rem] text-left text-[.61rem] font-semibold uppercase tracking-[.045em] text-text-muted transition-colors hover:bg-bg-1 hover:text-text [&_svg]:shrink-0",
+                dropTarget === `tasks:${unit.id}` && "outline-2 -outline-offset-2 outline-accent text-text",
+              )}
               data-source-drop-target={`tasks:${unit.id}`}
               aria-expanded={!tasksCollapsed}
               onClick={() => toggleTasksCollapsed(unit.id)}
@@ -1869,9 +1922,9 @@ export function AuthoringExplorer({
             {!tasksCollapsed && (
               <>
                 {tasks.length ? (
-                  <ul>{tasks.map((task) => renderTask(task, tasks))}</ul>
+                  <ul className="m-0 list-none p-0">{tasks.map((task) => renderTask(task, tasks))}</ul>
                 ) : (
-                  <div className="authoring-task-drop">Drop here</div>
+                  <div className="mx-1 mb-1 min-h-8 rounded-[.35rem] border border-dashed border-[color-mix(in_srgb,var(--color-border)_75%,transparent)] px-[.55rem] py-[.48rem] text-[.6rem] text-text-muted">Drop here</div>
                 )}
               </>
             )}
@@ -1883,15 +1936,16 @@ export function AuthoringExplorer({
 
   return (
     <LayoutGroup id={`authoring-explorer-${courseId}`}>
-      <div className="authoring-explorer">
-      <header className="authoring-explorer-header">
-        <div className="authoring-explorer-heading">
-          <strong>Explorer</strong>
-          {state.pending > 0 && <small>{state.pending} offen</small>}
+      <div className="authoring-explorer flex h-full min-h-0 flex-col bg-bg-0">
+      <header className="authoring-explorer-header flex h-[3.35rem] min-h-[3.35rem] items-center justify-between gap-2 border-b border-border bg-bg-1 px-[.55rem] pl-[.7rem]">
+        <div className="flex min-w-0 items-baseline gap-[.45rem]">
+          <strong className="text-[.72rem] font-semibold tracking-[.01em]">Explorer</strong>
+          {state.pending > 0 && <small className="text-[.6rem] font-normal text-text-muted">{state.pending} offen</small>}
         </div>
-        <div className="authoring-explorer-actions">
+        <div className="flex items-center gap-[.1rem]">
           <button
             type="button"
+            className={cx("grid size-[1.8rem] place-items-center rounded-[.38rem] text-text-muted transition-colors hover:bg-bg-2 hover:text-text", selection.kind === "script" && "bg-bg-2 text-text")}
             data-selected={selection.kind === "script" || undefined}
             aria-label="Gesamtes Skript ansehen"
             title="Gesamtes Skript"
@@ -1901,22 +1955,23 @@ export function AuthoringExplorer({
           </button>
           <button
             type="button"
+            className="grid size-[1.8rem] place-items-center rounded-[.38rem] text-text-muted transition-colors hover:bg-bg-2 hover:text-text disabled:cursor-wait disabled:opacity-50"
             aria-label="Quellenbestand aktualisieren"
             title="Refresh sources"
             disabled={refreshing}
             onClick={onRefresh}
           >
-            {refreshing ? <LoaderCircle className="authoring-spin" size={14} /> : <RefreshCw size={14} />}
+            {refreshing ? <LoaderCircle className="animate-spin" size={14} /> : <RefreshCw size={14} />}
           </button>
-          <button type="button" aria-label="Explorer einklappen" title="Collapse Explorer" onClick={onCollapse}>
+          <button type="button" className="grid size-[1.8rem] place-items-center rounded-[.38rem] text-text-muted transition-colors hover:bg-bg-2 hover:text-text" aria-label="Explorer einklappen" title="Collapse Explorer" onClick={onCollapse}>
             <PanelLeftClose size={14} />
           </button>
         </div>
       </header>
 
-      {moveError && <div className="authoring-explorer-error" role="alert">{moveError}</div>}
-      <div className="authoring-explorer-scroll">
-        <div className="authoring-explorer-tree">
+      {moveError && <div className="mx-2 mt-[.4rem] rounded-[.4rem] bg-[color-mix(in_srgb,var(--color-danger)_10%,transparent)] px-2 py-[.4rem] text-[.67rem] leading-[1.35] text-danger" role="alert">{moveError}</div>}
+      <div className="min-h-0 flex-1 overflow-auto px-2 pt-[.45rem] pb-[.75rem]">
+        <div className="mt-[.05rem]">
           <ReorderSectionList
             items={scriptRoots}
             disabled={disabled || structureSaving || !!movingSourceId}
@@ -1926,17 +1981,19 @@ export function AuthoringExplorer({
         </div>
 
         <section
-          className="authoring-ignored"
+          className="mt-[.8rem] border-t border-border pt-[.55rem]"
           aria-label="Ignored"
           data-source-drop-target="ignored"
-          data-drop-active={dropTarget === "ignored" || undefined}
         >
-          <div className="authoring-ignored-title">
+          <div className={cx(
+            "flex items-center gap-[.4rem] px-[.38rem] pt-[.2rem] pb-[.3rem] text-[.64rem] font-semibold text-text-muted",
+            dropTarget === "ignored" && "rounded-[.35rem] outline-2 -outline-offset-2 outline-accent text-text",
+          )}>
             <span>Ignored</span>
-            {ignored.length > 0 && <small>{ignored.length}</small>}
+            {ignored.length > 0 && <small className="text-[.58rem] font-medium">{ignored.length}</small>}
           </div>
           {ignored.length ? (
-            <div className="authoring-ignored-list">
+            <div className="opacity-72">
               <ReorderSourceList
                 items={ignored}
                 targetKey="ignored"
@@ -1948,7 +2005,7 @@ export function AuthoringExplorer({
               />
             </div>
           ) : (
-            <div className="authoring-ignored-empty">Drop files here to ignore them</div>
+            <div className="mx-[.2rem] my-[.1rem] min-h-[2.2rem] rounded-[.4rem] border border-dashed border-[color-mix(in_srgb,var(--color-border)_75%,transparent)] p-[.55rem] text-[.6rem] text-text-muted">Drop files here to ignore them</div>
           )}
         </section>
       </div>

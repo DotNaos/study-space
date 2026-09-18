@@ -1,0 +1,9 @@
+.content-authoring [data-ui-component="MarkdownEditor"] {
+  border: 0 !important;
+  background: transparent !important;
+}
+
+.content-authoring [data-ui-component="PdfViewer"] {
+  border: 0 !important;
+  border-radius: 0 !important;
+}

@@ -48,7 +48,7 @@ test("mobile content exposes the rendered TOC through one compact control", () =
 
 test("edit-mode unit content exposes an explicit path into block editor, diff and composer", () => {
   const content = readFileSync(new URL("../src/ContentAuthoringView.tsx", import.meta.url), "utf8");
-  expect(content).toContain('className="content-reading-edit-label"');
+  expect(content).toContain('<PencilLine size={11}/>Bearbeiten');
   expect(content).toContain('setTab("edited-raw")');
   expect(content).toContain('<Composer');
   expect(content).toContain('<MarkdownEditor');

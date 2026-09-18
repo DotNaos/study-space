@@ -8,6 +8,10 @@ import { ContentAuthoringView, type ContentSelection, type ContentTocItem } from
 import { DialogShell } from "./DialogShell";
 import { AuthoringExplorer } from "./AuthoringExplorer";
 
+function cx(...values: Array<string | false | null | undefined>) {
+  return values.filter(Boolean).join(" ");
+}
+
 const EXPLORER_WIDTH_KEY = "study-space:authoring-explorer-width";
 
 function initialExplorerWidth() {
@@ -117,12 +121,16 @@ export function PreparationWorkspace({
       const width = Math.min(560, Math.max(240, startWidth + next.clientX - startX));
       setExplorerWidth(width);
     };
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
     const stop = () => {
       window.removeEventListener("pointermove", move);
       window.removeEventListener("pointerup", stop);
-      document.body.classList.remove("authoring-resizing");
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
     };
-    document.body.classList.add("authoring-resizing");
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop, { once: true });
   }
@@ -137,10 +145,16 @@ export function PreparationWorkspace({
       </div>
     </header>
 
-    {editing ? <div className="preparation-authoring-shell">
-      {explorerCollapsed ? <div className="preparation-collapsed-rail" data-side="left">
-        <button type="button" className="preparation-panel-restore" onClick={() => { setExplorerCollapsed(false); setViewCollapsed(false); }} title="Explorer öffnen" aria-label="Explorer öffnen"><PanelLeftOpen size={15}/></button>
-      </div> : <aside className="preparation-explorer-panel" style={{ width: viewCollapsed ? "auto" : explorerWidth }}>
+    {editing ? <div className="relative flex h-[min(76vh,58rem)] min-h-[42rem] min-w-0 overflow-hidden rounded-[.65rem] border border-border bg-bg-0 max-[800px]:h-auto max-[800px]:min-h-0 max-[800px]:flex-col max-[800px]:overflow-visible">
+      {explorerCollapsed ? <div className="absolute top-0 left-0 z-20 flex h-[3.35rem] w-[2.7rem] items-center justify-center bg-transparent max-[800px]:relative max-[800px]:h-[2.15rem] max-[800px]:w-full max-[800px]:flex-[0_0_2.15rem] max-[800px]:border-b max-[800px]:border-border">
+        <button type="button" className="grid size-[1.7rem] place-items-center rounded-[.35rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text" onClick={() => { setExplorerCollapsed(false); setViewCollapsed(false); }} title="Explorer öffnen" aria-label="Explorer öffnen"><PanelLeftOpen size={15}/></button>
+      </div> : <aside
+        className={cx(
+          "min-w-0 flex-none overflow-hidden bg-bg-0 max-[800px]:w-full max-[800px]:max-h-[22rem] max-[800px]:border-b max-[800px]:border-border",
+          viewCollapsed && "flex-1 [&_.authoring-explorer-header]:pr-[3.25rem]",
+        )}
+        style={{ width: viewCollapsed ? "auto" : explorerWidth }}
+      >
         <AuthoringExplorer
           courseId={courseId}
           state={state}
@@ -157,11 +171,14 @@ export function PreparationWorkspace({
         />
       </aside>}
 
-      {!explorerCollapsed && !viewCollapsed && <div className="preparation-panel-splitter" role="separator" aria-orientation="vertical" aria-label="Explorer-Breite ändern" onPointerDown={beginResize}><span/></div>}
+      {!explorerCollapsed && !viewCollapsed && <div className="group relative z-[5] w-[5px] flex-[0_0_5px] cursor-col-resize touch-none bg-transparent max-[800px]:hidden" role="separator" aria-orientation="vertical" aria-label="Explorer-Breite ändern" onPointerDown={beginResize}><span className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-[width,background-color] group-hover:w-[3px] group-hover:bg-[color-mix(in_srgb,var(--color-text-muted)_52%,var(--color-border))]"/></div>}
 
-      {viewCollapsed ? <div className="preparation-collapsed-rail" data-side="right">
-        <button type="button" className="preparation-panel-restore" onClick={() => { setViewCollapsed(false); setExplorerCollapsed(false); }} title="View öffnen" aria-label="View öffnen"><PanelRightOpen size={15}/></button>
-      </div> : <main className="preparation-content-panel preparation-authoring-view" aria-label="Inhalt">
+      {viewCollapsed ? <div className="absolute top-0 right-0 z-20 flex h-[3.35rem] w-[2.7rem] items-center justify-center bg-transparent max-[800px]:relative max-[800px]:h-[2.15rem] max-[800px]:w-full max-[800px]:flex-[0_0_2.15rem] max-[800px]:border-b max-[800px]:border-border">
+        <button type="button" className="grid size-[1.7rem] place-items-center rounded-[.35rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text" onClick={() => { setViewCollapsed(false); setExplorerCollapsed(false); }} title="View öffnen" aria-label="View öffnen"><PanelRightOpen size={15}/></button>
+      </div> : <main className={cx(
+        "min-w-0 flex-1 overflow-auto bg-bg-0",
+        explorerCollapsed && "[&_.content-authoring-header]:pl-[3.7rem]",
+      )} aria-label="Inhalt">
         <ContentAuthoringView
           courseId={courseId}
           courseName={courseName}
