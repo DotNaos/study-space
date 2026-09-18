@@ -21,6 +21,7 @@
     "jsqr": "1.4.0",
     "katex": "0.16.47",
     "lucide-react": "0.562.0",
+    "motion": "^13.4.0",
     "pdfjs-dist": "6.3.289",
     "react": "19.2.0",
     "react-dom": "19.2.0",

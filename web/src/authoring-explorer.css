@@ -328,6 +328,8 @@
 .authoring-source-drag-overlay {
   position:fixed;
   z-index:2000;
+  left:0;
+  top:0;
   display:grid;
   grid-template-columns:1.55rem minmax(0,1fr) 1.35rem 1.7rem;
   min-width:12rem;

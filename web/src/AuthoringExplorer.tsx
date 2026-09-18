@@ -1,6 +1,7 @@
 import "./authoring-explorer.css";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
+import { motion, useMotionValue, useSpring } from "motion/react";
 import { Icon } from "@dotnaos/ui-base";
 import {
   AlertCircle,
@@ -428,11 +429,24 @@ function SourceDragOverlay({
   top: number;
   width: number;
 }) {
+  const rawX = useMotionValue(left);
+  const rawY = useMotionValue(top);
+  const x = useSpring(rawX, { stiffness: 850, damping: 55, mass: 0.42 });
+  const y = useSpring(rawY, { stiffness: 850, damping: 55, mass: 0.42 });
+
+  useEffect(() => {
+    rawX.set(left);
+    rawY.set(top);
+  }, [left, top, rawX, rawY]);
+
   return (
-    <div
+    <motion.div
       className="authoring-source-drag-overlay"
       aria-hidden="true"
-      style={{ left, top, width }}
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.12, ease: "easeOut" }}
+      style={{ x, y, width }}
     >
       <span className="authoring-source-drag-overlay-disclosure"><ChevronDown size={13} /></span>
       <span className="authoring-source-drag-overlay-main">
@@ -443,7 +457,7 @@ function SourceDragOverlay({
       </span>
       <ExtractionMark item={item} preview={preview} />
       <MoreHorizontal size={14} />
-    </div>
+    </motion.div>
   );
 }
 
