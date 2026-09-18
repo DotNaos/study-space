@@ -82,7 +82,7 @@ vec4 petal(
   float width = scale.x * (0.12 + 0.88 * pow(max(0.0, 1.0 - y * y), 0.54));
   float x = abs(q.x) / max(width, 0.001);
   float distanceField = max(abs(y), x);
-  float mask = 1.0 - smoothstep(0.70, 1.08, distanceField);
+  float mask = 1.0 - smoothstep(0.58, 1.14, distanceField);
 
   float crossLight = clamp(
     0.5 + 0.5 * q.x / max(scale.x, 0.001) * lightDirection,
@@ -91,15 +91,15 @@ vec4 petal(
   );
   float centerFold = exp(-pow(q.x / max(scale.x * 0.22, 0.001), 2.0));
   float innerLight = pow(max(0.0, 1.0 - abs(y)), 0.7);
-  float rim = smoothstep(0.62, 0.98, distanceField) * mask;
+  float rim = smoothstep(0.52, 1.02, distanceField) * mask;
 
-  vec3 shaded = petalColor * (0.79 + crossLight * 0.21);
+  vec3 shaded = petalColor * (0.83 + crossLight * 0.17);
   shaded = mix(
     shaded,
     screenBlend(shaded, vec3(0.74)),
-    centerFold * innerLight * 0.22
+    centerFold * innerLight * 0.16
   );
-  shaded = mix(shaded, screenBlend(shaded, vec3(0.64)), rim * 0.035);
+  shaded = mix(shaded, screenBlend(shaded, vec3(0.64)), rim * 0.012);
 
   return vec4(shaded, mask);
 }
@@ -119,25 +119,25 @@ vec4 sheet(
   vec2 n = q / max(scale, vec2(0.001));
 
   float distanceField = pow(abs(n.x), 3.0) + pow(abs(n.y), 2.2);
-  float mask = 1.0 - smoothstep(0.66, 1.10, distanceField);
+  float mask = 1.0 - smoothstep(0.54, 1.16, distanceField);
   float crossLight = clamp(0.5 + 0.5 * n.x * lightDirection, 0.0, 1.0);
   float crease = exp(-pow((n.x - foldOffset) * 5.4, 2.0));
   float middle = pow(max(0.0, 1.0 - abs(n.y)), 0.55);
-  float rim = smoothstep(0.54, 0.98, distanceField) * mask;
+  float rim = smoothstep(0.48, 1.02, distanceField) * mask;
 
-  vec3 shaded = sheetColor * (0.80 + crossLight * 0.20);
+  vec3 shaded = sheetColor * (0.84 + crossLight * 0.16);
   shaded = mix(
     shaded,
     screenBlend(shaded, vec3(0.76)),
-    crease * middle * 0.20
+    crease * middle * 0.14
   );
-  shaded = mix(shaded, screenBlend(shaded, vec3(0.62)), rim * 0.03);
+  shaded = mix(shaded, screenBlend(shaded, vec3(0.62)), rim * 0.01);
 
   return vec4(shaded, mask);
 }
 
 vec3 compositeForm(vec3 base, vec4 layer, float opacity) {
-  vec3 translucent = mix(base, layer.rgb, 0.76);
+  vec3 translucent = mix(base, layer.rgb, 0.69);
   return mix(base, translucent, layer.a * opacity);
 }
 
@@ -150,13 +150,30 @@ void main() {
   float seedB = hash21(vec2(9.1, u_seed * 53.0));
   float seedC = hash21(vec2(u_seed * 31.0, 6.4));
 
-  // Clean editorial base: saturated enough to feel alive, but the large forms
-  // carry the composition instead of procedural texture.
-  float diagonal = clamp(uv.x * 0.58 + (1.0 - uv.y) * 0.42, 0.0, 1.0);
-  vec3 color = mix(u_background, u_b, 0.05 + diagonal * 0.14);
+  // Build depth into the base itself so the forms dissolve into a soft,
+  // palette-specific field instead of sitting on a flat color.
+  float diagonal = clamp(uv.x * 0.62 + (1.0 - uv.y) * 0.38, 0.0, 1.0);
+  float reverseDiagonal = clamp((1.0 - uv.x) * 0.46 + uv.y * 0.54, 0.0, 1.0);
+  vec3 baseA = mix(u_background, u_b, 0.04 + diagonal * 0.16);
+  vec3 baseB = mix(u_background, u_c, 0.04 + reverseDiagonal * 0.14);
+  vec3 color = mix(baseA, baseB, 0.18 + seedC * 0.10);
+
+  vec2 backgroundPoint = vec2(
+    0.72 - seedB * 0.34,
+    0.68 - seedA * 0.28
+  );
+  float backgroundGlow = exp(
+    -dot(uv - backgroundPoint, uv - backgroundPoint) * 3.0
+  );
+  color = mix(
+    color,
+    screenBlend(color, u_a * 0.62),
+    backgroundGlow * 0.16
+  );
+
   vec2 softPoint = vec2(0.20 + seedA * 0.24, 0.17 + seedB * 0.20);
-  float softLight = exp(-dot(uv - softPoint, uv - softPoint) * 5.2);
-  color = mix(color, screenBlend(color, u_a * 0.72), softLight * 0.28);
+  float softLight = exp(-dot(uv - softPoint, uv - softPoint) * 4.6);
+  color = mix(color, screenBlend(color, u_a * 0.68), softLight * 0.22);
 
   if (u_variant < 0.5) {
     // Radial bloom: one clear flower-like focal point.
@@ -496,8 +513,8 @@ class SharedCourseShaderRenderer {
     context.globalAlpha = 1;
     context.filter = "none";
     context.drawImage(this.canvas, 0, 0, width, height);
-    context.globalAlpha = 0.24;
-    context.filter = "blur(3.5px)";
+    context.globalAlpha = 0.30;
+    context.filter = "blur(5px)";
     context.drawImage(this.canvas, 0, 0, width, height);
     context.globalAlpha = 1;
     context.filter = "none";
