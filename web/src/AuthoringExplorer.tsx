@@ -183,12 +183,11 @@ function ExtractionMark({
   );
 }
 
-function MoveSubmenu({ children }: { children: (target: "content" | "tasks") => ReactNode }) {
+function MoveSubmenu({ children }: { children: ReactNode }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
   const closeTimerRef = useRef<number | undefined>(undefined);
   const [open, setOpen] = useState(false);
-  const [target, setTarget] = useState<"content" | "tasks">("content");
   const [position, setPosition] = useState<{ top: number; left: number; width: number }>();
 
   const cancelClose = () => {
@@ -301,20 +300,8 @@ function MoveSubmenu({ children }: { children: (target: "content" | "tasks") => 
               }
             }}
           >
-            <button
-              type="button"
-              className="authoring-source-submenu-mode"
-              role="switch"
-              aria-checked={target === "tasks"}
-              onClick={() => setTarget((current) => current === "tasks" ? "content" : "tasks")}
-            >
-              <span className="authoring-source-submenu-mode-label">Tasks</span>
-              <span className="authoring-source-submenu-switch" aria-hidden="true">
-                <span />
-              </span>
-            </button>
             <div className="authoring-source-submenu-destinations">
-              {children(target)}
+              {children}
             </div>
           </div>,
           document.body,
@@ -658,17 +645,28 @@ export function AuthoringExplorer({
       {currentScript && current && unitKind(current) === "tasks" && <button type="button" onClick={() => void moveToUnit(item, currentScript)}><BookOpen size={13} aria-hidden="true" /><span>Move to Content</span></button>}
       {!placement.hidden && <button type="button" onClick={() => void moveToIgnored(item)}><EyeOff size={13} aria-hidden="true" /><span>Move to Ignored</span></button>}
       <MoveSubmenu>
-        {(target) => scriptUnits.map((unit) => (
-          <button
-            type="button"
-            role="menuitem"
-            data-submenu-destination
-            className="authoring-source-menu-destination"
-            key={unit.id}
-            onClick={() => void (target === "tasks" ? moveToTasks(item, unit) : moveToUnit(item, unit))}
-          >
-            <span>{unitLabel(unit)}</span>
-          </button>
+        {scriptUnits.map((unit) => (
+          <div className="authoring-source-menu-destination" key={unit.id}>
+            <button
+              type="button"
+              role="menuitem"
+              data-submenu-destination
+              className="authoring-source-menu-destination-main"
+              onClick={() => void moveToUnit(item, unit)}
+            >
+              <span>{unitLabel(unit)}</span>
+            </button>
+            <button
+              type="button"
+              role="menuitem"
+              data-submenu-destination
+              className="authoring-source-menu-task-chip"
+              aria-label={`${unitLabel(unit)} Tasks`}
+              onClick={() => void moveToTasks(item, unit)}
+            >
+              Tasks
+            </button>
+          </div>
         ))}
       </MoveSubmenu>
     </>;
