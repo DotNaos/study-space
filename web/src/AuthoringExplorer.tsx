@@ -184,16 +184,39 @@ function ExtractionMark({
 }
 
 function MoveSubmenu({ children }: { children: ReactNode }) {
-  const detailsRef = useRef<HTMLDetailsElement>(null);
-  const summaryRef = useRef<HTMLElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
   const flyoutRef = useRef<HTMLDivElement>(null);
+  const closeTimerRef = useRef<number | undefined>(undefined);
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState<{ top: number; left: number; width: number }>();
+
+  const cancelClose = () => {
+    if (closeTimerRef.current !== undefined) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = undefined;
+    }
+  };
+
+  const openMenu = () => {
+    cancelClose();
+    setOpen(true);
+  };
+
+  const scheduleClose = () => {
+    cancelClose();
+    closeTimerRef.current = window.setTimeout(() => {
+      setOpen(false);
+      setPosition(undefined);
+      closeTimerRef.current = undefined;
+    }, 120);
+  };
+
+  useEffect(() => () => cancelClose(), []);
 
   useEffect(() => {
     if (!open) return;
     const update = () => {
-      const rect = summaryRef.current?.getBoundingClientRect();
+      const rect = triggerRef.current?.getBoundingClientRect();
       if (!rect) return;
       const gutter = 8;
       const gap = 4;
@@ -204,12 +227,20 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
         : Math.max(gutter, rect.left - width - gap);
       setPosition({ top: Math.max(gutter, rect.top - 4), left, width });
     };
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target as Node;
+      if (triggerRef.current?.contains(target) || flyoutRef.current?.contains(target)) return;
+      setOpen(false);
+      setPosition(undefined);
+    };
     update();
     window.addEventListener("resize", update);
     window.addEventListener("scroll", update, true);
+    document.addEventListener("pointerdown", closeOnOutsidePointer);
     return () => {
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
     };
   }, [open]);
 
@@ -229,22 +260,27 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
   }, [open, position]);
 
   return (
-    <details
-      ref={detailsRef}
+    <div
       className="authoring-source-submenu"
-      onToggle={(event) => {
-        const next = event.currentTarget.open;
-        setOpen(next);
-        if (!next) setPosition(undefined);
-      }}
+      onMouseEnter={openMenu}
+      onMouseLeave={scheduleClose}
     >
-      <summary ref={summaryRef} aria-haspopup="menu">
+      <button
+        ref={triggerRef}
+        type="button"
+        className="authoring-source-submenu-trigger"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        onFocus={openMenu}
+        onBlur={scheduleClose}
+        onClick={openMenu}
+      >
         <span className="authoring-source-submenu-label">
           <FolderInput size={13} aria-hidden="true" />
           <span>Move to</span>
         </span>
         <ChevronRight className="authoring-source-submenu-chevron" size={13} aria-hidden="true" />
-      </summary>
+      </button>
       {open && position && typeof document !== "undefined" &&
         createPortal(
           <div
@@ -252,10 +288,15 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
             className="authoring-source-submenu-flyout"
             role="menu"
             style={{ top: position.top, left: position.left, width: position.width }}
+            onMouseEnter={cancelClose}
+            onMouseLeave={scheduleClose}
+            onFocus={cancelClose}
+            onBlur={scheduleClose}
             onClick={(event) => {
               if ((event.target as Element).closest?.("button")) {
-                if (detailsRef.current) detailsRef.current.open = false;
+                cancelClose();
                 setOpen(false);
+                setPosition(undefined);
               }
             }}
           >
@@ -263,7 +304,7 @@ function MoveSubmenu({ children }: { children: ReactNode }) {
           </div>,
           document.body,
         )}
-    </details>
+    </div>
   );
 }
 
