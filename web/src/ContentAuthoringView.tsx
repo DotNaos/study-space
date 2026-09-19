@@ -37,6 +37,14 @@ export type ContentSelection =
 
 export type ContentTocItem = { id: string; label: string; level: number };
 
+export function contentTocLevel(rawLevel: number, unitDepth?: number, minimumBlockHeadingLevel?: number) {
+  if (unitDepth === undefined) return Math.min(6, Math.max(1, rawLevel));
+  const level = minimumBlockHeadingLevel === undefined
+    ? unitDepth + 1
+    : unitDepth + 2 + Math.max(0, rawLevel - minimumBlockHeadingLevel);
+  return Math.min(6, Math.max(1, level));
+}
+
 type ContentTab = "content" | "pdf-current" | "edited-raw" | "raw";
 
 function cx(...values: Array<string | false | null | undefined>) {
@@ -517,13 +525,40 @@ export function ContentAuthoringView({
     const frame = requestAnimationFrame(() => {
       const root = readingRootRef.current;
       if (!root) { onTocChange?.([]); return; }
-      const items = Array.from(root.querySelectorAll<HTMLElement>("h1,h2,h3,h4")).map((heading, index) => {
+      const headings = Array.from(root.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6"));
+      const minimumBlockLevels = new Map<HTMLElement, number>();
+      const items = headings.map((heading, index) => {
         const label = heading.textContent?.trim() || `Abschnitt ${index + 1}`;
         const slug = label.toLocaleLowerCase().normalize("NFKD").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48) || "abschnitt";
         const id = `content-${slug}-${index + 1}`;
         heading.id = id;
         heading.classList.add("content-toc-anchor");
-        return { id, label, level: Number(heading.tagName.slice(1)) };
+
+        const rawLevel = Number(heading.tagName.slice(1));
+        const unit = heading.closest<HTMLElement>("[data-content-unit-depth]");
+        const unitDepth = unit ? Number(unit.dataset.contentUnitDepth) : undefined;
+        const block = heading.closest<HTMLElement>("[data-content-block-depth]");
+        let minimumBlockHeadingLevel: number | undefined;
+        if (block) {
+          minimumBlockHeadingLevel = minimumBlockLevels.get(block);
+          if (minimumBlockHeadingLevel === undefined) {
+            minimumBlockHeadingLevel = Math.min(
+              ...Array.from(block.querySelectorAll<HTMLElement>("h1,h2,h3,h4,h5,h6"))
+                .map(item => Number(item.tagName.slice(1))),
+            );
+            minimumBlockLevels.set(block, minimumBlockHeadingLevel);
+          }
+        }
+
+        return {
+          id,
+          label,
+          level: contentTocLevel(
+            rawLevel,
+            block ? Number(block.dataset.contentBlockDepth) : unitDepth,
+            block ? minimumBlockHeadingLevel : undefined,
+          ),
+        };
       });
       onTocChange?.(items);
     });
@@ -532,10 +567,10 @@ export function ContentAuthoringView({
 
   const taskNodesFor = (unitId: string) => outline.taskGroups.find(group => group.scriptUnit?.id === unitId)?.tasks ?? [];
 
-  function renderReadingBlock(block: ContentBlockSummary, unitId?: string) {
+  function renderReadingBlock(block: ContentBlockSummary, unitId?: string, depth = -1) {
     const view = views[block.id];
     const preview = view?.revision?.content;
-    return <article className="min-w-0" key={block.id}>
+    return <article className="min-w-0" key={block.id} data-content-block-depth={depth}>
       {editing && <button
         type="button"
         className="mb-[.45rem] flex max-w-full items-center gap-[.4rem] rounded-[.35rem] bg-transparent px-[.3rem] py-[.2rem] text-[.67rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text"
@@ -560,6 +595,7 @@ export function ContentAuthoringView({
         : "";
     const headingSize = depth === 0 ? "text-[.95rem]" : depth === 1 ? "text-[.84rem]" : "text-[.78rem]";
     return <section
+      data-content-unit-depth={depth}
       className={cx(
         "flex min-w-0 flex-col gap-3",
         depthClass,
@@ -569,10 +605,10 @@ export function ContentAuthoringView({
     >
       <header className={cx("flex min-w-0 items-center gap-[.45rem]", task && "text-warning")}>
         {task && <PencilLine size={14}/>}
-        <h2 className={cx("m-0 min-w-0 font-[620] leading-[1.3] text-text", headingSize)}>{unitLabel(node.unit)}</h2>
+        <h2 data-content-unit-heading className={cx("m-0 min-w-0 font-[620] leading-[1.3] text-text", headingSize)}>{unitLabel(node.unit)}</h2>
         {task && <span className="rounded-full bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] px-[.35rem] py-[.12rem] text-[.6rem] text-warning">Aufgabe</span>}
       </header>
-      {node.blocks.map(block => renderReadingBlock(block, node.unit.id))}
+      {node.blocks.map(block => renderReadingBlock(block, node.unit.id, depth))}
       {node.children.map(child => renderReadingNode(child, depth + 1, task))}
       {linkedTasks.length > 0 && <div className="mt-[.35rem] flex flex-col gap-[.55rem]">
         <div className="text-[.64rem] font-semibold uppercase tracking-[.04em] text-text-muted">Aufgaben</div>
@@ -587,7 +623,7 @@ export function ContentAuthoringView({
       {outline.taskGroups.filter(group => !group.scriptUnit).length > 0 && <section className="flex flex-col gap-[.7rem] border-t border-border pt-[.9rem] [&>h2]:m-0 [&>h2]:text-[.82rem]">
         <h2>Aufgaben</h2>{outline.taskGroups.filter(group => !group.scriptUnit).flatMap(group => group.tasks).map(node => renderReadingNode(node, 0, true))}
       </section>}
-      {outline.unassignedBlocks.length > 0 && <section className="flex flex-col gap-[.7rem] border-t border-border pt-[.9rem] [&>h2]:m-0 [&>h2]:text-[.82rem]"><h2>Weitere Inhalte</h2>{outline.unassignedBlocks.map(block => renderReadingBlock(block))}</section>}
+      {outline.unassignedBlocks.length > 0 && <section className="flex flex-col gap-[.7rem] border-t border-border pt-[.9rem] [&>h2]:m-0 [&>h2]:text-[.82rem]"><h2>Weitere Inhalte</h2>{outline.unassignedBlocks.map(block => renderReadingBlock(block, undefined, -1))}</section>}
     </div>;
 
     if (selection.kind === "unit") {
