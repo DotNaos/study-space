@@ -13,11 +13,18 @@ function cx(...values: Array<string | false | null | undefined>) {
 }
 
 const EXPLORER_WIDTH_KEY = "study-space:authoring-explorer-width";
+const TOC_WIDTH_KEY = "study-space:reader-toc-width";
 
 function initialExplorerWidth() {
   if (typeof window === "undefined") return 320;
   const value = Number(window.localStorage.getItem(EXPLORER_WIDTH_KEY));
   return Number.isFinite(value) && value >= 240 && value <= 560 ? value : 320;
+}
+
+function initialTocWidth() {
+  if (typeof window === "undefined") return 256;
+  const value = Number(window.localStorage.getItem(TOC_WIDTH_KEY));
+  return Number.isFinite(value) && value >= 176 && value <= 416 ? value : 256;
 }
 
 export function PreparationWorkspace({
@@ -51,6 +58,7 @@ export function PreparationWorkspace({
   const [tocOpen, setTocOpen] = useState(false);
   const [collapsedToc, setCollapsedToc] = useState<Set<string>>(() => new Set());
   const [explorerWidth, setExplorerWidth] = useState(initialExplorerWidth);
+  const [tocWidth, setTocWidth] = useState(initialTocWidth);
   const [explorerCollapsed, setExplorerCollapsed] = useState(false);
   const [viewCollapsed, setViewCollapsed] = useState(false);
   const updateToc = useCallback((items: ContentTocItem[]) => setToc(items), []);
@@ -58,6 +66,10 @@ export function PreparationWorkspace({
   useEffect(() => {
     if (typeof window !== "undefined") window.localStorage.setItem(EXPLORER_WIDTH_KEY, String(explorerWidth));
   }, [explorerWidth]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") window.localStorage.setItem(TOC_WIDTH_KEY, String(tocWidth));
+  }, [tocWidth]);
 
   useEffect(() => {
     onGuard?.(null);
@@ -180,6 +192,40 @@ export function PreparationWorkspace({
     window.addEventListener("pointerup", stop, { once: true });
   }
 
+  function beginTocResize(event: import("react").PointerEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = tocWidth;
+    const move = (next: PointerEvent) => {
+      setTocWidth(Math.min(416, Math.max(176, startWidth + next.clientX - startX)));
+    };
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    const stop = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", stop);
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+    };
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop, { once: true });
+  }
+
+  function resizeTocWithKeyboard(event: import("react").KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      setTocWidth(current => Math.min(416, Math.max(176, current + (event.key === "ArrowRight" ? 16 : -16))));
+    } else if (event.key === "Home") {
+      event.preventDefault();
+      setTocWidth(176);
+    } else if (event.key === "End") {
+      event.preventDefault();
+      setTocWidth(416);
+    }
+  }
+
   return <section className="preparation-workspace" data-editing={editing || undefined}>
     <header className="preparation-workspace-head">
       <div className="preparation-workspace-actions">
@@ -236,14 +282,31 @@ export function PreparationWorkspace({
           onRefreshPipeline={onRefresh}
         />
       </main>}
-    </div> : <div className="mx-auto grid w-full max-w-[112rem] grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)] max-[800px]:block">
-      <aside className="min-w-0 pr-4 max-[800px]:hidden" aria-label="Inhaltsverzeichnis">
+    </div> : <div
+      className="mx-auto grid w-full max-w-[112rem] max-[800px]:block"
+      style={{ gridTemplateColumns: "clamp(11rem, " + tocWidth + "px, min(26rem, 40vw)) 5px minmax(0, 1fr)" }}
+    >
+      <aside className="min-w-0 pr-3 max-[800px]:hidden" aria-label="Inhaltsverzeichnis">
         <div className="preparation-toc-sticky">
           <h2>Inhaltsverzeichnis</h2>
           {tocList()}
         </div>
       </aside>
-      <main className="min-w-0 overflow-auto" aria-label="Inhalt">
+      <div
+        className="group relative z-[5] w-[5px] cursor-col-resize touch-none outline-none max-[800px]:hidden"
+        role="separator"
+        aria-label="Breite des Inhaltsverzeichnisses ändern"
+        aria-orientation="vertical"
+        aria-valuemin={176}
+        aria-valuemax={416}
+        aria-valuenow={tocWidth}
+        tabIndex={0}
+        onPointerDown={beginTocResize}
+        onKeyDown={resizeTocWithKeyboard}
+      >
+        <span className="absolute inset-y-3 left-1/2 w-px -translate-x-1/2 bg-border opacity-0 transition-opacity group-hover:opacity-100 group-focus:opacity-100"/>
+      </div>
+      <main className="min-w-0 overflow-auto pl-3 max-[800px]:pl-0" aria-label="Inhalt">
         <ContentAuthoringView
           courseId={courseId}
           courseName={courseName}
