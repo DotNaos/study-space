@@ -679,6 +679,8 @@ export function ContentAuthoringView({
       ? pipeline.units.find(unit => unit.id === selection.id) ? unitLabel(pipeline.units.find(unit => unit.id === selection.id)!) : "Inhalt"
       : selectedSummary?.name ?? pipeline.sources.find(item => item.source.id === selection.id)?.source.name ?? "Inhalt";
 
+  const composerReady = !!selectedSummary && !!selectedView?.revision;
+
   if (loading) return <div className="p-8"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
   return <div ref={contentRootRef} className={cx("content-authoring m-0 max-w-none bg-bg-0 p-0", editing ? "pb-24 max-[760px]:pb-28" : "pb-8")} data-editing={editing||undefined}>
@@ -797,14 +799,14 @@ export function ContentAuthoringView({
       </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-[.45rem] border border-border bg-bg-1 p-4 font-mono text-[.7rem] leading-[1.55] text-text"><code>{rawRevision?.content ?? ""}</code></pre> : null}
     </div>)}
 
-    {selectedSummary && selectedView?.revision && editing ? <div
+    {editing ? <div
       className="fixed bottom-[clamp(.75rem,2vw,1.5rem)] z-30 -translate-x-1/2 max-[800px]:bottom-[max(.75rem,env(safe-area-inset-bottom))]"
       style={{
         left: composerFrame?.centerX ?? "50%",
         width: composerFrame?.width ?? "min(35rem, calc(100vw - 1.5rem))",
       }}
     >
-      {aiStatus ? <div className="mb-1 flex items-center justify-end gap-1.5 px-2 text-[.66rem] text-text-muted" role="status"><span className="min-w-0 flex-1 truncate">{aiStatus}</span><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div> : null}
+      {aiStatus ? <div className="mb-1 flex items-center justify-end gap-1.5 px-2 text-[.66rem] text-text-muted" role="status"><span className="min-w-0 flex-1 truncate">{aiStatus}</span><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView?.revision?.parentRevisionId} onPress={() => void undo()}/></div> : null}
       <div className={cx(
         "relative",
         "[&_[data-ui-component=Composer]]:min-w-0",
@@ -822,8 +824,8 @@ export function ContentAuthoringView({
           onChange={setAiPrompt}
           onSubmit={(value) => void submitAi(value)}
           state={aiBusy ? "waiting" : "idle"}
-          disabled={aiBusy || saving || busy}
-          placeholder={selectionText ? "Auswahl bearbeiten…" : "Diesen Block bearbeiten…"}
+          disabled={aiBusy || saving || busy || !composerReady}
+          placeholder={!composerReady ? "Wähle im Explorer einen bearbeitbaren Block…" : selectionText ? "Auswahl bearbeiten…" : "Diesen Block bearbeiten…"}
           submitLabel={aiProvider === "chatgpt" ? "In ChatGPT" : "Senden"}
         />
         <details className="group/provider absolute right-2 bottom-2 z-30">
