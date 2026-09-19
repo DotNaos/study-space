@@ -236,7 +236,7 @@ export function PreparationWorkspace({
           onRefreshPipeline={onRefresh}
         />
       </main>}
-    </div> : <div className="preparation-workspace-panels">
+    </div> : <div className="preparation-workspace-panels w-full max-w-[112rem]">
       <main className="preparation-content-panel" aria-label="Inhalt">
         <ContentAuthoringView
           courseId={courseId}
