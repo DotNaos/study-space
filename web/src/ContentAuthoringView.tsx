@@ -593,20 +593,20 @@ export function ContentAuthoringView({
       : depth >= 2
         ? "ml-[.45rem] border-l border-border pl-[.8rem] max-[800px]:ml-1 max-[800px]:pl-[.55rem]"
         : "";
-    const headingSize = depth === 0 ? "text-[1.08rem] tracking-tight" : depth === 1 ? "text-[.84rem]" : "text-[.78rem]";
+    const headingSize = depth === 0 ? "text-[1.35rem] leading-none tracking-tight" : depth === 1 ? "text-[.84rem] leading-[1.3]" : "text-[.78rem] leading-[1.3]";
     return <section
       data-content-unit-depth={depth}
       className={cx(
         "flex min-w-0 flex-col",
         depthClass,
-        depth === 0 ? "mt-6 gap-5 first:mt-0" : "gap-3",
+        depth === 0 ? "mt-6 gap-7 first:mt-0" : "gap-3",
         task && "rounded-[.4rem] border-l-2 border-warning bg-[color-mix(in_srgb,var(--color-warning)_5%,transparent)] px-3 py-[.65rem]",
       )}
       key={node.unit.id}
     >
-      <header className={cx("flex min-w-0 items-center gap-[.45rem]", depth === 0 && "border-b border-border pb-[2px]", task && "text-warning")}>
+      <header className={cx("flex min-w-0 items-center gap-[.45rem]", depth === 0 && "border-b border-border pb-1", task && "text-warning")}>
         {task && <PencilLine size={14}/>}
-        <h2 data-content-unit-heading className={cx("m-0 min-w-0 font-[620] leading-[1.3] text-text", headingSize)}>{unitLabel(node.unit)}</h2>
+        <h2 data-content-unit-heading className={cx("m-0 min-w-0 font-[620] text-text", headingSize)}>{unitLabel(node.unit)}</h2>
         {task && <span className="rounded-full bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] px-[.35rem] py-[.12rem] text-[.6rem] text-warning">Aufgabe</span>}
       </header>
       {node.blocks.map(block => renderReadingBlock(block, node.unit.id, depth))}
