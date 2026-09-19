@@ -74,6 +74,33 @@ function flattenNodes(nodes: ContentUnitNode[]): ContentUnitNode[] {
   return nodes.flatMap(node => [node, ...flattenNodes(node.children)]);
 }
 
+function collectNodeBlocks(node: ContentUnitNode): ContentBlockSummary[] {
+  return [...node.blocks, ...node.children.flatMap(collectNodeBlocks)];
+}
+
+function uniqueBlocks(blocks: ContentBlockSummary[]) {
+  return [...new Map(blocks.map(block => [block.id, block])).values()];
+}
+
+export function contentBlocksForUnit(outline: ContentOutline, unitId: string): ContentBlockSummary[] {
+  const scriptNode = flattenNodes(outline.script).find(node => node.unit.id === unitId);
+  if (scriptNode) {
+    const scriptIds = new Set(flattenNodes([scriptNode]).map(node => node.unit.id));
+    const linkedTasks = outline.taskGroups
+      .filter(group => group.scriptUnit && scriptIds.has(group.scriptUnit.id))
+      .flatMap(group => group.tasks);
+    return uniqueBlocks([
+      ...collectNodeBlocks(scriptNode),
+      ...linkedTasks.flatMap(collectNodeBlocks),
+    ]);
+  }
+
+  const taskNode = outline.taskGroups
+    .flatMap(group => flattenNodes(group.tasks))
+    .find(node => node.unit.id === unitId);
+  return taskNode ? uniqueBlocks(collectNodeBlocks(taskNode)) : [];
+}
+
 export function buildContentOutline(blocks: ContentBlockSummary[], units: PipelineUnit[]): ContentOutline {
   const included = blocks.filter(block => block.included);
   const visibleUnits = units.filter(unit => !unitHidden(unit, units));

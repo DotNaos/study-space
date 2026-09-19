@@ -69,6 +69,8 @@ export type ContentAgentContext = {
   selectionText?: string;
   page?: number;
   sourceBlockIds?: string[];
+  scopeBlockIds?: string[];
+  scopeLabel?: string;
 };
 
 export const contentPath = (courseId: number) => `/api/content/courses/${courseId}`;
@@ -122,6 +124,8 @@ export const runContentAgent = (courseId: number, blockId: string, expectedRevis
       selectionText: context.selectionText || null,
       page: context.page ?? null,
       sourceBlockIds: context.sourceBlockIds ?? [],
+      scopeBlockIds: context.scopeBlockIds ?? [],
+      scopeLabel: context.scopeLabel ?? null,
     }),
   });
 

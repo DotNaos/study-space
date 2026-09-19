@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildContentOutline } from "../src/content-authoring-model";
+import { buildContentOutline, contentBlocksForUnit } from "../src/content-authoring-model";
 import { originalMaterialUrl, type ContentBlockSummary } from "../src/content-api";
 import { buildChatGptHandoffPrompt, buildChatGptHandoffUrl } from "../src/chatgpt-handoff";
 import type { PipelineUnit } from "../src/pipeline-api";
@@ -54,30 +54,64 @@ test("tasks stay in a separate area and retain links to script sections", () => 
   expect(outline.taskGroups[0].tasks[1].linkedScriptUnits.map(unit => unit.title)).toEqual(["Block 1", "Block 2"]);
 });
 
+test("unit composer scope includes nested script blocks and linked tasks", () => {
+  const root = block("5".repeat(64), "Root.pdf", units[0].id, 0, 0);
+  const nested = block("6".repeat(64), "Nested.pdf", units[1].id, 1, 0);
+  const task = block("7".repeat(64), "Task.pdf", units[3].id, 3, 0);
+  const nestedTask = block("8".repeat(64), "NestedTask.pdf", units[5].id, 5, 0);
+  task.placements[0].role = "task";
+  nestedTask.placements[0].role = "task";
+  const outline = buildContentOutline([root, nested, task, nestedTask], units);
+  expect(contentBlocksForUnit(outline, units[0].id).map(item => item.name)).toEqual([
+    "Root.pdf",
+    "Nested.pdf",
+    "Task.pdf",
+    "NestedTask.pdf",
+  ]);
+  expect(contentBlocksForUnit(outline, units[1].id).map(item => item.name)).toEqual([
+    "Nested.pdf",
+    "NestedTask.pdf",
+  ]);
+});
+
 test("preserved original URL stays pinned to the observed material revision", () => {
   const item = block("a".repeat(64), "source.pdf", units[0].id, 0, 0);
   expect(originalMaterialUrl(item)).toBe(`/api/materials/${item.sourceId}/revisions/${item.observedMaterialRevision}/assets/original`);
   expect(originalMaterialUrl({ ...item, observedMaterialRevision: null })).toBeUndefined();
 });
 
-test("ChatGPT handoff keeps stable Study Space edit identifiers in one adapter", () => {
+test("ChatGPT handoff keeps stable multi-block Study Space edit identifiers in one adapter", () => {
   const prompt = buildChatGptHandoffPrompt({
     courseId: 23691,
     courseName: "Data Science und Informatik in der Biologie (cds-303) HS26",
+    scopeLabel: "Block 1",
     learningUnitId: units[0].id,
     learningUnitTitle: "Block 1",
-    contentBlockId: "f".repeat(64),
-    editableRevision: "e".repeat(32),
-    sourceName: "2026_CDS303_Block1_1.pdf",
-    materialId: "f".repeat(64),
-    materialRevision: "d".repeat(64),
+    blocks: [
+      {
+        contentBlockId: "f".repeat(64),
+        editableRevision: "e".repeat(32),
+        sourceName: "2026_CDS303_Block1_1.pdf",
+        materialId: "f".repeat(64),
+        materialRevision: "d".repeat(64),
+      },
+      {
+        contentBlockId: "9".repeat(64),
+        editableRevision: "8".repeat(32),
+        sourceName: "2026_CDS303_Block1_2.pdf",
+        materialId: "9".repeat(64),
+        materialRevision: "7".repeat(64),
+      },
+    ],
     page: 10,
     sourceBlockIds: ["b-00103", "b-00104"],
     selectionText: "DNA besteht aus Nukleotiden.",
     instruction: "Erkläre das kompakter.",
   });
   expect(prompt).toContain("courseId: 23691");
-  expect(prompt).toContain(`contentBlockId: ${"f".repeat(64)}`);
+  expect(prompt).toContain("scope: Block 1");
+  expect(prompt).toContain("contentBlockId: " + "f".repeat(64));
+  expect(prompt).toContain("contentBlockId: " + "9".repeat(64));
   expect(prompt).toContain("page: 10");
   expect(prompt).toContain("sourceBlocks: b-00103, b-00104");
   expect(prompt).toContain("Current selection:\nDNA besteht aus Nukleotiden.");

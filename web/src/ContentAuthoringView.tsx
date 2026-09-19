@@ -9,7 +9,7 @@ import { message } from "./api";
 import { extractMaterialSource, readMaterialSnapshot, type MaterialJob } from "./material-api";
 import type { PipelineState } from "./pipeline-api";
 import { unitHidden, unitKind, unitLabel } from "./learning-structure";
-import { buildContentOutline, type ContentUnitNode } from "./content-authoring-model";
+import { buildContentOutline, contentBlocksForUnit, type ContentUnitNode } from "./content-authoring-model";
 import { sourcePlacement } from "./source-placement";
 import { TextDiff, type TextDiffMode } from "./TextDiff";
 import {
@@ -22,6 +22,7 @@ import {
   runContentAgent,
   saveContentBlock,
   undoContentBlock,
+  type ContentAgentContext,
   type ContentBlockSummary,
   type ContentBlockView,
   type ContentRevision,
@@ -183,7 +184,7 @@ export function ContentAuthoringView({
   const activeBlockRef = useRef<HTMLDivElement>(null);
   const readingRootRef = useRef<HTMLDivElement>(null);
   const contentRootRef = useRef<HTMLDivElement>(null);
-  const [composerFrame, setComposerFrame] = useState<{ centerX: number; width: number }>();
+  const [composerFrame, setComposerFrame] = useState<{ centerX: number; width: number; bottom: number }>();
 
   const selected = selection.kind === "source" ? selection.id : undefined;
 
@@ -215,20 +216,24 @@ export function ContentAuthoringView({
     }
     const root = contentRootRef.current;
     if (!root) return;
+    const panel = root.closest<HTMLElement>('main[aria-label="Inhalt"]') ?? root;
     const update = () => {
-      const rect = root.getBoundingClientRect();
+      const rect = panel.getBoundingClientRect();
       setComposerFrame({
         centerX: rect.left + rect.width / 2,
         width: Math.min(560, Math.max(280, rect.width - 32)),
+        bottom: Math.max(12, window.innerHeight - rect.bottom + 16),
       });
     };
     update();
     const observer = new ResizeObserver(update);
-    observer.observe(root);
+    observer.observe(panel);
     window.addEventListener("resize", update);
+    window.addEventListener("scroll", update, true);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", update);
+      window.removeEventListener("scroll", update, true);
     };
   }, [editing]);
 
@@ -263,6 +268,20 @@ export function ContentAuthoringView({
   const originalUrl = selectedSummary ? originalMaterialUrl(selectedSummary) : undefined;
   const isPdf = selectedSummary?.mimeType === "application/pdf" && !!originalUrl;
   const activeSourcePage = hoveredSourcePage ?? sourcePage;
+  const selectedUnit = selection.kind === "unit" ? pipeline.units.find(unit => unit.id === selection.id) : undefined;
+  const composerScopeBlocks = useMemo(() => {
+    const candidates = selection.kind === "script"
+      ? blocks
+      : selection.kind === "unit"
+        ? contentBlocksForUnit(outline, selection.id)
+        : selectedSummary ? [selectedSummary] : [];
+    return candidates.filter(block => !!block.currentRevisionId);
+  }, [blocks, outline, selectedSummary, selection]);
+  const composerScopeLabel = selection.kind === "script"
+    ? "Gesamtes Skript"
+    : selection.kind === "unit"
+      ? selectedUnit ? unitLabel(selectedUnit) : "Ausgewählter Abschnitt"
+      : selectedSummary?.name ?? "Ausgewählte Datei";
   const draftReady = !!selected && draftBlockId === selected && !!draftRevisionId;
 
   const ensureRawRevision = useCallback(async (blockId: string, revision: ContentRevision) => {
@@ -294,7 +313,7 @@ export function ContentAuthoringView({
     setDraftBlockId(undefined);
     setDraftRevisionId(undefined);
     setSourcePage(undefined);
-  }, [selected]);
+  }, [selection]);
 
   useEffect(() => {
     if (!selected || !selectedSummary?.currentRevisionId) return;
@@ -496,55 +515,131 @@ export function ContentAuthoringView({
     finally { setBusy(false); }
   }
 
-  async function submitAi(instruction: string) {
-    const summary = selectedSummary;
-    const revision = selectedView?.revision;
-    const prompt = instruction.trim();
-    if (!selected || !summary || !revision || !prompt || aiBusy || saving) return;
-    const placement = summary.placements[0];
-    const unit = placement ? pipeline.units.find(candidate => candidate.id === placement.unitId) : undefined;
-    const sourceBlockIds = revision.provenance
+  async function resolveComposerScopeViews() {
+    const resolved: ContentBlockView[] = [];
+    const loaded: Array<[string, ContentBlockView]> = [];
+    for (const block of composerScopeBlocks) {
+      const cached = views[block.id];
+      if (cached?.revision?.id === block.currentRevisionId) {
+        resolved.push(cached);
+        continue;
+      }
+      const view = await readContentBlock(courseId, block.id);
+      if (!view.revision) continue;
+      resolved.push(view);
+      loaded.push([block.id, view]);
+    }
+    if (loaded.length) setViews(current => ({ ...current, ...Object.fromEntries(loaded) }));
+    return resolved;
+  }
+
+  function focusedSourceContext(view: ContentBlockView): ContentAgentContext {
+    if (selection.kind !== "source" || view.block.id !== selected || !view.revision) return {};
+    const sourceBlockIds = view.revision.provenance
       .filter(item => sourcePage == null || item.page === sourcePage || item.slide === sourcePage)
       .map(item => item.sourceBlockId)
       .filter((id, index, values) => values.indexOf(id) === index)
       .slice(0, 30);
+    return {
+      selectionText: selectionText || undefined,
+      page: sourcePage,
+      sourceBlockIds,
+    };
+  }
+
+  async function submitAi(instruction: string) {
+    const prompt = instruction.trim();
+    if (!prompt || !composerReady || aiBusy || saving) return;
+
+    let scopeViews: ContentBlockView[];
+    try {
+      scopeViews = (await resolveComposerScopeViews()).filter(view => !!view.revision);
+    } catch (error) {
+      setError(message(error));
+      return;
+    }
+    if (!scopeViews.length) return;
+
+    const scopeBlockIds = scopeViews.map(view => view.block.id);
+    const focusedView = selected ? scopeViews.find(view => view.block.id === selected) : undefined;
+    const focusedContext = focusedView ? focusedSourceContext(focusedView) : {};
+    const scopeUnit = selection.kind === "unit"
+      ? selectedUnit
+      : focusedView?.block.placements[0]
+        ? pipeline.units.find(unit => unit.id === focusedView.block.placements[0].unitId)
+        : undefined;
 
     if (aiProvider === "chatgpt") {
       const handoff = buildChatGptHandoffPrompt({
         courseId,
         courseName,
-        learningUnitId: unit?.id,
-        learningUnitTitle: unit ? unitLabel(unit) : undefined,
-        contentBlockId: summary.id,
-        editableRevision: revision.id,
-        sourceName: summary.name,
-        materialId: summary.sourceId,
-        materialRevision: summary.observedMaterialRevision,
-        page: sourcePage,
-        sourceBlockIds,
-        selectionText: selectionText || undefined,
+        scopeLabel: composerScopeLabel,
+        learningUnitId: scopeUnit?.id,
+        learningUnitTitle: scopeUnit ? unitLabel(scopeUnit) : undefined,
+        blocks: scopeViews.flatMap(view => view.revision ? [{
+          contentBlockId: view.block.id,
+          editableRevision: view.revision.id,
+          sourceName: view.block.name,
+          materialId: view.block.sourceId,
+          materialRevision: view.block.observedMaterialRevision,
+        }] : []),
+        page: focusedContext.page,
+        sourceBlockIds: focusedContext.sourceBlockIds,
+        selectionText: focusedContext.selectionText,
         instruction: prompt,
       });
       window.open(buildChatGptHandoffUrl(handoff), "_blank", "noopener,noreferrer");
-      setAiPrompt(""); setAiStatus("Prompt in ChatGPT geöffnet.");
+      setAiPrompt("");
+      setAiStatus("Prompt in ChatGPT geöffnet.");
       return;
     }
 
-    setAiBusy(true); setError(""); setAiStatus("");
+    setAiBusy(true);
+    setError("");
+    setAiStatus("");
+    let completed = 0;
+    let changed = 0;
+    const summaries: string[] = [];
     try {
-      const result = await runContentAgent(courseId, selected, revision.id, prompt, {
-        selectionText: selectionText || undefined,
-        page: sourcePage,
-        sourceBlockIds,
-      });
-      const next = result.view;
-      setViews(current => ({ ...current, [selected]: next }));
-      setDraft(next.revision?.content ?? draft); setSavedDraft(next.revision?.content ?? draft);
-      setDraftBlockId(selected); setDraftRevisionId(next.revision?.id);
-      setWorkspace(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selected ? next.block : block) } : current);
-      setAiPrompt(""); setAiStatus(result.summary);
-    } catch (error) { setError(message(error)); }
-    finally { setAiBusy(false); }
+      for (const [index, view] of scopeViews.entries()) {
+        const revision = view.revision;
+        if (!revision) continue;
+        setAiStatus(scopeViews.length > 1
+          ? composerScopeLabel + ": " + (index + 1) + "/" + scopeViews.length + " wird bearbeitet …"
+          : "");
+        const sourceContext = focusedSourceContext(view);
+        const result = await runContentAgent(courseId, view.block.id, revision.id, prompt, {
+          ...sourceContext,
+          scopeBlockIds,
+          scopeLabel: composerScopeLabel,
+        });
+        const next = result.view;
+        completed++;
+        if (next.revision?.id !== revision.id) changed++;
+        summaries.push(result.summary);
+        setViews(current => ({ ...current, [view.block.id]: next }));
+        setWorkspace(current => current ? {
+          ...current,
+          blocks: current.blocks.map(block => block.id === view.block.id ? next.block : block),
+        } : current);
+        if (selected === view.block.id) {
+          const content = next.revision?.content ?? draft;
+          setDraft(content);
+          setSavedDraft(content);
+          setDraftBlockId(view.block.id);
+          setDraftRevisionId(next.revision?.id);
+        }
+      }
+      setAiPrompt("");
+      setAiStatus(scopeViews.length === 1
+        ? summaries[0] ?? "Bearbeitung abgeschlossen."
+        : changed + " von " + completed + " Blöcken in " + composerScopeLabel + " geändert.");
+    } catch (error) {
+      if (completed) setAiStatus(completed + " von " + scopeViews.length + " Blöcken verarbeitet.");
+      setError(message(error));
+    } finally {
+      setAiBusy(false);
+    }
   }
 
 
@@ -679,7 +774,16 @@ export function ContentAuthoringView({
       ? pipeline.units.find(unit => unit.id === selection.id) ? unitLabel(pipeline.units.find(unit => unit.id === selection.id)!) : "Inhalt"
       : selectedSummary?.name ?? pipeline.sources.find(item => item.source.id === selection.id)?.source.name ?? "Inhalt";
 
-  const composerReady = !!selectedSummary && !!selectedView?.revision;
+  const composerReady = composerScopeBlocks.length > 0;
+  const composerPlaceholder = !composerReady
+    ? "Für diesen Bereich gibt es noch keinen bearbeitbaren Inhalt…"
+    : selectionText
+      ? "Auswahl bearbeiten…"
+      : selection.kind === "script"
+        ? "Gesamtes Skript bearbeiten…"
+        : selection.kind === "unit"
+          ? composerScopeLabel + " bearbeiten…"
+          : "Diese Datei bearbeiten…";
 
   if (loading) return <div className="p-8"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
@@ -804,9 +908,10 @@ export function ContentAuthoringView({
       style={{
         left: composerFrame?.centerX ?? "50%",
         width: composerFrame?.width ?? "min(35rem, calc(100vw - 1.5rem))",
+        bottom: composerFrame?.bottom ?? 16,
       }}
     >
-      {aiStatus ? <div className="mb-1 flex items-center justify-end gap-1.5 px-2 text-[.66rem] text-text-muted" role="status"><span className="min-w-0 flex-1 truncate">{aiStatus}</span><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView?.revision?.parentRevisionId} onPress={() => void undo()}/></div> : null}
+      {aiStatus ? <div className="mb-1 flex items-center justify-end gap-1.5 px-2 text-[.66rem] text-text-muted" role="status"><span className="min-w-0 flex-1 truncate">{aiStatus}</span>{selection.kind === "source" ? <><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView?.revision?.parentRevisionId} onPress={() => void undo()}/></> : null}</div> : null}
       <div className={cx(
         "relative",
         "[&_[data-ui-component=Composer]]:min-w-0",
@@ -825,7 +930,7 @@ export function ContentAuthoringView({
           onSubmit={(value) => void submitAi(value)}
           state={aiBusy ? "waiting" : "idle"}
           disabled={aiBusy || saving || busy || !composerReady}
-          placeholder={!composerReady ? "Wähle im Explorer einen bearbeitbaren Block…" : selectionText ? "Auswahl bearbeiten…" : "Diesen Block bearbeiten…"}
+          placeholder={composerPlaceholder}
           submitLabel={aiProvider === "chatgpt" ? "In ChatGPT" : "Senden"}
         />
         <details className="group/provider absolute right-2 bottom-2 z-30">

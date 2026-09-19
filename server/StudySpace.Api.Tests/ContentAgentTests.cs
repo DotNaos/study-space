@@ -20,8 +20,11 @@ public sealed class ContentAgentTests : IDisposable
     private readonly ContentAgentService agent;
 
     private static readonly string SourceId = new('b', 64);
+    private static readonly string SourceId2 = new('e', 64);
     private static readonly string SourceVersion = new('c', 64);
+    private static readonly string SourceVersion2 = new('f', 64);
     private static readonly string MaterialRevision = new('d', 64);
+    private static readonly string MaterialRevision2 = new('1', 64);
     private static readonly PipelineUnit Unit = new(new('a', 32), "Block 1", null, 0, "script", false, null, 10, []);
 
     public ContentAgentTests()
@@ -53,6 +56,23 @@ public sealed class ContentAgentTests : IDisposable
         Assert.Contains("b-00001", model.Prompt);
         Assert.Contains("Die Bausteine von DNA sind Nukleotide.", model.Prompt);
         Assert.Equal(initial.Content, (await content.Revision(7, SourceId, initial.Id)).Content);
+    }
+
+    [Fact]
+    public async Task AgentReceivesOtherBlocksFromTheSelectedScope()
+    {
+        var initial = await Materialized();
+        var other = (await content.Block(7, SourceId2)).Revision!;
+        model.Content = initial.Content;
+
+        var result = await agent.Edit(7, SourceId, new(initial.Id, "Keep terminology consistent.", true,
+            ScopeBlockIds: [SourceId, SourceId2], ScopeLabel: "Gesamtes Skript"), default);
+
+        Assert.Equal(initial.Id, result.View.Revision!.Id);
+        Assert.Contains("\"label\":\"Gesamtes Skript\"", model.Prompt);
+        Assert.Contains(SourceId2, model.Prompt);
+        Assert.Contains("2026_CDS303_Block1_2.pdf", model.Prompt);
+        Assert.Contains(other.Content, model.Prompt);
     }
 
     [Fact]
@@ -100,10 +120,20 @@ public sealed class ContentAgentTests : IDisposable
         {
             state.Pipeline.Revision = 3;
             state.Pipeline.Units = [Unit];
-            state.Pipeline.Sources = [new PipelineSource(SourceId, 10, 100, "2026_CDS303_Block1_1.pdf", "file", "application/pdf",
-                SourceVersion, MaterialRevision, "ready", null, [], "", "/courses/7/activities/100", true, "teaching")];
-            state.Pipeline.Decisions = [new SourceDecision(SourceId, SourceVersion, "use", [new SourceUse(Unit.Id, "teaching", 10, 12, Order: 2)],
-                "Reviewed", "user", DateTimeOffset.UtcNow)];
+            state.Pipeline.Sources =
+            [
+                new PipelineSource(SourceId, 10, 100, "2026_CDS303_Block1_1.pdf", "file", "application/pdf",
+                    SourceVersion, MaterialRevision, "ready", null, [], "", "/courses/7/activities/100", true, "teaching"),
+                new PipelineSource(SourceId2, 10, 101, "2026_CDS303_Block1_2.pdf", "file", "application/pdf",
+                    SourceVersion2, MaterialRevision2, "ready", null, [], "", "/courses/7/activities/101", true, "teaching"),
+            ];
+            state.Pipeline.Decisions =
+            [
+                new SourceDecision(SourceId, SourceVersion, "use", [new SourceUse(Unit.Id, "teaching", 10, 12, Order: 2)],
+                    "Reviewed", "user", DateTimeOffset.UtcNow),
+                new SourceDecision(SourceId2, SourceVersion2, "use", [new SourceUse(Unit.Id, "teaching", 13, 14, Order: 3)],
+                    "Reviewed", "user", DateTimeOffset.UtcNow),
+            ];
             await learning.Save(state);
             return true;
         });
@@ -124,7 +154,13 @@ public sealed class ContentAgentTests : IDisposable
                 new("b-00002", "paragraph", "Die Bausteine von DNA sind Nukleotide.", 1, 10, null, "page-0010"),
                 new("b-00003", "paragraph", "Replikation", 2, 11, null, "page-0011")
             ], [], [], [], true);
-        public Task<MaterialDocument> GetDocument(string materialId, string revision, CancellationToken ct = default) => Task.FromResult(Document);
+        private static readonly MaterialDocument Document2 = new(SourceId2, MaterialRevision2, "2026_CDS303_Block1_2.pdf", "application/pdf",
+            [
+                new("c-00001", "heading", "RNA", 0, 13, null, "page-0013"),
+                new("c-00002", "paragraph", "RNA enthält Ribose.", 1, 13, null, "page-0013")
+            ], [], [], [], true);
+        public Task<MaterialDocument> GetDocument(string materialId, string revision, CancellationToken ct = default) =>
+            Task.FromResult(materialId == SourceId2 ? Document2 : Document);
         public Task<MaterialSnapshot> GetSnapshot(long courseId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<MaterialSnapshot> StartImport(long courseId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<MaterialSnapshot> Cancel(long courseId, string jobId, CancellationToken ct = default) => throw new NotSupportedException();

@@ -105,7 +105,9 @@ public sealed record ContentAgentRequest(
     bool ConsentToCodex,
     string? SelectionText = null,
     int? Page = null,
-    string[]? SourceBlockIds = null);
+    string[]? SourceBlockIds = null,
+    string[]? ScopeBlockIds = null,
+    string? ScopeLabel = null);
 
 public sealed record ContentAgentResult(
     ContentBlockView View,
