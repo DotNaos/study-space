@@ -6,7 +6,7 @@ import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
 import { Composer, type AiOption } from "./ui-ai";
 import { AlertTriangle, Check, Code2, Columns2, FileDiff, FileText, PanelRightClose, PencilLine, Rows3 } from "lucide-react";
 import { message } from "./api";
-import { extractMaterialSource, readMaterialSnapshot } from "./material-api";
+import { extractMaterialSource, readMaterialSnapshot, type MaterialJob } from "./material-api";
 import type { PipelineState } from "./pipeline-api";
 import { unitHidden, unitKind, unitLabel } from "./learning-structure";
 import { buildContentOutline, type ContentUnitNode } from "./content-authoring-model";
@@ -170,6 +170,7 @@ export function ContentAuthoringView({
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [extractingSourceId, setExtractingSourceId] = useState<string>();
+  const [extractionJob, setExtractionJob] = useState<MaterialJob>();
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [aiProvider, setAiProvider] = useState<"codex" | "chatgpt">("codex");
@@ -355,11 +356,13 @@ export function ContentAuthoringView({
     setError("");
     try {
       let snapshot = await extractMaterialSource(courseId, source.id);
+      setExtractionJob(snapshot.job ?? undefined);
       const deadline = Date.now() + 9 * 60 * 1000;
       while (snapshot.job?.status === "queued" || snapshot.job?.status === "running") {
         if (Date.now() >= deadline) throw new Error("Die PDF-Extraktion läuft länger als erwartet. Prüfe den Material-Status erneut.");
         await new Promise(resolve => window.setTimeout(resolve, 1200));
         snapshot = await readMaterialSnapshot(courseId);
+        setExtractionJob(snapshot.job ?? undefined);
       }
       const material = snapshot.materials.find(item => item.id === source.id);
       if (material?.status !== "ready") {
@@ -383,6 +386,7 @@ export function ContentAuthoringView({
       setError(message(error));
     } finally {
       setExtractingSourceId(current => current === selected ? undefined : current);
+      setExtractionJob(undefined);
     }
   }
 
@@ -696,11 +700,35 @@ export function ContentAuthoringView({
       <div className="mb-[.8rem] flex items-center gap-[.45rem] text-[.65rem] text-text-muted [&>span+span]:border-l [&>span+span]:border-border [&>span+span]:pl-[.45rem]">
         <Icon.File filename={selectedSummary.name} size={16}/><span>{statusLabel(selectedSummary)}</span>{sourcePages(selectedSummary) && <span>{sourcePages(selectedSummary)}</span>}{selectedSummary.stale && <AlertTriangle size={13}/>} {selectedSummary.status === "ready" && <Check size={13}/>}
       </div>
-      {editing && selectedSummary.status === "not-ready" && selectedPipelineSource?.source.mimeType === "application/pdf" && selectedPipelineSource.source.acquisition !== "unsupported" ? <div className="grid min-h-[22rem] place-content-center justify-items-center gap-[.7rem] px-4 py-8 text-center text-text-muted">
+      {editing && selectedSummary.status === "not-ready" && selectedPipelineSource?.source.mimeType === "application/pdf" && selectedPipelineSource.source.acquisition !== "unsupported" ? extractingSourceId === selected ? <div className="grid min-h-[22rem] place-content-center justify-items-center gap-4 px-4 py-8 text-center text-text-muted">
+        <span className="inline-flex size-11 items-center justify-center rounded-xl bg-bg-1 text-text-muted"><Icon.File filename={selectedSummary.name} size={22}/></span>
+        <div className="space-y-1">
+          <strong className="block text-sm font-semibold text-text">PDF wird extrahiert</strong>
+          <span className="block max-w-[30rem] text-xs leading-5">Study Space liest die Quelle ein und bereitet den Inhalt auf.</span>
+        </div>
+        <div className="w-full max-w-sm text-left">
+          <div className="mb-2 flex items-center justify-between gap-3 text-[.68rem] text-text-muted">
+            <span>{extractionJob?.status === "queued" ? "Wartet auf Verarbeitung" : "Dokument wird verarbeitet"}</span>
+            {extractionJob && extractionJob.total > 1 ? <span>{Math.round(Math.min(1, extractionJob.completed / extractionJob.total) * 100)}%</span> : null}
+          </div>
+          <div
+            className="h-1.5 overflow-hidden rounded-full bg-bg-2"
+            role="progressbar"
+            aria-label="PDF-Extraktion"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={extractionJob && extractionJob.total > 1 ? Math.round(Math.min(1, extractionJob.completed / extractionJob.total) * 100) : undefined}
+          >
+            {extractionJob && extractionJob.total > 1
+              ? <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: String(Math.round(Math.min(1, extractionJob.completed / extractionJob.total) * 100)) + "%" }}/>
+              : <div className="h-full w-2/5 rounded-full bg-accent animate-pulse"/>}
+          </div>
+        </div>
+      </div> : <div className="grid min-h-[22rem] place-content-center justify-items-center gap-[.7rem] px-4 py-8 text-center text-text-muted">
         <span className="inline-flex size-10 items-center justify-center rounded-[.55rem] bg-bg-1 text-text-muted"><Icon.File filename={selectedSummary.name} size={20}/></span>
-        <strong className="text-[.8rem] font-[650] text-text">{extractingSourceId === selected ? "PDF wird extrahiert …" : "PDF noch nicht extrahiert"}</strong>
-        <span className="max-w-[29rem] text-[.68rem] leading-[1.5]">{extractingSourceId === selected ? "Study Space liest die Quelle ein und bereitet den Inhalt auf." : "Extrahiere diese Quelle, bevor du daraus eine editierbare Rohfassung erstellst."}</span>
-        <Button variant="primary" icon="file-text" label={extractingSourceId === selected ? "Extraktion läuft …" : "PDF extrahieren"} disabled={busy || !!extractingSourceId} onPress={() => void extractSelectedPdf()}/>
+        <strong className="text-[.8rem] font-[650] text-text">PDF noch nicht extrahiert</strong>
+        <span className="max-w-[29rem] text-[.68rem] leading-[1.5]">Extrahiere diese Quelle, bevor du daraus eine editierbare Rohfassung erstellst.</span>
+        <Button variant="primary" icon="file-text" label="PDF extrahieren" disabled={busy || !!extractingSourceId} onPress={() => void extractSelectedPdf()}/>
       </div> : !selectedView && selectedSummary.currentRevisionId ? <Loading label="Inhalt wird geöffnet …"/> : !selectedView?.revision ? <div className="p-3 text-[.72rem] text-text-muted">Für diese Quelle gibt es noch keine editierbare Rohfassung.</div> : !draftReady ? <Loading label="Bearbeitete Fassung wird geladen …"/> : tab === "content" ? <>
         {editing ? <MarkdownEditor value={draft} onChange={setDraft} minHeight={320}/> : <div className="h-[68vh] min-h-64 overflow-auto px-[.9rem] py-[.8rem] [&>:first-child]:mt-0 [&>:last-child]:mb-0"><MarkdownRenderer value={draft}/></div>}
         {editing && <div className="mt-[.6rem] flex items-center justify-between gap-3 px-0 pt-[.45rem] pb-[.1rem] text-[.68rem] text-text-muted">
