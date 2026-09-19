@@ -236,8 +236,14 @@ export function PreparationWorkspace({
           onRefreshPipeline={onRefresh}
         />
       </main>}
-    </div> : <div className="preparation-workspace-panels mx-auto w-full max-w-[112rem]">
-      <main className="preparation-content-panel" aria-label="Inhalt">
+    </div> : <div className="mx-auto grid w-full max-w-[112rem] grid-cols-[minmax(14rem,18rem)_minmax(0,1fr)] max-[800px]:block">
+      <aside className="min-w-0 pr-4 max-[800px]:hidden" aria-label="Inhaltsverzeichnis">
+        <div className="preparation-toc-sticky">
+          <h2>Inhaltsverzeichnis</h2>
+          {tocList()}
+        </div>
+      </aside>
+      <main className="min-w-0 overflow-auto" aria-label="Inhalt">
         <ContentAuthoringView
           courseId={courseId}
           courseName={courseName}
@@ -248,12 +254,6 @@ export function PreparationWorkspace({
           onTocChange={updateToc}
         />
       </main>
-      <aside className="preparation-toc-panel" aria-label="Inhaltsverzeichnis">
-        <div className="preparation-toc-sticky">
-          <h2>Inhaltsverzeichnis</h2>
-          {tocList()}
-        </div>
-      </aside>
     </div>}
     {tocOpen && <DialogShell title="Inhaltsverzeichnis" onClose={() => setTocOpen(false)}><div className="preparation-toc-dialog">{tocList(true)}</div></DialogShell>}
   </section>;

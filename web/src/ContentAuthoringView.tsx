@@ -662,7 +662,7 @@ export function ContentAuthoringView({
 
   if (loading) return <div className="p-8"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
-  return <div className="content-authoring m-0 max-w-none bg-bg-0 p-0 pb-44 max-[760px]:pb-48" data-editing={editing||undefined}>
+  return <div className={cx("content-authoring m-0 max-w-none bg-bg-0 p-0", editing ? "pb-32 max-[760px]:pb-36" : "pb-8")} data-editing={editing||undefined}>
     {(editing || selection.kind !== "script") && <header className={cx(
       "content-authoring-header sticky top-0 z-[4] flex items-center justify-between gap-4 border-b border-border bg-bg-1 px-4 max-[800px]:static max-[800px]:px-[.8rem] max-[800px]:py-[.65rem]",
       editing ? "h-[3.35rem] min-h-[3.35rem] py-0" : "min-h-[3.25rem] py-[.7rem]",
@@ -778,20 +778,22 @@ export function ContentAuthoringView({
       </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-[.45rem] border border-border bg-bg-1 p-4 font-mono text-[.7rem] leading-[1.55] text-text"><code>{rawRevision?.content ?? ""}</code></pre> : null}
     </div>)}
 
-    {selectedSummary && selectedView?.revision && editing ? <div className="fixed right-[clamp(.75rem,3vw,2rem)] bottom-[clamp(.75rem,2vw,1.5rem)] left-[max(calc(50%_-_29rem),.75rem)] z-30 ml-auto max-w-[58rem] rounded-xl border border-border bg-[color-mix(in_srgb,var(--color-bg-0)_94%,transparent)] p-[.35rem] shadow-[0_12px_36px_rgb(0_0_0/.18)] backdrop-blur-[12px] max-[760px]:right-[.35rem] max-[760px]:bottom-[max(.35rem,env(safe-area-inset-bottom))] max-[760px]:left-[.35rem] max-[760px]:w-auto max-[760px]:max-w-none [&_[data-ui-component=Composer]]:min-w-0">
-      {aiStatus ? <div className="flex items-center justify-between gap-2 px-[.35rem] pt-[.15rem] pb-[.3rem] text-[.68rem] text-text-muted max-[760px]:items-start" role="status"><span className="min-w-0 truncate max-[760px]:line-clamp-2 max-[760px]:whitespace-normal">{aiStatus}</span><div className="flex flex-none items-center gap-[.15rem]"><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div></div> : null}
-      <div className="min-w-0 truncate px-[.55rem] pt-[.15rem] pb-[.35rem] text-[.67rem] text-text-muted" title={aiContextLabel}>{aiContextLabel}</div>
-      <Composer
-        value={aiPrompt}
-        onChange={setAiPrompt}
-        onSubmit={(value) => void submitAi(value)}
-        modelOptions={aiProviderOptions}
-        onModelSelect={(option: AiOption) => setAiProvider(option.id === "chatgpt" ? "chatgpt" : "codex")}
-        state={aiBusy ? "waiting" : "idle"}
-        disabled={aiBusy || saving || busy}
-        placeholder={selectionText ? "Auswahl bearbeiten…" : "Diesen Block bearbeiten…"}
-        submitLabel={aiProvider === "chatgpt" ? "In ChatGPT" : "Senden"}
-      />
+    {selectedSummary && selectedView?.revision && editing ? <div className="fixed right-[clamp(.75rem,3vw,2rem)] bottom-[clamp(.75rem,2vw,1.5rem)] z-30 w-[min(42rem,calc(100vw-1.5rem))] max-[1100px]:w-[34rem] max-[800px]:right-3 max-[800px]:bottom-[max(.75rem,env(safe-area-inset-bottom))] max-[800px]:w-[calc(100vw-1.5rem)]">
+      {aiStatus ? <div className="mb-1 flex items-center justify-end gap-1.5 px-2 text-[.66rem] text-text-muted" role="status"><span className="min-w-0 flex-1 truncate">{aiStatus}</span><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div> : null}
+      <div className="mb-1.5 truncate px-3 text-[.65rem] text-text-muted" title={aiContextLabel}>{aiContextLabel}</div>
+      <div className="[&_[data-ui-component=Composer]]:min-w-0 [&_.dotnaos-chat-composer]:!m-0 [&_.dotnaos-chat-composer]:!w-full [&_.dotnaos-chat-composer]:!max-w-none [&_.dotnaos-chat-composer]:shadow-[0_12px_32px_rgb(0_0_0/.16)]">
+        <Composer
+          value={aiPrompt}
+          onChange={setAiPrompt}
+          onSubmit={(value) => void submitAi(value)}
+          modelOptions={aiProviderOptions}
+          onModelSelect={(option: AiOption) => setAiProvider(option.id === "chatgpt" ? "chatgpt" : "codex")}
+          state={aiBusy ? "waiting" : "idle"}
+          disabled={aiBusy || saving || busy}
+          placeholder={selectionText ? "Auswahl bearbeiten…" : "Diesen Block bearbeiten…"}
+          submitLabel={aiProvider === "chatgpt" ? "In ChatGPT" : "Senden"}
+        />
+      </div>
     </div> : null}
   </div>;
 }
