@@ -3,8 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Icon } from "@dotnaos/ui-base";
 import { MarkdownEditor, MarkdownRenderer } from "@dotnaos/ui/markdown-editor";
 import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
-import { Composer, type AiOption } from "./ui-ai";
-import { AlertTriangle, Check, Code2, Columns2, FileDiff, FileText, PanelRightClose, PencilLine, Rows3 } from "lucide-react";
+import { Composer } from "./ui-ai";
+import { AlertTriangle, Check, ChevronDown, Code2, Columns2, FileDiff, FileText, PanelRightClose, PencilLine, Rows3 } from "lucide-react";
 import { message } from "./api";
 import { extractMaterialSource, readMaterialSnapshot, type MaterialJob } from "./material-api";
 import type { PipelineState } from "./pipeline-api";
@@ -655,10 +655,7 @@ export function ContentAuthoringView({
       ? pipeline.units.find(unit => unit.id === selection.id) ? unitLabel(pipeline.units.find(unit => unit.id === selection.id)!) : "Inhalt"
       : selectedSummary?.name ?? pipeline.sources.find(item => item.source.id === selection.id)?.source.name ?? "Inhalt";
   const aiContextLabel = selectedSummary ? [selectedSummary.name, selectionText ? "Auswahl" : selectedUnit ? unitLabel(selectedUnit) : undefined, sourcePage ? `Seite ${sourcePage}` : undefined].filter(Boolean).join(" · ") : "Block auswählen";
-  const aiProviderOptions = [
-    { id: "codex", label: "Codex", selected: aiProvider === "codex" },
-    { id: "chatgpt", label: "ChatGPT", selected: aiProvider === "chatgpt" },
-  ];
+  const compactComposer = !aiPrompt.trim() && !selectionText && !aiStatus;
 
   if (loading) return <div className="p-8"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
@@ -778,21 +775,57 @@ export function ContentAuthoringView({
       </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-[.45rem] border border-border bg-bg-1 p-4 font-mono text-[.7rem] leading-[1.55] text-text"><code>{rawRevision?.content ?? ""}</code></pre> : null}
     </div>)}
 
-    {selectedSummary && selectedView?.revision && editing ? <div className="fixed right-[clamp(.75rem,3vw,2rem)] bottom-[clamp(.75rem,2vw,1.5rem)] z-30 w-[min(42rem,calc(100vw-1.5rem))] max-[1100px]:w-[34rem] max-[800px]:right-3 max-[800px]:bottom-[max(.75rem,env(safe-area-inset-bottom))] max-[800px]:w-[calc(100vw-1.5rem)]">
+    {selectedSummary && selectedView?.revision && editing ? <div className={cx(
+      "fixed right-[clamp(.75rem,3vw,2rem)] bottom-[clamp(.75rem,2vw,1.5rem)] z-30 transition-[width] duration-200 max-[800px]:right-3 max-[800px]:bottom-[max(.75rem,env(safe-area-inset-bottom))] max-[800px]:w-[calc(100vw-1.5rem)]",
+      compactComposer ? "w-[min(32rem,calc(100vw-1.5rem))]" : "w-[min(42rem,calc(100vw-1.5rem))] max-[1100px]:w-[34rem]",
+    )}>
       {aiStatus ? <div className="mb-1 flex items-center justify-end gap-1.5 px-2 text-[.66rem] text-text-muted" role="status"><span className="min-w-0 flex-1 truncate">{aiStatus}</span><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div> : null}
-      <div className="mb-1.5 truncate px-3 text-[.65rem] text-text-muted" title={aiContextLabel}>{aiContextLabel}</div>
-      <div className="[&_[data-ui-component=Composer]]:min-w-0 [&_.dotnaos-chat-composer]:!m-0 [&_.dotnaos-chat-composer]:!w-full [&_.dotnaos-chat-composer]:!max-w-none [&_.dotnaos-chat-composer]:shadow-[0_12px_32px_rgb(0_0_0/.16)]">
+      {!compactComposer ? <div className="mb-1.5 truncate px-3 text-[.65rem] text-text-muted" title={aiContextLabel}>{aiContextLabel}</div> : null}
+      <div className={cx(
+        "relative [&_[data-ui-component=Composer]]:min-w-0 [&_.dotnaos-chat-composer]:!m-0 [&_.dotnaos-chat-composer]:!w-full [&_.dotnaos-chat-composer]:!max-w-none [&_.dotnaos-chat-composer]:shadow-[0_12px_32px_rgb(0_0_0/.16)]",
+        compactComposer && "[&_.dotnaos-chat-composer]:!gap-1 [&_.dotnaos-chat-composer]:!rounded-xl [&_.dotnaos-chat-composer]:!px-2 [&_.dotnaos-chat-composer]:!pt-2 [&_.dotnaos-chat-composer]:!pb-1.5 [&_.dotnaos-chat-composer__input]:!min-h-6",
+      )}>
         <Composer
           value={aiPrompt}
           onChange={setAiPrompt}
           onSubmit={(value) => void submitAi(value)}
-          modelOptions={aiProviderOptions}
-          onModelSelect={(option: AiOption) => setAiProvider(option.id === "chatgpt" ? "chatgpt" : "codex")}
           state={aiBusy ? "waiting" : "idle"}
           disabled={aiBusy || saving || busy}
           placeholder={selectionText ? "Auswahl bearbeiten…" : "Diesen Block bearbeiten…"}
           submitLabel={aiProvider === "chatgpt" ? "In ChatGPT" : "Senden"}
         />
+        <details className="group/provider absolute bottom-1.5 left-2 z-30">
+          <summary className="flex h-7 cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-xs text-text-muted transition-colors hover:bg-bg-2 hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring [&::-webkit-details-marker]:hidden">
+            <img
+              src={aiProvider === "chatgpt" ? "/brands/chatgpt.svg" : "/brands/codex.png"}
+              alt=""
+              className="size-4 shrink-0 rounded-[4px] object-contain"
+              aria-hidden="true"
+            />
+            <span>{aiProvider === "chatgpt" ? "ChatGPT" : "Codex"}</span>
+            <ChevronDown size={12} className="transition-transform group-open/provider:rotate-180" aria-hidden="true"/>
+          </summary>
+          <div className="absolute bottom-full left-0 mb-1 w-36 overflow-hidden rounded-lg border border-border bg-bg-0 p-1 shadow-lg">
+            {([
+              { id: "codex" as const, label: "Codex", icon: "/brands/codex.png" },
+              { id: "chatgpt" as const, label: "ChatGPT", icon: "/brands/chatgpt.svg" },
+            ]).map(provider => <button
+              key={provider.id}
+              type="button"
+              className={cx(
+                "flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-xs transition-colors hover:bg-bg-1 focus-visible:outline-2 focus-visible:outline-focus-ring",
+                aiProvider === provider.id && "bg-bg-1 text-text",
+              )}
+              onClick={(event) => {
+                setAiProvider(provider.id);
+                event.currentTarget.closest("details")?.removeAttribute("open");
+              }}
+            >
+              <img src={provider.icon} alt="" className="size-4 rounded-[4px] object-contain" aria-hidden="true"/>
+              <span>{provider.label}</span>
+            </button>)}
+          </div>
+        </details>
       </div>
     </div> : null}
   </div>;
