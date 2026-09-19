@@ -1,6 +1,6 @@
 import "./preparation-workspace.css";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Check, ListTree, PanelLeftOpen, PanelRightOpen, PencilLine } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, ListTree, PanelLeftOpen, PanelRightOpen, PencilLine } from "lucide-react";
 import type { PipelineSourceView, PipelineState, PipelineUnit } from "./pipeline-api";
 import { unitHidden, unitKind } from "./learning-structure";
 import type { StructureSave } from "./structure-autosave";
@@ -49,6 +49,7 @@ export function PreparationWorkspace({
   const [toc, setToc] = useState<ContentTocItem[]>([]);
   const [activeToc, setActiveToc] = useState<string>();
   const [tocOpen, setTocOpen] = useState(false);
+  const [collapsedToc, setCollapsedToc] = useState<Set<string>>(() => new Set());
   const [explorerWidth, setExplorerWidth] = useState(initialExplorerWidth);
   const [explorerCollapsed, setExplorerCollapsed] = useState(false);
   const [viewCollapsed, setViewCollapsed] = useState(false);
@@ -106,8 +107,52 @@ export function PreparationWorkspace({
     });
   }
 
+  function navigateToc(item: ContentTocItem, close = false) {
+    const element = document.getElementById(item.id);
+    if (!element) return;
+    element.scrollIntoView({ behavior: "smooth", block: "start" });
+    setActiveToc(item.id);
+    if (close) setTocOpen(false);
+  }
+
+  function toggleToc(item: ContentTocItem) {
+    setCollapsedToc(current => {
+      const next = new Set(current);
+      if (next.has(item.id)) next.delete(item.id);
+      else next.add(item.id);
+      return next;
+    });
+  }
+
   function tocList(close = false) {
-    return toc.length ? <nav className="preparation-toc-nav"><ol>{toc.map(item => <li key={item.id} data-level={item.level} data-active={activeToc === item.id || undefined}><a href={`#${item.id}`} onClick={() => close && setTocOpen(false)}>{item.label}</a></li>)}</ol></nav> : <p>Noch keine Überschriften.</p>;
+    if (!toc.length) return <p>Noch keine Überschriften.</p>;
+    let collapsedLevel: number | undefined;
+    return <nav className="preparation-toc-nav"><ol>{toc.map((item, index) => {
+      if (collapsedLevel !== undefined && item.level > collapsedLevel) return null;
+      if (collapsedLevel !== undefined && item.level <= collapsedLevel) collapsedLevel = undefined;
+      const hasChildren = (toc[index + 1]?.level ?? item.level) > item.level;
+      const collapsed = hasChildren && collapsedToc.has(item.id);
+      if (collapsed) collapsedLevel = item.level;
+      return <li key={item.id} data-level={item.level} data-active={activeToc === item.id || undefined}>
+        <div className="flex min-w-0 items-center gap-0.5">
+          {hasChildren ? <button
+            type="button"
+            className="grid size-5 shrink-0 place-items-center rounded text-text-muted transition-colors hover:bg-bg-1 hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring"
+            aria-label={item.label + " " + (collapsed ? "aufklappen" : "einklappen")}
+            aria-expanded={!collapsed}
+            onClick={() => toggleToc(item)}
+          >{collapsed ? <ChevronRight size={13}/> : <ChevronDown size={13}/>}</button> : <span className="block size-5 shrink-0" aria-hidden="true"/>}
+          <a
+            href={"#" + item.id}
+            className="min-w-0 flex-1"
+            onClick={(event) => {
+              event.preventDefault();
+              navigateToc(item, close);
+            }}
+          >{item.label}</a>
+        </div>
+      </li>;
+    })}</ol></nav>;
   }
 
   const selectSource = (item: PipelineSourceView, unitId?: string) => setSelection({ kind: "source", id: item.source.id, unitId });

@@ -593,12 +593,13 @@ export function ContentAuthoringView({
       : depth >= 2
         ? "ml-[.45rem] border-l border-border pl-[.8rem] max-[800px]:ml-1 max-[800px]:pl-[.55rem]"
         : "";
-    const headingSize = depth === 0 ? "text-[.95rem]" : depth === 1 ? "text-[.84rem]" : "text-[.78rem]";
+    const headingSize = depth === 0 ? "text-[1.08rem] tracking-tight" : depth === 1 ? "text-[.84rem]" : "text-[.78rem]";
     return <section
       data-content-unit-depth={depth}
       className={cx(
         "flex min-w-0 flex-col gap-3",
         depthClass,
+        depth === 0 && "border-t border-border pt-5 first:border-t-0 first:pt-0",
         task && "rounded-[.4rem] border-l-2 border-warning bg-[color-mix(in_srgb,var(--color-warning)_5%,transparent)] px-3 py-[.65rem]",
       )}
       key={node.unit.id}
