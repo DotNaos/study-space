@@ -68,7 +68,6 @@
 .preparation-toc-panel {
   min-width: 0;
   padding: .25rem 0 .25rem 1rem;
-  border-left: 1px solid var(--color-border);
 }
 
 .preparation-toc-sticky {

@@ -582,7 +582,7 @@ export function ContentAuthoringView({
         {sourcePages(block) && <small className="ml-auto whitespace-nowrap text-[.6rem] text-text-muted">{sourcePages(block)}</small>}
         <small className="ml-[.15rem] inline-flex items-center gap-[.2rem] whitespace-nowrap text-[.6rem] text-accent"><PencilLine size={11}/>Bearbeiten</small>
       </button>}
-      {preview ? <div className="min-w-0 [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&>:first-child]:mt-0 [&>:last-child]:mb-0"><MarkdownRenderer value={preview}/></div> : <div className="block p-3 text-[.72rem] text-text-muted">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div>}
+      {preview ? <div className="min-w-0 [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&>:first-child]:mt-0 [&>:last-child]:mb-0"><MarkdownRenderer value={preview}/></div> : editing ? <div className="block p-3 text-[.72rem] text-text-muted">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div> : null}
     </article>;
   }
 
@@ -631,7 +631,7 @@ export function ContentAuthoringView({
       const scriptNode = findNode(outline.script, selection.id);
       const taskNode = outline.taskGroups.flatMap(group => group.tasks).map(root => findNode([root], selection.id)).find((node): node is ContentUnitNode => !!node);
       const node = scriptNode ?? taskNode;
-      if (!node) return <div className="grid min-h-72 place-items-center gap-[.8rem] text-[.8rem] text-text-muted">Dieser Eintrag enthält noch keinen aufbereiteten Inhalt.</div>;
+      if (!node) return editing ? <div className="grid min-h-72 place-items-center gap-[.8rem] text-[.8rem] text-text-muted">Dieser Eintrag enthält noch keinen aufbereiteten Inhalt.</div> : null;
       return <div className="flex flex-col gap-[1.45rem] px-[1.35rem] pt-[1.15rem] pb-8 max-[800px]:px-[.85rem] max-[800px]:pt-[.9rem] max-[800px]:pb-[1.4rem]">{renderReadingNode(node, 0, unitKind(node.unit) === "tasks")}</div>;
     }
 
@@ -653,7 +653,7 @@ export function ContentAuthoringView({
   if (loading) return <div className="p-8"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
   return <div className="content-authoring m-0 max-w-none bg-bg-0 p-0 pb-44 max-[760px]:pb-48" data-editing={editing||undefined}>
-    <header className={cx(
+    {(editing || selection.kind !== "script") && <header className={cx(
       "content-authoring-header sticky top-0 z-[4] flex items-center justify-between gap-4 border-b border-border bg-bg-1 px-4 max-[800px]:static max-[800px]:px-[.8rem] max-[800px]:py-[.65rem]",
       editing ? "h-[3.35rem] min-h-[3.35rem] py-0" : "min-h-[3.25rem] py-[.7rem]",
     )}>
@@ -667,7 +667,7 @@ export function ContentAuthoringView({
         {stale > 0 && <Button size="sm" variant="ghost" label="Aktualisierte Raw-Fassungen übernehmen" disabled={busy || saving || aiBusy} onPress={() => void rebuildStale()}/>}
         {onCollapseView && <button type="button" className="grid size-[1.9rem] flex-none place-items-center rounded-[.4rem] text-text-muted transition-colors hover:bg-bg-1 hover:text-text" onClick={onCollapseView} aria-label="View einklappen" title="Collapse View"><PanelRightClose size={14}/></button>}
       </div>}
-    </header>
+    </header>}
 
     {selectedSummary && <div className="flex min-h-[2.35rem] items-center gap-[.15rem] overflow-x-auto border-b border-border bg-bg-0 px-4 py-[.3rem] max-[800px]:px-[.7rem] max-[800px]:py-1" role="tablist" aria-label={`${selectedSummary.name} Ansicht`}>
       <button className={cx(tabButtonClass, tab === "content" && tabButtonSelectedClass)} type="button" role="tab" aria-label="Inhalt" title="Inhalt" aria-selected={tab === "content"} onClick={() => setTab("content")}><FileText size={16}/></button>
@@ -677,7 +677,7 @@ export function ContentAuthoringView({
     </div>}
 
     {error && <div className="mx-4 my-3"><Notice>{error}</Notice></div>}
-    {!blocks.length && <div className="mx-auto grid min-h-[calc(min(76vh,58rem)-8rem)] place-content-center justify-items-center gap-4 px-4 py-8 text-center text-[.76rem] text-text-muted max-[760px]:min-h-56 max-[760px]:px-3 max-[760px]:py-6">
+    {!blocks.length && editing && <div className="mx-auto grid min-h-[calc(min(76vh,58rem)-8rem)] place-content-center justify-items-center gap-4 px-4 py-8 text-center text-[.76rem] text-text-muted max-[760px]:min-h-56 max-[760px]:px-3 max-[760px]:py-6">
       <span className="max-w-[34rem] leading-[1.55]">{contentCandidateCount === 0
         ? pipeline.pending > 0
           ? `${pipeline.pending} Quellen sind noch offen. Ordne sie unter Quellen zu oder blende sie aus.`
