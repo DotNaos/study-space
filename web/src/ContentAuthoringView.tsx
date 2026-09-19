@@ -599,12 +599,12 @@ export function ContentAuthoringView({
       className={cx(
         "flex min-w-0 flex-col gap-3",
         depthClass,
-        depth === 0 && "border-t border-border pt-5 first:border-t-0 first:pt-0",
+        depth === 0 && "mt-5 first:mt-0",
         task && "rounded-[.4rem] border-l-2 border-warning bg-[color-mix(in_srgb,var(--color-warning)_5%,transparent)] px-3 py-[.65rem]",
       )}
       key={node.unit.id}
     >
-      <header className={cx("flex min-w-0 items-center gap-[.45rem]", task && "text-warning")}>
+      <header className={cx("flex min-w-0 items-center gap-[.45rem]", depth === 0 && "border-b border-border pb-2.5", task && "text-warning")}>
         {task && <PencilLine size={14}/>}
         <h2 data-content-unit-heading className={cx("m-0 min-w-0 font-[620] leading-[1.3] text-text", headingSize)}>{unitLabel(node.unit)}</h2>
         {task && <span className="rounded-full bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] px-[.35rem] py-[.12rem] text-[.6rem] text-warning">Aufgabe</span>}
