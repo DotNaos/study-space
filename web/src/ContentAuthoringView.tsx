@@ -4,7 +4,7 @@ import { Button, Icon } from "@dotnaos/ui-base";
 import { MarkdownEditor, MarkdownRenderer } from "@dotnaos/ui/markdown-editor";
 import { PdfViewer } from "@dotnaos/ui/pdf-viewer";
 import { Composer } from "./ui-ai";
-import { AlertTriangle, Check, ChevronDown, Code2, Columns2, FileDiff, FileText, PanelRightClose, PencilLine, Rows3 } from "lucide-react";
+import { AlertTriangle, Check, Code2, Columns2, FileDiff, FileText, PanelRightClose, PencilLine, Rows3 } from "lucide-react";
 import { message } from "./api";
 import { extractMaterialSource, readMaterialSnapshot, type MaterialJob } from "./material-api";
 import type { PipelineState } from "./pipeline-api";
@@ -182,6 +182,8 @@ export function ContentAuthoringView({
   const [hoveredSourcePage, setHoveredSourcePage] = useState<number>();
   const activeBlockRef = useRef<HTMLDivElement>(null);
   const readingRootRef = useRef<HTMLDivElement>(null);
+  const contentRootRef = useRef<HTMLDivElement>(null);
+  const [composerFrame, setComposerFrame] = useState<{ centerX: number; width: number }>();
 
   const selected = selection.kind === "source" ? selection.id : undefined;
 
@@ -205,6 +207,30 @@ export function ContentAuthoringView({
       if (!signal?.aborted) setLoading(false);
     }
   }, [courseId, hydrate]);
+
+  useEffect(() => {
+    if (!editing) {
+      setComposerFrame(undefined);
+      return;
+    }
+    const root = contentRootRef.current;
+    if (!root) return;
+    const update = () => {
+      const rect = root.getBoundingClientRect();
+      setComposerFrame({
+        centerX: rect.left + rect.width / 2,
+        width: Math.min(560, Math.max(280, rect.width - 32)),
+      });
+    };
+    update();
+    const observer = new ResizeObserver(update);
+    observer.observe(root);
+    window.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", update);
+    };
+  }, [editing]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -237,8 +263,6 @@ export function ContentAuthoringView({
   const originalUrl = selectedSummary ? originalMaterialUrl(selectedSummary) : undefined;
   const isPdf = selectedSummary?.mimeType === "application/pdf" && !!originalUrl;
   const activeSourcePage = hoveredSourcePage ?? sourcePage;
-  const selectedPlacement = selectedSummary?.placements[0];
-  const selectedUnit = selectedPlacement ? pipeline.units.find(unit => unit.id === selectedPlacement.unitId) : undefined;
   const draftReady = !!selected && draftBlockId === selected && !!draftRevisionId;
 
   const ensureRawRevision = useCallback(async (blockId: string, revision: ContentRevision) => {
@@ -654,12 +678,10 @@ export function ContentAuthoringView({
     : selection.kind === "unit"
       ? pipeline.units.find(unit => unit.id === selection.id) ? unitLabel(pipeline.units.find(unit => unit.id === selection.id)!) : "Inhalt"
       : selectedSummary?.name ?? pipeline.sources.find(item => item.source.id === selection.id)?.source.name ?? "Inhalt";
-  const aiContextLabel = selectedSummary ? [selectedSummary.name, selectionText ? "Auswahl" : selectedUnit ? unitLabel(selectedUnit) : undefined, sourcePage ? `Seite ${sourcePage}` : undefined].filter(Boolean).join(" · ") : "Block auswählen";
-  const compactComposer = !aiPrompt.trim() && !selectionText && !aiStatus;
 
   if (loading) return <div className="p-8"><Loading label="Editierbare Inhalte werden gelesen …" /></div>;
 
-  return <div className={cx("content-authoring m-0 max-w-none bg-bg-0 p-0", editing ? "pb-32 max-[760px]:pb-36" : "pb-8")} data-editing={editing||undefined}>
+  return <div ref={contentRootRef} className={cx("content-authoring m-0 max-w-none bg-bg-0 p-0", editing ? "pb-24 max-[760px]:pb-28" : "pb-8")} data-editing={editing||undefined}>
     {(editing || selection.kind !== "script") && <header className={cx(
       "content-authoring-header sticky top-0 z-[4] flex items-center justify-between gap-4 border-b border-border bg-bg-1 px-4 max-[800px]:static max-[800px]:px-[.8rem] max-[800px]:py-[.65rem]",
       editing ? "h-[3.35rem] min-h-[3.35rem] py-0" : "min-h-[3.25rem] py-[.7rem]",
@@ -775,15 +797,25 @@ export function ContentAuthoringView({
       </> : tab === "raw" ? rawLoading === selected ? <Loading label="Raw wird geladen …"/> : <pre className="m-0 max-h-[70vh] overflow-auto whitespace-pre-wrap break-words rounded-[.45rem] border border-border bg-bg-1 p-4 font-mono text-[.7rem] leading-[1.55] text-text"><code>{rawRevision?.content ?? ""}</code></pre> : null}
     </div>)}
 
-    {selectedSummary && selectedView?.revision && editing ? <div className={cx(
-      "fixed right-[clamp(.75rem,3vw,2rem)] bottom-[clamp(.75rem,2vw,1.5rem)] z-30 transition-[width] duration-200 max-[800px]:right-3 max-[800px]:bottom-[max(.75rem,env(safe-area-inset-bottom))] max-[800px]:w-[calc(100vw-1.5rem)]",
-      compactComposer ? "w-[min(32rem,calc(100vw-1.5rem))]" : "w-[min(42rem,calc(100vw-1.5rem))] max-[1100px]:w-[34rem]",
-    )}>
+    {selectedSummary && selectedView?.revision && editing ? <div
+      className="fixed bottom-[clamp(.75rem,2vw,1.5rem)] z-30 -translate-x-1/2 max-[800px]:bottom-[max(.75rem,env(safe-area-inset-bottom))]"
+      style={{
+        left: composerFrame?.centerX ?? "50%",
+        width: composerFrame?.width ?? "min(35rem, calc(100vw - 1.5rem))",
+      }}
+    >
       {aiStatus ? <div className="mb-1 flex items-center justify-end gap-1.5 px-2 text-[.66rem] text-text-muted" role="status"><span className="min-w-0 flex-1 truncate">{aiStatus}</span><Button size="sm" variant="ghost" label="Vergleich" onPress={() => setTab(isPdf ? "pdf-current" : "edited-raw")}/><Button size="sm" variant="ghost" label="Rückgängig" disabled={busy || saving || aiBusy || !selectedView.revision?.parentRevisionId} onPress={() => void undo()}/></div> : null}
-      {!compactComposer ? <div className="mb-1.5 truncate px-3 text-[.65rem] text-text-muted" title={aiContextLabel}>{aiContextLabel}</div> : null}
       <div className={cx(
-        "relative [&_[data-ui-component=Composer]]:min-w-0 [&_.dotnaos-chat-composer]:!m-0 [&_.dotnaos-chat-composer]:!w-full [&_.dotnaos-chat-composer]:!max-w-none [&_.dotnaos-chat-composer]:shadow-[0_12px_32px_rgb(0_0_0/.16)]",
-        compactComposer && "[&_.dotnaos-chat-composer]:!gap-1 [&_.dotnaos-chat-composer]:!rounded-xl [&_.dotnaos-chat-composer]:!px-2 [&_.dotnaos-chat-composer]:!pt-2 [&_.dotnaos-chat-composer]:!pb-1.5 [&_.dotnaos-chat-composer__input]:!min-h-6",
+        "relative",
+        "[&_[data-ui-component=Composer]]:min-w-0",
+        "[&_.dotnaos-chat-composer]:!m-0 [&_.dotnaos-chat-composer]:!grid [&_.dotnaos-chat-composer]:!w-full [&_.dotnaos-chat-composer]:!max-w-none",
+        "[&_.dotnaos-chat-composer]:!grid-cols-[minmax(0,1fr)_auto] [&_.dotnaos-chat-composer]:!items-end [&_.dotnaos-chat-composer]:!gap-2",
+        "[&_.dotnaos-chat-composer]:!rounded-xl [&_.dotnaos-chat-composer]:!px-3 [&_.dotnaos-chat-composer]:!py-2 [&_.dotnaos-chat-composer]:shadow-[0_12px_32px_rgb(0_0_0/.16)]",
+        "[&_.dotnaos-chat-composer__input]:!min-h-7 [&_.dotnaos-chat-composer__input]:!max-h-32 [&_.dotnaos-chat-composer__input]:!py-1 [&_.dotnaos-chat-composer__input]:!leading-5",
+        "[&_.dotnaos-chat-composer__footer]:!min-h-7 [&_.dotnaos-chat-composer__footer]:!w-auto [&_.dotnaos-chat-composer__footer]:!self-end",
+        "[&_.dotnaos-chat-composer__leading]:!hidden",
+        "[&_.dotnaos-chat-composer__trailing]:!ml-0 [&_.dotnaos-chat-composer__trailing]:!gap-1 [&_.dotnaos-chat-composer__trailing]:!pr-8",
+        "[&_.dotnaos-chat-composer__primary]:!bg-accent [&_.dotnaos-chat-composer__primary]:!text-white",
       )}>
         <Composer
           value={aiPrompt}
@@ -794,18 +826,20 @@ export function ContentAuthoringView({
           placeholder={selectionText ? "Auswahl bearbeiten…" : "Diesen Block bearbeiten…"}
           submitLabel={aiProvider === "chatgpt" ? "In ChatGPT" : "Senden"}
         />
-        <details className="group/provider absolute bottom-1.5 left-2 z-30">
-          <summary className="flex h-7 cursor-pointer list-none items-center gap-1.5 rounded-full px-2 text-xs text-text-muted transition-colors hover:bg-bg-2 hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring [&::-webkit-details-marker]:hidden">
+        <details className="group/provider absolute right-2 bottom-2 z-30">
+          <summary
+            className="grid size-7 cursor-pointer list-none place-items-center rounded-full text-text-muted transition-colors hover:bg-bg-2 hover:text-text focus-visible:outline-2 focus-visible:outline-focus-ring [&::-webkit-details-marker]:hidden"
+            aria-label={aiProvider === "chatgpt" ? "ChatGPT auswählen" : "Codex auswählen"}
+            title={aiProvider === "chatgpt" ? "ChatGPT" : "Codex"}
+          >
             <img
               src={aiProvider === "chatgpt" ? "/brands/chatgpt.svg" : "/brands/codex.png"}
               alt=""
-              className="size-4 shrink-0 rounded-[4px] object-contain"
+              className="size-4 rounded-[4px] object-contain"
               aria-hidden="true"
             />
-            <span>{aiProvider === "chatgpt" ? "ChatGPT" : "Codex"}</span>
-            <ChevronDown size={12} className="transition-transform group-open/provider:rotate-180" aria-hidden="true"/>
           </summary>
-          <div className="absolute bottom-full left-0 mb-1 w-36 overflow-hidden rounded-lg border border-border bg-bg-0 p-1 shadow-lg">
+          <div className="absolute right-0 bottom-full mb-1 w-36 overflow-hidden rounded-lg border border-border bg-bg-0 p-1 shadow-lg">
             {([
               { id: "codex" as const, label: "Codex", icon: "/brands/codex.png" },
               { id: "chatgpt" as const, label: "ChatGPT", icon: "/brands/chatgpt.svg" },
