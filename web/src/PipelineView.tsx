@@ -194,7 +194,7 @@ export function PipelineView({
       ) ?? [];
     return (
       <div className="pipeline-existing">
-        <h3>Bestehende Ergebnisse</h3>
+        <h3 className="mt-4 mb-2 text-sm font-semibold">Bestehende Ergebnisse</h3>
         <p className="pipeline-muted">
           Quellenbezüge der aktiven Lernversion – keine Bestätigung dieses
           Plans.
@@ -247,7 +247,7 @@ export function PipelineView({
         (route.kind === "group" ? Number(route.id) : null),
     ) ?? [];
   return (
-    <section className="pipeline-view" aria-label="Kursaufbereitung">
+    <section className="pipeline-view min-w-0 pt-4" aria-label="Kursaufbereitung">
       {!combinedPreparation && route.kind !== "mapping" && route.kind !== "mapping-unit" && <div className="pipeline-toolbar">
         <div className="pipeline-breadcrumb">
           <Button
@@ -340,7 +340,7 @@ export function PipelineView({
             <div className="pipeline-source-pane">
               {item ? (
                 <>
-                  <h2>{item.source.name}</h2>
+                  <h2 className="mb-4 text-base font-semibold">{item.source.name}</h2>
                   <p className="pipeline-muted">
                     {group?.title} · {item.source.kind}
                     {item.source.mimeType ? " · " + item.source.mimeType : ""}
@@ -379,7 +379,7 @@ export function PipelineView({
                   ))}
                   {item.source.text && (
                     <div className="pipeline-source-text">
-                      <h3>Quelltext</h3>
+                      <h3 className="mt-4 mb-2 text-sm font-semibold">Quelltext</h3>
                       <SafeMarkdown>{item.source.text}</SafeMarkdown>
                     </div>
                   )}
@@ -393,7 +393,7 @@ export function PipelineView({
                 </>
               ) : (
                 <>
-                  <h2>{unit ? "Zugeordnete Quellen" : "Quellenbestand"}</h2>
+                  <h2 className="mb-4 text-base font-semibold">{unit ? "Zugeordnete Quellen" : "Quellenbestand"}</h2>
                   <Checkbox
                     checked={openOnly}
                     onCheckedChange={setOpenOnly}
@@ -471,7 +471,7 @@ export function PipelineView({
                 />
               ) : (
                 <>
-                  <h2>{(unit ? unitLabel(unit) : undefined) ?? "Bestätigte Lernstruktur"}</h2>
+                  <h2 className="mb-4 text-base font-semibold">{(unit ? unitLabel(unit) : undefined) ?? "Bestätigte Lernstruktur"}</h2>
                   {!state.units.length ? (
                     <>
                       <p className="pipeline-muted">

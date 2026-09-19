@@ -11,8 +11,8 @@ export function PipelineUnits({state,unit,onOpen,onEdit}:{state:PipelineState;un
   </li>)}</ul>;}
   const related=unit ? visible.filter(item=>unitKind(unit)==="tasks"?(unit.scriptUnitIds??[]).includes(item.id):(item.scriptUnitIds??[]).includes(unit.id)) : [];
   return <>
-    {unit?list(children):<>{["script","tasks"].map(kind=><section key={kind}><h3>{kind==="script"?"Skript":"Aufgaben"}</h3>{list(children.filter(item=>unitKind(item)===kind))}</section>)}</>}
-    {related.length>0 && <section><h3>{unit && unitKind(unit)==="tasks"?"Zugeordnetes Skript":"Zugeordnete Aufgaben"}</h3>{list(related)}</section>}
+    {unit?list(children):<>{["script","tasks"].map(kind=><section key={kind}><h3 className="mt-4 mb-2 text-sm font-semibold">{kind==="script"?"Skript":"Aufgaben"}</h3>{list(children.filter(item=>unitKind(item)===kind))}</section>)}</>}
+    {related.length>0 && <section><h3 className="mt-4 mb-2 text-sm font-semibold">{unit && unitKind(unit)==="tasks"?"Zugeordnetes Skript":"Zugeordnete Aufgaben"}</h3>{list(related)}</section>}
     {state.units.length>visible.length && <Button size="sm" variant="ghost" label={`${state.units.length-visible.length} ausgeblendete Einträge verwalten`} onPress={onEdit}/>}
   </>;
 }

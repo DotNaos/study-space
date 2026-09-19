@@ -1,17 +1,3 @@
-.pipeline-view {
-  min-width: 0;
-  padding-top: 1rem;
-}
-.pipeline-view h2 {
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 1rem;
-}
-.pipeline-view h3 {
-  font-size: 0.875rem;
-  font-weight: 600;
-  margin: 1rem 0 0.5rem;
-}
 .pipeline-muted {
   font-size: 0.75rem;
   line-height: 1.7;

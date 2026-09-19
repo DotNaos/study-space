@@ -582,7 +582,7 @@ export function ContentAuthoringView({
         {sourcePages(block) && <small className="ml-auto whitespace-nowrap text-[.6rem] text-text-muted">{sourcePages(block)}</small>}
         <small className="ml-[.15rem] inline-flex items-center gap-[.2rem] whitespace-nowrap text-[.6rem] text-accent"><PencilLine size={11}/>Bearbeiten</small>
       </button>}
-      {preview ? <div className="min-w-0 [&>:first-child]:mt-0 [&>:last-child]:mb-0"><MarkdownRenderer value={preview}/></div> : <div className="block p-3 text-[.72rem] text-text-muted">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div>}
+      {preview ? <div className="min-w-0 [&_h1]:text-xl [&_h2]:text-lg [&_h3]:text-base [&>:first-child]:mt-0 [&>:last-child]:mb-0"><MarkdownRenderer value={preview}/></div> : <div className="block p-3 text-[.72rem] text-text-muted">{block.currentRevisionId ? "Inhalt wird geladen …" : "Noch keine aufbereitete Rohfassung."}</div>}
     </article>;
   }
 
@@ -593,7 +593,7 @@ export function ContentAuthoringView({
       : depth >= 2
         ? "ml-[.45rem] border-l border-border pl-[.8rem] max-[800px]:ml-1 max-[800px]:pl-[.55rem]"
         : "";
-    const headingSize = depth === 0 ? "!m-0 !text-[1.5rem] !leading-[1.05] tracking-tight" : depth === 1 ? "text-[.84rem] leading-[1.3]" : "text-[.78rem] leading-[1.3]";
+    const headingSize = depth === 0 ? "m-0 text-[1.5rem] leading-[1.05] tracking-tight" : depth === 1 ? "text-[.84rem] leading-[1.3]" : "text-[.78rem] leading-[1.3]";
     return <section
       data-content-unit-depth={depth}
       className={cx(
@@ -604,7 +604,7 @@ export function ContentAuthoringView({
       )}
       key={node.unit.id}
     >
-      <header className={cx("flex min-w-0 items-center gap-[.45rem]", depth === 0 && "border-b border-border pb-0.5", task && "text-warning")}>
+      <header className={cx("flex min-w-0 items-center gap-[.45rem]", depth === 0 && "border-b border-border pb-2", task && "text-warning")}>
         {task && <PencilLine size={14}/>}
         <h2 data-content-unit-heading className={cx("m-0 min-w-0 font-[620] text-text", headingSize)}>{unitLabel(node.unit)}</h2>
         {task && <span className="rounded-full bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] px-[.35rem] py-[.12rem] text-[.6rem] text-warning">Aufgabe</span>}
