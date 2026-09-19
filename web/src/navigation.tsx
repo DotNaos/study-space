@@ -45,6 +45,23 @@ export function parseRoute(path: string, search = ""): Route {
   return { page: "not-found" };
 }
 export type Navigate = (path: string, replace?: boolean) => void;
+const previewLocationMessage = "dotnaos:preview-location";
+
+function reportPreviewLocation() {
+  if (
+    window.parent === window ||
+    parseRoute(window.location.pathname, window.location.search).page === "moodle-return"
+  )
+    return;
+  window.parent.postMessage(
+    {
+      type: previewLocationMessage,
+      path: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+    },
+    "*",
+  );
+}
+
 export function useRoute() {
   const [route, setRoute] = useState(() =>
     parseRoute(window.location.pathname, window.location.search),
@@ -52,12 +69,22 @@ export function useRoute() {
   const navigate = useCallback<Navigate>((path, replace = false) => {
     window.history[replace ? "replaceState" : "pushState"](null, "", path);
     setRoute(parseRoute(window.location.pathname, window.location.search));
+    reportPreviewLocation();
     window.scrollTo({ top: 0 });
   }, []);
   useEffect(() => {
-    const changed = () => setRoute(parseRoute(window.location.pathname, window.location.search));
+    const changed = () => {
+      setRoute(parseRoute(window.location.pathname, window.location.search));
+      reportPreviewLocation();
+    };
+    const hashChanged = () => reportPreviewLocation();
+    reportPreviewLocation();
     window.addEventListener("popstate", changed);
-    return () => window.removeEventListener("popstate", changed);
+    window.addEventListener("hashchange", hashChanged);
+    return () => {
+      window.removeEventListener("popstate", changed);
+      window.removeEventListener("hashchange", hashChanged);
+    };
   }, []);
   return { route, navigate };
 }
