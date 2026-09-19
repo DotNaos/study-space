@@ -570,6 +570,7 @@ export function ContentAuthoringView({
   function renderReadingBlock(block: ContentBlockSummary, unitId?: string, depth = -1) {
     const view = views[block.id];
     const preview = view?.revision?.content;
+    if (!editing && !preview?.trim()) return null;
     return <article className="min-w-0" key={block.id} data-content-block-depth={depth}>
       {editing && <button
         type="button"
@@ -588,6 +589,8 @@ export function ContentAuthoringView({
 
   function renderReadingNode(node: ContentUnitNode, depth = 0, task = false) {
     const linkedTasks = task ? [] : taskNodesFor(node.unit.id);
+    const hasReadableContent = node.blocks.some(block => !!views[block.id]?.revision?.content?.trim());
+    const loadingReadableContent = node.blocks.some(block => !!block.currentRevisionId && !views[block.id]);
     const depthClass = depth === 1
       ? "ml-[.65rem] border-l border-border pl-4 max-[800px]:ml-1 max-[800px]:pl-[.55rem]"
       : depth >= 2
@@ -610,6 +613,9 @@ export function ContentAuthoringView({
         {task && <span className="rounded-full bg-[color-mix(in_srgb,var(--color-warning)_14%,transparent)] px-[.35rem] py-[.12rem] text-[.6rem] text-warning">Aufgabe</span>}
       </header>
       {node.blocks.map(block => renderReadingBlock(block, node.unit.id, depth))}
+      {!editing && node.blocks.length > 0 && !hasReadableContent && !loadingReadableContent && (
+        <p className="m-0 text-sm text-text-muted">Hier gibt es noch keinen Inhalt.</p>
+      )}
       {node.children.map(child => renderReadingNode(child, depth + 1, task))}
       {linkedTasks.length > 0 && <div className="mt-[.35rem] flex flex-col gap-[.55rem]">
         <div className="text-[.64rem] font-semibold uppercase tracking-[.04em] text-text-muted">Aufgaben</div>
